@@ -1,0 +1,173 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+enum ProjectStatus {
+  ACTIVE
+  ARCHIVED
+}
+
+enum BillingStatus {
+  UNBILLED
+  BILLED
+}
+
+enum InvoiceStatus {
+  DRAFT
+  SENT
+  PAID
+  VOID
+}
+
+enum LineItemType {
+  LABOUR
+  EXPENSE
+}
+
+model Client {
+  id           String    @id @default(cuid())
+  businessName String
+  contactName  String?
+  email        String?
+  phone        String?
+  abn          String?
+  address      String?
+  notes        String?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+  projects     Project[]
+  invoices     Invoice[]
+
+  @@index([businessName])
+}
+
+model Project {
+  id                      String        @id @default(cuid())
+  title                   String
+  clientId                String
+  currentHourlyRateCents  Int
+  status                  ProjectStatus @default(ACTIVE)
+  notes                   String?
+  createdAt               DateTime      @default(now())
+  updatedAt               DateTime      @updatedAt
+  client                  Client        @relation(fields: [clientId], references: [id], onDelete: Restrict)
+  timeEntries             TimeEntry[]
+  expenseItems            ExpenseItem[]
+  invoices                Invoice[]
+  rateHistory             RateHistory[]
+
+  @@index([clientId])
+  @@index([status])
+}
+
+model RateHistory {
+  id        String   @id @default(cuid())
+  projectId String
+  rateCents Int
+  startsAt  DateTime @default(now())
+  notes     String?
+  project   Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@index([projectId, startsAt])
+}
+
+model TimeEntry {
+  id                       String        @id @default(cuid())
+  projectId                String
+  invoiceId                String?
+  date                     DateTime
+  startTime                String?
+  endTime                  String?
+  durationMinutes          Int
+  notes                    String?
+  billingStatus            BillingStatus @default(UNBILLED)
+  hourlyRateCentsSnapshot  Int
+  createdAt                DateTime      @default(now())
+  updatedAt                DateTime      @updatedAt
+  project                  Project       @relation(fields: [projectId], references: [id], onDelete: Restrict)
+  invoice                  Invoice?      @relation(fields: [invoiceId], references: [id], onDelete: SetNull)
+  invoiceLineItems         InvoiceLineItem[]
+
+  @@index([projectId, date])
+  @@index([billingStatus])
+  @@index([invoiceId])
+}
+
+model ExpenseItem {
+  id              String        @id @default(cuid())
+  projectId       String
+  invoiceId       String?
+  datePurchased   DateTime
+  description     String
+  quantity        Decimal       @default(1)
+  unitCostCents   Int
+  totalCostCents  Int
+  notes           String?
+  billingStatus   BillingStatus @default(UNBILLED)
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+  project         Project       @relation(fields: [projectId], references: [id], onDelete: Restrict)
+  invoice         Invoice?      @relation(fields: [invoiceId], references: [id], onDelete: SetNull)
+  invoiceLineItems InvoiceLineItem[]
+
+  @@index([projectId, datePurchased])
+  @@index([billingStatus])
+  @@index([invoiceId])
+}
+
+model Invoice {
+  id             String            @id @default(cuid())
+  invoiceNumber  String            @unique
+  projectId      String
+  clientId       String
+  invoiceDate    DateTime
+  dateRangeStart DateTime
+  dateRangeEnd   DateTime
+  status         InvoiceStatus     @default(DRAFT)
+  totalHours     Decimal           @default(0)
+  labourTotalCents Int             @default(0)
+  itemTotalCents   Int             @default(0)
+  grandTotalCents  Int             @default(0)
+  paymentDate    DateTime?
+  summary        String?
+  createdAt      DateTime          @default(now())
+  updatedAt      DateTime          @updatedAt
+  project        Project           @relation(fields: [projectId], references: [id], onDelete: Restrict)
+  client         Client            @relation(fields: [clientId], references: [id], onDelete: Restrict)
+  timeEntries    TimeEntry[]
+  expenseItems   ExpenseItem[]
+  lineItems      InvoiceLineItem[]
+
+  @@index([projectId])
+  @@index([clientId])
+  @@index([status])
+  @@index([invoiceDate])
+}
+
+model InvoiceLineItem {
+  id                String       @id @default(cuid())
+  invoiceId         String
+  timeEntryId       String?
+  expenseItemId     String?
+  type              LineItemType
+  description       String
+  date              DateTime?
+  quantity          Decimal?
+  hoursMinutes      Int?
+  unitAmountCents   Int
+  totalAmountCents  Int
+  notes             String?
+  sortOrder         Int          @default(0)
+  invoice           Invoice      @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  timeEntry         TimeEntry?   @relation(fields: [timeEntryId], references: [id], onDelete: SetNull)
+  expenseItem       ExpenseItem? @relation(fields: [expenseItemId], references: [id], onDelete: SetNull)
+
+  @@index([invoiceId])
+  @@index([timeEntryId])
+  @@index([expenseItemId])
+}
