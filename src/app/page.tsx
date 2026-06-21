@@ -2,7 +2,7 @@ import Link from "next/link";
 import { ArrowRight, Banknote, ClipboardList, FileClock, ReceiptText } from "lucide-react";
 import { prisma } from "@/lib/prisma";
 import { buildPaidWeeklyTotals, unbilledTimeValue } from "@/lib/dashboard";
-import { formatDateAU } from "@/lib/dates";
+import { dateInputValue, formatDateAU, previousWeekMondayToSunday } from "@/lib/dates";
 import { formatMoney } from "@/lib/money";
 import { formatHours } from "@/lib/time";
 import { InvoiceStatusPill } from "@/components/StatusPill";
@@ -10,8 +10,13 @@ import { LogTimeSheet } from "@/components/LogTimeSheet";
 import { SummaryCard } from "@/components/SummaryCard";
 import { WeeklyPaidChart } from "@/components/WeeklyPaidChart";
 
+export const dynamic = "force-dynamic";
+
 export default async function DashboardPage() {
-  const [projects, sentInvoices, paidInvoices, unbilledEntries, unbilledItems, recentEntries] = await Promise.all([
+  const previousWeek = previousWeekMondayToSunday();
+  const previousWeekExportLink = `/hours-export?start=${dateInputValue(previousWeek.start)}&end=${dateInputValue(previousWeek.end)}`;
+
+  const [projects, sentInvoices, paidInvoices, unbilledEntries, unbilledItems, previousWeekEntries] = await Promise.all([
     prisma.project.findMany({
       where: { status: "ACTIVE" },
       include: { client: true },
@@ -37,9 +42,14 @@ export default async function DashboardPage() {
       orderBy: { datePurchased: "desc" }
     }),
     prisma.timeEntry.findMany({
-      take: 5,
+      where: {
+        date: {
+          gte: previousWeek.start,
+          lte: previousWeek.endInclusive
+        }
+      },
       include: { project: { include: { client: true } } },
-      orderBy: [{ date: "desc" }, { createdAt: "desc" }]
+      orderBy: [{ date: "asc" }, { createdAt: "asc" }]
     })
   ]);
 
@@ -80,29 +90,41 @@ export default async function DashboardPage() {
       <section className="mt-7 grid gap-4 lg:grid-cols-[1.1fr_0.9fr]">
         <div>
           <div className="mb-3 flex items-center justify-between gap-3">
-            <h2 className="text-xl font-black tracking-normal">Recent hours</h2>
-            <Link className="inline-flex items-center gap-1 text-sm font-bold text-mint" href="/hours-export">
+            <div>
+              <h2 className="text-xl font-black tracking-normal">Previous Week Hours</h2>
+              <p className="mt-1 text-sm font-bold text-moss">
+                {formatDateAU(previousWeek.start)} - {formatDateAU(previousWeek.end)}
+              </p>
+            </div>
+            <Link className="inline-flex items-center gap-1 text-sm font-bold text-mint" href={previousWeekExportLink}>
               Export <ArrowRight size={16} aria-hidden="true" />
             </Link>
           </div>
           <div className="grid gap-3">
-            {recentEntries.map((entry) => (
-              <article key={entry.id} className="card">
-                <div className="flex items-start justify-between gap-4">
-                  <div>
-                    <p className="font-bold">{entry.project.title}</p>
-                    <p className="mt-1 text-sm text-moss">{entry.project.client.businessName}</p>
+            {previousWeekEntries.length ? (
+              previousWeekEntries.map((entry) => (
+                <article key={entry.id} className="card">
+                  <div className="flex items-start justify-between gap-4">
+                    <div>
+                      <p className="font-bold">{entry.project.title}</p>
+                      <p className="mt-1 text-sm text-moss">{entry.project.client.businessName}</p>
+                    </div>
+                    <span className="rounded-lg bg-paper px-2.5 py-1 text-sm font-black text-ink">
+                      {formatHours(entry.durationMinutes)}h
+                    </span>
                   </div>
-                  <span className="rounded-lg bg-paper px-2.5 py-1 text-sm font-black text-ink">
-                    {formatHours(entry.durationMinutes)}h
-                  </span>
-                </div>
-                <p className="mt-3 text-sm text-moss">
-                  {formatDateAU(entry.date)}
-                  {entry.notes ? ` - ${entry.notes}` : ""}
-                </p>
+                  <p className="mt-3 text-sm text-moss">
+                    {formatDateAU(entry.date)}
+                    {entry.notes ? ` - ${entry.notes}` : ""}
+                  </p>
+                </article>
+              ))
+            ) : (
+              <article className="card flex items-center gap-3 text-moss">
+                <FileClock size={20} aria-hidden="true" />
+                No hours logged for the previous week.
               </article>
-            ))}
+            )}
           </div>
         </div>
 

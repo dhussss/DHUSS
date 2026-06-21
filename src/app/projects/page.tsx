@@ -7,6 +7,8 @@ import { formatMoney } from "@/lib/money";
 import { formatHours } from "@/lib/time";
 import { ProjectStatusPill } from "@/components/StatusPill";
 
+export const dynamic = "force-dynamic";
+
 export default async function ProjectsPage({
   searchParams
 }: {

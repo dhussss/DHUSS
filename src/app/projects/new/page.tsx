@@ -3,6 +3,8 @@ import { ArrowLeft } from "lucide-react";
 import { prisma } from "@/lib/prisma";
 import { CreateProjectForm } from "@/components/CreateProjectForm";
 
+export const dynamic = "force-dynamic";
+
 export default async function NewProjectPage() {
   const clients = await prisma.client.findMany({
     orderBy: { businessName: "asc" }

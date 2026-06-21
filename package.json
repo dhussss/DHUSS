@@ -2,13 +2,15 @@
   "name": "trade-invoice-tracker",
   "version": "0.1.0",
   "private": true,
-  "packageManager": "pnpm@11.0.7",
+  "packageManager": "pnpm@11.5.3",
   "scripts": {
     "dev": "next dev",
     "build": "prisma generate && next build",
     "start": "next start",
     "lint": "eslint .",
-    "db:push": "node scripts/ensure-sqlite.mjs && prisma db push",
+    "db:push": "prisma db push",
+    "db:migrate": "prisma migrate deploy",
+    "db:migrate:dev": "prisma migrate dev",
     "db:seed": "prisma db seed",
     "prisma:studio": "prisma studio"
   },

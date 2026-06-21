@@ -58,6 +58,33 @@ export function startOfWeekMonday(date: Date): Date {
   return value;
 }
 
+export function todayInPerth(): Date {
+  const parts = new Intl.DateTimeFormat("en-AU", {
+    timeZone: "Australia/Perth",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit"
+  }).formatToParts(new Date());
+
+  const year = Number(parts.find((part) => part.type === "year")?.value);
+  const month = Number(parts.find((part) => part.type === "month")?.value);
+  const day = Number(parts.find((part) => part.type === "day")?.value);
+
+  return new Date(Date.UTC(year, month - 1, day));
+}
+
+export function previousWeekMondayToSunday(date: Date = todayInPerth()) {
+  const currentWeekStart = startOfWeekMonday(date);
+  const start = addDays(currentWeekStart, -7);
+  const end = addDays(currentWeekStart, -1);
+
+  return {
+    start,
+    end,
+    endInclusive: endOfDay(end)
+  };
+}
+
 export function endOfDay(date: Date): Date {
   return new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate(), 23, 59, 59, 999));
 }

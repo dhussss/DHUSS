@@ -1,6 +1,8 @@
 import { prisma } from "@/lib/prisma";
 import { HoursExportClient } from "@/components/HoursExportClient";
 
+export const dynamic = "force-dynamic";
+
 type SearchParams = Record<string, string | string[] | undefined>;
 
 function paramValue(params: SearchParams | undefined, key: string) {

@@ -5,6 +5,8 @@ import { formatDateAU } from "@/lib/dates";
 import { formatMoney } from "@/lib/money";
 import { InvoiceStatusPill } from "@/components/StatusPill";
 
+export const dynamic = "force-dynamic";
+
 export default async function InvoicesPage() {
   const invoices = await prisma.invoice.findMany({
     include: {

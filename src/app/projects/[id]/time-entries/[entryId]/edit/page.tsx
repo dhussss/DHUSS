@@ -6,6 +6,8 @@ import { dateInputValue } from "@/lib/dates";
 import { formatHours } from "@/lib/time";
 import { EditTimeEntryForm } from "@/components/EditTimeEntryForm";
 
+export const dynamic = "force-dynamic";
+
 export default async function EditTimeEntryPage({
   params
 }: {

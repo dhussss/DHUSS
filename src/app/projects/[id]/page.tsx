@@ -10,6 +10,8 @@ import { ConfirmSubmitButton } from "@/components/ConfirmSubmitButton";
 import { InvoiceStatusPill, ProjectStatusPill } from "@/components/StatusPill";
 import { LogTimeSheet } from "@/components/LogTimeSheet";
 
+export const dynamic = "force-dynamic";
+
 export default async function ProjectDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const [project, activeProjects] = await Promise.all([

@@ -17,6 +17,8 @@ import { formatDateAU } from "@/lib/dates";
 import { formatMoney } from "@/lib/money";
 import { ConfirmSubmitButton } from "@/components/ConfirmSubmitButton";
 
+export const dynamic = "force-dynamic";
+
 function detail(value: string | null) {
   return value?.trim() ? value : "Not recorded";
 }

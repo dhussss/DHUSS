@@ -6,6 +6,8 @@ import { prisma } from "@/lib/prisma";
 import { centsToDollars } from "@/lib/money";
 import { ConfirmSubmitButton } from "@/components/ConfirmSubmitButton";
 
+export const dynamic = "force-dynamic";
+
 export default async function EditProjectPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const [project, clients] = await Promise.all([

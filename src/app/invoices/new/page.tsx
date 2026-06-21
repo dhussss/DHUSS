@@ -7,6 +7,8 @@ import { invoiceTotals, timeEntryTotalCents } from "@/lib/invoices";
 import { formatMoney } from "@/lib/money";
 import { formatHours } from "@/lib/time";
 
+export const dynamic = "force-dynamic";
+
 type SearchParams = Record<string, string | string[] | undefined>;
 
 function paramValue(params: SearchParams | undefined, key: string) {
