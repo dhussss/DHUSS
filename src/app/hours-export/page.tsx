@@ -1,7 +1,7 @@
-import { prisma } from "@/lib/prisma";
+import { getHoursExportData } from "@/lib/app-data";
 import { HoursExportClient } from "@/components/HoursExportClient";
 
-export const dynamic = "force-dynamic";
+export const revalidate = 20;
 
 type SearchParams = Record<string, string | string[] | undefined>;
 
@@ -16,22 +16,7 @@ export default async function HoursExportPage({
   searchParams?: Promise<SearchParams>;
 }) {
   const params = await searchParams;
-  const [projects, entries] = await Promise.all([
-    prisma.project.findMany({
-      where: { status: "ACTIVE" },
-      select: {
-        id: true,
-        title: true,
-        client: { select: { businessName: true } },
-        timeEntries: { where: { billingStatus: "UNBILLED" }, select: { durationMinutes: true } }
-      },
-      orderBy: { title: "asc" }
-    }),
-    prisma.timeEntry.findMany({
-      select: { id: true, projectId: true, date: true, durationMinutes: true, notes: true },
-      orderBy: { date: "asc" }
-    })
-  ]);
+  const { projects, entries } = await getHoursExportData();
 
   return (
     <main className="page-shell">
@@ -45,8 +30,8 @@ export default async function HoursExportPage({
           projects={projects.map((project) => ({
             id: project.id,
             title: project.title,
-            client: project.client.businessName,
-            unbilledMinutes: project.timeEntries.reduce((sum, entry) => sum + entry.durationMinutes, 0)
+            client: project.client,
+            unbilledMinutes: project.unbilledMinutes
           }))}
           defaultProjectId={paramValue(params, "projectId")}
           defaultStart={paramValue(params, "start") || paramValue(params, "dateRangeStart")}

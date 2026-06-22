@@ -12,12 +12,12 @@ import {
   UsersRound
 } from "lucide-react";
 import { deleteClientAction } from "@/app/actions";
-import { prisma } from "@/lib/prisma";
+import { getClientsPageData } from "@/lib/app-data";
 import { formatDateAU } from "@/lib/dates";
 import { formatMoney } from "@/lib/money";
 import { ConfirmSubmitButton } from "@/components/ConfirmSubmitButton";
 
-export const dynamic = "force-dynamic";
+export const revalidate = 20;
 
 function detail(value: string | null) {
   return value?.trim() ? value : "Not recorded";
@@ -31,41 +31,7 @@ export default async function ClientsPage({
   const params = await searchParams;
   const q = typeof params?.q === "string" ? params.q.trim() : "";
 
-  const searchWhere = q
-    ? {
-        OR: [
-          { businessName: { contains: q } },
-          { contactName: { contains: q } },
-          { email: { contains: q } },
-          { phone: { contains: q } },
-          { abn: { contains: q } },
-          { address: { contains: q } },
-          { notes: { contains: q } }
-        ]
-      }
-    : undefined;
-
-  const clients = await prisma.client.findMany({
-    where: searchWhere,
-    include: {
-      projects: {
-        select: {
-          id: true,
-          title: true,
-          status: true
-        },
-        orderBy: [{ status: "asc" }, { updatedAt: "desc" }]
-      },
-      invoices: {
-        select: {
-          id: true,
-          status: true,
-          grandTotalCents: true
-        }
-      }
-    },
-    orderBy: { businessName: "asc" }
-  });
+  const clients = await getClientsPageData(q);
 
   return (
     <main className="page-shell">
@@ -90,13 +56,6 @@ export default async function ClientsPage({
       <section className="mt-5 grid gap-3">
         {clients.length ? (
           clients.map((client) => {
-            const activeProjects = client.projects.filter((project) => project.status === "ACTIVE");
-            const archivedProjects = client.projects.filter((project) => project.status === "ARCHIVED");
-            const invoiceValue = client.invoices
-              .filter((invoice) => invoice.status !== "VOID")
-              .reduce((sum, invoice) => sum + invoice.grandTotalCents, 0);
-            const projectNames = client.projects.map((project) => project.title).join(", ");
-
             return (
               <article key={client.id} className="card">
                 <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
@@ -168,7 +127,7 @@ export default async function ClientsPage({
                       Projects
                     </p>
                     <p className="mt-2 text-xl font-black">
-                      {activeProjects.length} active, {archivedProjects.length} archived
+                      {client.activeProjectCount} active, {client.archivedProjectCount} archived
                     </p>
                   </div>
                   <div>
@@ -176,18 +135,18 @@ export default async function ClientsPage({
                       <FileText size={16} aria-hidden="true" />
                       Invoices
                     </p>
-                    <p className="mt-2 text-xl font-black">{client.invoices.length}</p>
+                    <p className="mt-2 text-xl font-black">{client.invoiceCount}</p>
                   </div>
                   <div>
                     <p className="text-xs font-bold uppercase text-moss">Invoice value</p>
-                    <p className="mt-2 text-xl font-black">{formatMoney(invoiceValue)}</p>
+                    <p className="mt-2 text-xl font-black">{formatMoney(client.invoiceValueCents)}</p>
                   </div>
                 </div>
 
-                {client.projects.length ? (
+                {client.projectNames ? (
                   <div className="mt-4">
                     <p className="text-xs font-bold uppercase text-moss">Linked projects</p>
-                    <p className="mt-2 text-sm font-bold text-ink">{projectNames}</p>
+                    <p className="mt-2 text-sm font-bold text-ink">{client.projectNames}</p>
                   </div>
                 ) : null}
               </article>

@@ -3,7 +3,7 @@ import { prisma } from "@/lib/prisma";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
-export const preferredRegion = "hnd1";
+export const preferredRegion = "syd1";
 
 function authorised(request: NextRequest) {
   const configuredToken = process.env.BACKUP_EXPORT_TOKEN;

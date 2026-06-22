@@ -15,7 +15,7 @@ Mobile-first PWA for a sole trader/subcontractor to track clients, projects, log
 - Server-rendered App Router pages query Supabase through Prisma.
 - Prisma uses the Supabase transaction-mode pooler through `DATABASE_URL`.
 - Prisma migrations use the session-mode pooler through `DIRECT_URL`.
-- The root route config uses the Node.js runtime for Prisma and prefers Vercel `hnd1` so serverless functions run close to the Supabase `ap-northeast-1` project.
+- The root route config uses the Node.js runtime for Prisma, and `vercel.json` pins Vercel Functions to `syd1` to run close to the current Supabase `ap-southeast-2` project.
 - Dashboard totals ignore void invoices. Deleted invoices are gone from the database, and their linked time/items are returned to unbilled before deletion.
 - Project and client delete actions are guarded. Records with invoices or billed history should be archived, not deleted.
 
@@ -25,20 +25,20 @@ Create `.env` locally and add the Supabase Prisma connection strings:
 
 ```bash
 # Runtime connection via Supabase shared transaction-mode pooler.
-DATABASE_URL="postgresql://postgres.<PROJECT-REF>:<PASSWORD>@aws-1-ap-northeast-1.pooler.supabase.com:6543/postgres?pgbouncer=true"
+DATABASE_URL="postgresql://postgres.<PROJECT-REF>:<PASSWORD>@<REGION>.pooler.supabase.com:6543/postgres?pgbouncer=true&connection_limit=1"
 
 # Direct/session-mode connection used by Prisma migrations.
-DIRECT_URL="postgresql://postgres.<PROJECT-REF>:<PASSWORD>@aws-1-ap-northeast-1.pooler.supabase.com:5432/postgres"
+DIRECT_URL="postgresql://postgres.<PROJECT-REF>:<PASSWORD>@<REGION>.pooler.supabase.com:5432/postgres"
 
 # Required in production to download database backups from /backup.
 BACKUP_EXPORT_TOKEN="change-this-long-random-token"
 ```
 
-For this Supabase project, replace `<PASSWORD>` in both values:
+For this Supabase project, copy the current Supabase Prisma connection strings and make sure the runtime pooler URL includes `pgbouncer=true&connection_limit=1`:
 
 ```bash
-DATABASE_URL="postgresql://postgres.kfejfgkkugatnrxrftry:<PASSWORD>@aws-1-ap-northeast-1.pooler.supabase.com:6543/postgres?pgbouncer=true"
-DIRECT_URL="postgresql://postgres.kfejfgkkugatnrxrftry:<PASSWORD>@aws-1-ap-northeast-1.pooler.supabase.com:5432/postgres"
+DATABASE_URL="postgresql://postgres.<PROJECT-REF>:<PASSWORD>@aws-1-ap-southeast-2.pooler.supabase.com:6543/postgres?pgbouncer=true&connection_limit=1"
+DIRECT_URL="postgresql://postgres.<PROJECT-REF>:<PASSWORD>@aws-1-ap-southeast-2.pooler.supabase.com:5432/postgres"
 BACKUP_EXPORT_TOKEN="change-this-long-random-token"
 ```
 
@@ -74,7 +74,7 @@ For production-like workflows, prefer migrations.
 1. Create a Supabase project.
 2. Go to the project database connection settings.
 3. Copy the Prisma connection strings:
-   - `DATABASE_URL`: shared transaction-mode pooler on port `6543` with `?pgbouncer=true`
+   - `DATABASE_URL`: shared transaction-mode pooler on port `6543` with `?pgbouncer=true&connection_limit=1`
    - `DIRECT_URL`: shared session-mode pooler on port `5432`
 4. Add both values to `.env`.
 5. Run `pnpm run db:migrate:dev` to create the schema.
@@ -93,8 +93,8 @@ pnpm run build
 4. Add these Vercel environment variables for Production, Preview, and Development. Do not commit `.env`:
 
 ```bash
-DATABASE_URL="postgresql://postgres.kfejfgkkugatnrxrftry:<PASSWORD>@aws-1-ap-northeast-1.pooler.supabase.com:6543/postgres?pgbouncer=true"
-DIRECT_URL="postgresql://postgres.kfejfgkkugatnrxrftry:<PASSWORD>@aws-1-ap-northeast-1.pooler.supabase.com:5432/postgres"
+DATABASE_URL="postgresql://postgres.<PROJECT-REF>:<PASSWORD>@aws-1-ap-southeast-2.pooler.supabase.com:6543/postgres?pgbouncer=true&connection_limit=1"
+DIRECT_URL="postgresql://postgres.<PROJECT-REF>:<PASSWORD>@aws-1-ap-southeast-2.pooler.supabase.com:5432/postgres"
 BACKUP_EXPORT_TOKEN="change-this-long-random-token"
 ```
 
@@ -106,7 +106,9 @@ pnpm run db:migrate
 
 `db:migrate` runs `prisma migrate deploy`, which applies committed Prisma migration files without creating new ones.
 
-6. Confirm Vercel deployments run near Supabase. This app exports `preferredRegion = "hnd1"` from the root layout and backup route. If Vercel logs still show a far-away region, set the project/function region in Vercel to Tokyo where available, or Singapore as the next practical fallback.
+6. Confirm Vercel deployments run near Supabase. This app sets `regions: ["syd1"]` in `vercel.json`. After deployment, open `/diagnostics?token=<BACKUP_EXPORT_TOKEN>` and check `x-vercel-id`. The first segment should be `syd1`.
+
+The diagnostics page helps choose the next fix: if TCP/TLS connect is fast but Prisma `SELECT 1` is high, Prisma engine/pooler overhead is the main problem; if both TCP/TLS and Prisma are high, network or Supabase pooler latency is the main problem; if `SELECT 1` is low but dashboard is high, query work is the main problem.
 
 ## Backup Export
 
@@ -124,7 +126,13 @@ Run a backup before production migrations or any manual database maintenance.
 
 ## Private Diagnostics
 
-Use `/diagnostics?token=<BACKUP_EXPORT_TOKEN>` to open a private performance diagnostics page. It shows the Vercel region signals available to the app plus server, Prisma, count-query, and dashboard-query timings in milliseconds. The page does not print secrets and is blocked in production unless `BACKUP_EXPORT_TOKEN` is set.
+Use `/diagnostics?token=<BACKUP_EXPORT_TOKEN>` to open a private performance diagnostics page. It shows the Vercel region signals available to the app plus server, TCP/TLS, Prisma first-query, Prisma second-query, count-query, and dashboard-query timings in milliseconds. It also explains whether slowness appears to be database/network latency, Prisma overhead, dashboard query work, or general server/frontend time. The page does not print secrets and is blocked in production unless `BACKUP_EXPORT_TOKEN` is set.
+
+If Prisma timings remain high while TCP/TLS is low, the cleanest options are:
+
+- Prisma Accelerate/Data Proxy for connection pooling and query caching without rewriting the ORM layer.
+- A lightweight Postgres driver for read-heavy aggregate pages while keeping Prisma for mutations and relational writes.
+- Drizzle or another lighter ORM if the app later needs a broader ORM migration.
 
 ## Production Safety
 
@@ -138,9 +146,10 @@ Use `/diagnostics?token=<BACKUP_EXPORT_TOKEN>` to open a private performance dia
 ## Troubleshooting
 
 - `the URL must start with postgresql://`: the Vercel `DATABASE_URL` is missing, malformed, or still set to an old SQLite value.
-- `Can't reach database server`: check the Supabase password, pooler host, and that `DATABASE_URL` uses port `6543` with `?pgbouncer=true`.
+- `Can't reach database server`: check the Supabase password, pooler host, and that `DATABASE_URL` uses port `6543` with `?pgbouncer=true&connection_limit=1`.
 - Migration fails in production: confirm `DIRECT_URL` is set to the session-mode pooler on port `5432`.
 - Slow first loads: check Vercel runtime logs for the executing region. Far-away regions add latency to every Supabase query.
+- Region mismatch: open `/diagnostics?token=<BACKUP_EXPORT_TOKEN>` after deploy. `x-vercel-id` should start with `syd1` when Vercel is running close to the current Supabase Sydney database.
 - Build fails after schema changes: run `pnpm run db:migrate` or `pnpm exec prisma generate`, then rerun `pnpm run build`.
 
 ## Useful Commands

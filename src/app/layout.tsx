@@ -4,7 +4,7 @@ import { BottomNav } from "@/components/BottomNav";
 import { ServiceWorkerRegister } from "@/components/ServiceWorkerRegister";
 
 export const runtime = "nodejs";
-export const preferredRegion = "hnd1";
+export const preferredRegion = "syd1";
 
 export const metadata: Metadata = {
   title: "Trade Invoice Tracker",

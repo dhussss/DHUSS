@@ -1,10 +1,13 @@
 import { headers } from "next/headers";
+import tls from "node:tls";
+import { Prisma } from "@prisma/client";
+import { loadDashboardData } from "@/lib/app-data";
 import { prisma } from "@/lib/prisma";
-import { previousWeekMondayToSunday } from "@/lib/dates";
+import { prismaRuntimeDiagnostics } from "@/lib/prisma";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
-export const preferredRegion = "hnd1";
+export const preferredRegion = "syd1";
 
 type SearchParams = Record<string, string | string[] | undefined>;
 
@@ -42,6 +45,85 @@ function extractRegion(vercelId: string | null) {
   return vercelId.split("::").find(Boolean) ?? vercelId;
 }
 
+function databaseUrlDiagnostics() {
+  const raw = process.env.DATABASE_URL;
+  if (!raw) {
+    return {
+      configured: false,
+      protocol: "Not available",
+      host: "Not available",
+      port: "Not available",
+      pgbouncer: "Not available",
+      connectionLimit: "Not available",
+      usesAccelerateOrDataProxy: false
+    };
+  }
+
+  const url = new URL(raw);
+    return {
+      configured: true,
+      protocol: url.protocol,
+      host: url.hostname,
+      port: url.port || "5432",
+    pgbouncer: url.searchParams.get("pgbouncer") ?? "not set",
+    connectionLimit: url.searchParams.get("connection_limit") ?? "not set",
+    usesAccelerateOrDataProxy: url.protocol === "prisma:" || url.hostname.includes("prisma-data") || url.hostname.includes("accelerate")
+  };
+}
+
+async function tlsConnectTiming() {
+  const database = databaseUrlDiagnostics();
+  if (!database.configured || database.host === "Not available") {
+    return { ok: false, durationMs: 0, detail: "DATABASE_URL is not configured." };
+  }
+
+  const startedAt = performance.now();
+  return new Promise<{ ok: boolean; durationMs: number; detail: string }>((resolve) => {
+    const socket = tls.connect({
+      host: database.host,
+      port: Number(database.port),
+      servername: database.host,
+      rejectUnauthorized: true,
+      timeout: 5000
+    });
+
+    socket.once("secureConnect", () => {
+      const durationMs = performance.now() - startedAt;
+      socket.end();
+      resolve({ ok: true, durationMs, detail: `TLS connect to ${database.host}:${database.port}` });
+    });
+
+    socket.once("timeout", () => {
+      socket.destroy();
+      resolve({ ok: false, durationMs: performance.now() - startedAt, detail: "TLS connection timed out." });
+    });
+
+    socket.once("error", (error) => {
+      resolve({ ok: false, durationMs: performance.now() - startedAt, detail: error.message });
+    });
+  });
+}
+
+function diagnosis({
+  prismaPingMs,
+  dashboardMs,
+  region
+}: {
+  prismaPingMs: number;
+  dashboardMs: number;
+  region: string | null;
+}) {
+  if (prismaPingMs > 300) {
+    return `Database/Prisma round-trip overhead is the dominant signal. Prisma SELECT 1 took ${formatMs(prismaPingMs)} from ${region ?? "the current Vercel region"}. If TCP/TLS is fast but Prisma remains slow, consider Prisma Accelerate or a lighter driver for read-heavy paths.`;
+  }
+
+  if (dashboardMs > prismaPingMs * 2.5) {
+    return "Dashboard query work is the dominant signal. The dashboard now uses one aggregate SQL query, so check row counts and indexes if this stays high.";
+  }
+
+  return "Timings look balanced. Remaining slowness is likely normal server/database latency rather than frontend rendering.";
+}
+
 function TimingRow({ label, durationMs, detail }: { label: string; durationMs: number; detail?: string }) {
   return (
     <tr className="border-t border-line">
@@ -75,79 +157,25 @@ export default async function DiagnosticsPage({
 
   const requestHeaders = await headers();
   const vercelId = requestHeaders.get("x-vercel-id");
-  const previousWeek = previousWeekMondayToSunday();
+  const regionFromHeader = extractRegion(vercelId);
+  const database = databaseUrlDiagnostics();
+  const runtime = prismaRuntimeDiagnostics();
+  const tlsTiming = await tlsConnectTiming();
 
   const simpleServerTiming = await timed("Simple server timing check", async () => Promise.resolve("ok"));
-  const prismaPing = await timed("Prisma connection/query", async () => prisma.$queryRaw`SELECT 1`);
+  const prismaPing = await timed("Prisma SELECT 1 first query", async () => prisma.$queryRaw`SELECT 1`);
+  const prismaPingSecond = await timed("Prisma SELECT 1 second query", async () => prisma.$queryRaw`SELECT 1`);
+  const prismaDoublePing = await timed("Prisma two SELECTs in one round trip", async () => prisma.$queryRaw`SELECT 1 AS one, 2 AS two`);
   const clientCount = await timed("Client count query", async () => prisma.client.count());
   const projectCount = await timed("Project count query", async () => prisma.project.count());
   const timeEntryCount = await timed("Time entry count query", async () => prisma.timeEntry.count());
-
-  const dashboardStartedAt = performance.now();
-  const dashboardTimings = await Promise.all([
-    timed("Dashboard active projects", async () =>
-      prisma.project.findMany({
-        where: { status: "ACTIVE" },
-        select: { id: true, title: true, client: { select: { businessName: true } } },
-        orderBy: { updatedAt: "desc" }
-      })
-    ),
-    timed("Dashboard sent invoices", async () =>
-      prisma.invoice.findMany({
-        where: { status: "SENT" },
-        select: {
-          id: true,
-          invoiceNumber: true,
-          status: true,
-          invoiceDate: true,
-          grandTotalCents: true,
-          project: { select: { title: true } }
-        },
-        orderBy: { invoiceDate: "desc" }
-      })
-    ),
-    timed("Dashboard paid invoices", async () =>
-      prisma.invoice.findMany({
-        where: { status: "PAID", paymentDate: { not: null } },
-        select: { paymentDate: true, grandTotalCents: true },
-        orderBy: { paymentDate: "desc" }
-      })
-    ),
-    timed("Dashboard unbilled time", async () =>
-      prisma.timeEntry.findMany({
-        where: { billingStatus: "UNBILLED" },
-        select: { durationMinutes: true, hourlyRateCentsSnapshot: true },
-        orderBy: { date: "desc" }
-      })
-    ),
-    timed("Dashboard unbilled items", async () =>
-      prisma.expenseItem.findMany({
-        where: { billingStatus: "UNBILLED" },
-        select: { totalCostCents: true },
-        orderBy: { datePurchased: "desc" }
-      })
-    ),
-    timed("Dashboard previous week hours", async () =>
-      prisma.timeEntry.findMany({
-        where: {
-          date: {
-            gte: previousWeek.start,
-            lte: previousWeek.endInclusive
-          }
-        },
-        select: {
-          id: true,
-          date: true,
-          durationMinutes: true,
-          notes: true,
-          project: { select: { title: true, client: { select: { businessName: true } } } }
-        },
-        orderBy: [{ date: "asc" }, { createdAt: "asc" }]
-      })
-    )
-  ]);
-  const dashboardTotalMs = performance.now() - dashboardStartedAt;
+  const dashboardTiming = await timed("Dashboard aggregate query", loadDashboardData);
   const totalServerMs = performance.now() - pageStartedAt;
+  const diagnosisText = diagnosis({
+    prismaPingMs: prismaPing.durationMs,
+    dashboardMs: dashboardTiming.durationMs,
+    region: regionFromHeader ?? process.env.VERCEL_REGION ?? null
+  });
 
   return (
     <main className="page-shell">
@@ -163,12 +191,37 @@ export default async function DiagnosticsPage({
         </article>
         <article className="card">
           <p className="text-sm font-bold text-moss">Region from header</p>
-          <p className="mt-2 text-xl font-black">{extractRegion(vercelId) ?? "Not available"}</p>
+          <p className="mt-2 text-xl font-black">{regionFromHeader ?? "Not available"}</p>
         </article>
         <article className="card">
           <p className="text-sm font-bold text-moss">x-vercel-id</p>
           <p className="mt-2 break-words text-sm font-black">{vercelId ?? "Not available"}</p>
         </article>
+      </section>
+
+      <section className="mt-6 grid gap-3 md:grid-cols-3">
+        <article className="card">
+          <p className="text-sm font-bold text-moss">Database pooler host</p>
+          <p className="mt-2 break-words text-sm font-black">{database.host}</p>
+        </article>
+        <article className="card">
+          <p className="text-sm font-bold text-moss">DATABASE_URL params</p>
+          <p className="mt-2 text-sm font-black">pgbouncer={database.pgbouncer}, connection_limit={database.connectionLimit}</p>
+        </article>
+        <article className="card">
+          <p className="text-sm font-bold text-moss">Prisma runtime</p>
+          <p className="mt-2 text-sm font-black">
+            Node {process.version}, Prisma {Prisma.prismaVersion.client}, init count {runtime.initCount}
+          </p>
+          <p className="mt-2 text-xs font-bold text-moss">
+            {database.usesAccelerateOrDataProxy ? "Accelerate/Data Proxy style URL detected" : "Direct Prisma engine URL detected"}
+          </p>
+        </article>
+      </section>
+
+      <section className="card mt-6">
+        <h2 className="text-xl font-black tracking-normal">Diagnosis</h2>
+        <p className="mt-3 text-sm font-bold leading-6 text-moss">{diagnosisText}</p>
       </section>
 
       <section className="card mt-6 overflow-x-auto">
@@ -184,7 +237,10 @@ export default async function DiagnosticsPage({
           <tbody>
             <TimingRow label="Simple server response time" durationMs={totalServerMs} detail="Full diagnostics page render" />
             <TimingRow label={simpleServerTiming.label} durationMs={simpleServerTiming.durationMs} detail="No database work" />
+            <TimingRow label="TCP/TLS connect to database host" durationMs={tlsTiming.durationMs} detail={tlsTiming.detail} />
             <TimingRow label={prismaPing.label} durationMs={prismaPing.durationMs} detail="SELECT 1 through Prisma" />
+            <TimingRow label={prismaPingSecond.label} durationMs={prismaPingSecond.durationMs} detail="Second query in same request" />
+            <TimingRow label={prismaDoublePing.label} durationMs={prismaDoublePing.durationMs} detail="Single Prisma round trip" />
             <TimingRow label={clientCount.label} durationMs={clientCount.durationMs} detail={`${clientCount.result} clients`} />
             <TimingRow label={projectCount.label} durationMs={projectCount.durationMs} detail={`${projectCount.result} projects`} />
             <TimingRow label={timeEntryCount.label} durationMs={timeEntryCount.durationMs} detail={`${timeEntryCount.result} time entries`} />
@@ -203,10 +259,11 @@ export default async function DiagnosticsPage({
             </tr>
           </thead>
           <tbody>
-            <TimingRow label="Dashboard parallel query group" durationMs={dashboardTotalMs} detail="All dashboard queries in Promise.all" />
-            {dashboardTimings.map((item) => (
-              <TimingRow key={item.label} label={item.label} durationMs={item.durationMs} detail={`${item.result.length} rows`} />
-            ))}
+            <TimingRow
+              label={dashboardTiming.label}
+              durationMs={dashboardTiming.durationMs}
+              detail={`${dashboardTiming.result.projects.length} active projects, ${dashboardTiming.result.sentInvoices.length} sent invoices, ${dashboardTiming.result.previousWeekEntries.length} previous-week entries`}
+            />
           </tbody>
         </table>
       </section>

@@ -1,9 +1,10 @@
 "use server";
 
 import type { ProjectStatus } from "@prisma/client";
-import { revalidatePath } from "next/cache";
+import { revalidatePath, revalidateTag } from "next/cache";
 import { redirect } from "next/navigation";
 import { prisma } from "@/lib/prisma";
+import { CACHE_TAGS } from "@/lib/app-data";
 import { dollarsToCents } from "@/lib/money";
 import { endOfDay, parseInputDate } from "@/lib/dates";
 import { buildInvoiceLineData, invoiceTotals, summaryText } from "@/lib/invoices";
@@ -22,6 +23,12 @@ function positive(value: number, message: string) {
 function returnTo(formData: FormData) {
   const value = text(formData, "returnTo");
   return value.startsWith("/") ? value : "/";
+}
+
+function revalidateAppData() {
+  for (const tag of Object.values(CACHE_TAGS)) {
+    revalidateTag(tag);
+  }
 }
 
 export async function createTimeEntryAction(formData: FormData) {
@@ -78,6 +85,7 @@ export async function createTimeEntryAction(formData: FormData) {
 
   revalidatePath("/");
   revalidatePath("/projects");
+  revalidateAppData();
   redirect(returnTo(formData));
 }
 
@@ -138,6 +146,7 @@ export async function updateTimeEntryAction(formData: FormData) {
   revalidatePath("/projects");
   revalidatePath(`/projects/${projectId}`);
   revalidatePath("/hours-export");
+  revalidateAppData();
   redirect(`/projects/${projectId}`);
 }
 
@@ -158,6 +167,7 @@ export async function deleteTimeEntryAction(formData: FormData) {
   revalidatePath("/projects");
   revalidatePath(`/projects/${projectId}`);
   revalidatePath("/hours-export");
+  revalidateAppData();
   redirect(returnTo(formData));
 }
 
@@ -192,6 +202,7 @@ export async function createExpenseItemAction(formData: FormData) {
 
   revalidatePath("/");
   revalidatePath("/projects");
+  revalidateAppData();
   redirect(returnTo(formData));
 }
 
@@ -240,6 +251,7 @@ export async function createProjectAction(formData: FormData) {
   });
 
   revalidatePath("/projects");
+  revalidateAppData();
   redirect(`/projects/${project.id}`);
 }
 
@@ -282,6 +294,7 @@ export async function updateProjectAction(formData: FormData) {
   });
 
   revalidatePath("/projects");
+  revalidateAppData();
   redirect(`/projects/${projectId}`);
 }
 
@@ -294,6 +307,7 @@ export async function archiveProjectAction(formData: FormData) {
   });
 
   revalidatePath("/projects");
+  revalidateAppData();
   redirect("/projects");
 }
 
@@ -307,6 +321,7 @@ export async function unarchiveProjectAction(formData: FormData) {
 
   revalidatePath("/");
   revalidatePath("/projects");
+  revalidateAppData();
   redirect(`/projects/${projectId}`);
 }
 
@@ -336,6 +351,7 @@ export async function deleteProjectAction(formData: FormData) {
   revalidatePath("/");
   revalidatePath("/projects");
   revalidatePath("/invoices");
+  revalidateAppData();
   redirect("/projects");
 }
 
@@ -389,6 +405,7 @@ export async function deleteClientAction(formData: FormData) {
   revalidatePath("/projects");
   revalidatePath("/invoices");
   revalidatePath("/hours-export");
+  revalidateAppData();
   redirect("/clients");
 }
 
@@ -471,6 +488,7 @@ export async function createInvoiceDraftAction(formData: FormData) {
   });
 
   revalidatePath("/invoices");
+  revalidateAppData();
   redirect(`/invoices/${invoice.id}`);
 }
 
@@ -538,6 +556,7 @@ export async function markInvoiceSentAction(formData: FormData) {
   const invoiceId = text(formData, "invoiceId");
   await finaliseInvoice(invoiceId, "SENT");
   revalidatePath("/invoices");
+  revalidateAppData();
   redirect(`/invoices/${invoiceId}`);
 }
 
@@ -546,6 +565,7 @@ export async function markInvoicePaidAction(formData: FormData) {
   await finaliseInvoice(invoiceId, "PAID");
   revalidatePath("/");
   revalidatePath("/invoices");
+  revalidateAppData();
   redirect(`/invoices/${invoiceId}`);
 }
 
@@ -583,6 +603,7 @@ export async function voidInvoiceAction(formData: FormData) {
   revalidatePath("/");
   revalidatePath("/projects");
   revalidatePath("/invoices");
+  revalidateAppData();
   redirect(`/invoices/${invoiceId}`);
 }
 
@@ -600,6 +621,7 @@ export async function unvoidInvoiceAction(formData: FormData) {
 
   revalidatePath("/");
   revalidatePath("/invoices");
+  revalidateAppData();
   redirect(`/invoices/${invoiceId}`);
 }
 
@@ -634,5 +656,6 @@ export async function deleteInvoiceAction(formData: FormData) {
   revalidatePath("/");
   revalidatePath("/projects");
   revalidatePath("/invoices");
+  revalidateAppData();
   redirect("/invoices");
 }

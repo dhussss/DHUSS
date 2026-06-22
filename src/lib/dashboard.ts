@@ -1,4 +1,4 @@
-import type { Invoice, TimeEntry } from "@prisma/client";
+import type { TimeEntry } from "@prisma/client";
 import { addDays, startOfWeekMonday } from "@/lib/dates";
 import { labourTotalCents } from "@/lib/time";
 
@@ -6,7 +6,7 @@ export function unbilledTimeValue(entries: Pick<TimeEntry, "durationMinutes" | "
   return entries.reduce((sum, entry) => sum + labourTotalCents(entry.durationMinutes, entry.hourlyRateCentsSnapshot), 0);
 }
 
-export function buildPaidWeeklyTotals(invoices: Pick<Invoice, "paymentDate" | "grandTotalCents">[]) {
+export function buildPaidWeeklyTotals(invoices: { paymentDate: Date | string | null; grandTotalCents: number }[]) {
   const thisWeek = startOfWeekMonday(new Date());
   const weeks = Array.from({ length: 13 }, (_, index) => {
     const start = addDays(thisWeek, (index - 12) * 7);

@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { ArrowRight, Banknote, ClipboardList, Download, FileClock, ReceiptText } from "lucide-react";
-import { prisma } from "@/lib/prisma";
-import { buildPaidWeeklyTotals, unbilledTimeValue } from "@/lib/dashboard";
+import { buildPaidWeeklyTotals } from "@/lib/dashboard";
+import { getDashboardData } from "@/lib/app-data";
 import { dateInputValue, formatDateAU, previousWeekMondayToSunday } from "@/lib/dates";
 import { formatMoney } from "@/lib/money";
 import { formatHours } from "@/lib/time";
@@ -10,66 +10,14 @@ import { LogTimeSheet } from "@/components/LogTimeSheet";
 import { SummaryCard } from "@/components/SummaryCard";
 import { WeeklyPaidChart } from "@/components/WeeklyPaidChart";
 
-export const dynamic = "force-dynamic";
+export const revalidate = 20;
 
 export default async function DashboardPage() {
   const previousWeek = previousWeekMondayToSunday();
   const previousWeekExportLink = `/hours-export?start=${dateInputValue(previousWeek.start)}&end=${dateInputValue(previousWeek.end)}`;
 
-  const [projects, sentInvoices, paidInvoices, unbilledEntries, unbilledItems, previousWeekEntries] = await Promise.all([
-    prisma.project.findMany({
-      where: { status: "ACTIVE" },
-      select: { id: true, title: true, client: { select: { businessName: true } } },
-      orderBy: { updatedAt: "desc" }
-    }),
-    prisma.invoice.findMany({
-      where: { status: "SENT" },
-      select: {
-        id: true,
-        invoiceNumber: true,
-        status: true,
-        invoiceDate: true,
-        grandTotalCents: true,
-        project: { select: { title: true } }
-      },
-      orderBy: { invoiceDate: "desc" }
-    }),
-    prisma.invoice.findMany({
-      where: { status: "PAID", paymentDate: { not: null } },
-      select: { paymentDate: true, grandTotalCents: true },
-      orderBy: { paymentDate: "desc" }
-    }),
-    prisma.timeEntry.findMany({
-      where: { billingStatus: "UNBILLED" },
-      select: { durationMinutes: true, hourlyRateCentsSnapshot: true },
-      orderBy: { date: "desc" }
-    }),
-    prisma.expenseItem.findMany({
-      where: { billingStatus: "UNBILLED" },
-      select: { totalCostCents: true },
-      orderBy: { datePurchased: "desc" }
-    }),
-    prisma.timeEntry.findMany({
-      where: {
-        date: {
-          gte: previousWeek.start,
-          lte: previousWeek.endInclusive
-        }
-      },
-      select: {
-        id: true,
-        date: true,
-        durationMinutes: true,
-        notes: true,
-        project: { select: { title: true, client: { select: { businessName: true } } } }
-      },
-      orderBy: [{ date: "asc" }, { createdAt: "asc" }]
-    })
-  ]);
-
-  const pendingPaymentCents = sentInvoices.reduce((sum, invoice) => sum + invoice.grandTotalCents, 0);
-  const pendingInvoicesCents =
-    unbilledTimeValue(unbilledEntries) + unbilledItems.reduce((sum, item) => sum + item.totalCostCents, 0);
+  const { projects, sentInvoices, paidInvoices, previousWeekEntries, unbilledEntryCount, unbilledItemCount, pendingPaymentCents, pendingInvoicesCents } =
+    await getDashboardData();
   const paidWeeks = buildPaidWeeklyTotals(paidInvoices);
 
   return (
@@ -98,7 +46,7 @@ export default async function DashboardPage() {
         <SummaryCard
           label="Pending Invoices"
           value={formatMoney(pendingInvoicesCents)}
-          note={`${unbilledEntries.length} time entries, ${unbilledItems.length} items`}
+          note={`${unbilledEntryCount} time entries, ${unbilledItemCount} items`}
           icon={ReceiptText}
         />
       </section>

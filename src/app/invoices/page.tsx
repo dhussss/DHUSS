@@ -1,28 +1,14 @@
 import Link from "next/link";
 import { Plus } from "lucide-react";
-import { prisma } from "@/lib/prisma";
+import { getInvoicesPageData } from "@/lib/app-data";
 import { formatDateAU } from "@/lib/dates";
 import { formatMoney } from "@/lib/money";
 import { InvoiceStatusPill } from "@/components/StatusPill";
 
-export const dynamic = "force-dynamic";
+export const revalidate = 20;
 
 export default async function InvoicesPage() {
-  const invoices = await prisma.invoice.findMany({
-    select: {
-      id: true,
-      invoiceNumber: true,
-      status: true,
-      dateRangeStart: true,
-      dateRangeEnd: true,
-      invoiceDate: true,
-      grandTotalCents: true,
-      totalHours: true,
-      project: { select: { title: true } },
-      client: { select: { businessName: true } }
-    },
-    orderBy: [{ invoiceDate: "desc" }, { invoiceNumber: "desc" }]
-  });
+  const invoices = await getInvoicesPageData();
 
   return (
     <main className="page-shell">

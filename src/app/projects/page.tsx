@@ -1,13 +1,12 @@
 import Link from "next/link";
 import { Archive, Plus, RotateCcw, Search } from "lucide-react";
 import { unarchiveProjectAction } from "@/app/actions";
-import { prisma } from "@/lib/prisma";
-import { unbilledTimeValue } from "@/lib/dashboard";
+import { getProjectsPageData } from "@/lib/app-data";
 import { formatMoney } from "@/lib/money";
 import { formatHours } from "@/lib/time";
 import { ProjectStatusPill } from "@/components/StatusPill";
 
-export const dynamic = "force-dynamic";
+export const revalidate = 20;
 
 export default async function ProjectsPage({
   searchParams
@@ -17,59 +16,9 @@ export default async function ProjectsPage({
   const params = await searchParams;
   const q = typeof params?.q === "string" ? params.q.trim() : "";
 
-  const searchWhere = q
-    ? [
-        { title: { contains: q } },
-        { client: { businessName: { contains: q } } },
-        { client: { contactName: { contains: q } } }
-      ]
-    : undefined;
-
-  const [projects, archivedProjects] = await Promise.all([
-    prisma.project.findMany({
-      where: {
-        status: "ACTIVE",
-        OR: searchWhere
-      },
-      select: {
-        id: true,
-        title: true,
-        status: true,
-        currentHourlyRateCents: true,
-        client: { select: { businessName: true } },
-        timeEntries: {
-          where: { billingStatus: "UNBILLED" },
-          select: { durationMinutes: true, hourlyRateCentsSnapshot: true }
-        },
-        expenseItems: {
-          where: { billingStatus: "UNBILLED" },
-          select: { totalCostCents: true }
-        }
-      },
-      orderBy: { updatedAt: "desc" }
-    }),
-    prisma.project.findMany({
-      where: {
-        status: "ARCHIVED",
-        OR: searchWhere
-      },
-      select: {
-        id: true,
-        title: true,
-        status: true,
-        client: { select: { businessName: true } },
-        timeEntries: {
-          where: { billingStatus: "UNBILLED" },
-          select: { durationMinutes: true, hourlyRateCentsSnapshot: true }
-        },
-        expenseItems: {
-          where: { billingStatus: "UNBILLED" },
-          select: { totalCostCents: true }
-        }
-      },
-      orderBy: { updatedAt: "desc" }
-    })
-  ]);
+  const rows = await getProjectsPageData(q);
+  const projects = rows.filter((project) => project.status === "ACTIVE");
+  const archivedProjects = rows.filter((project) => project.status === "ARCHIVED");
 
   return (
     <main className="page-shell">
@@ -96,17 +45,12 @@ export default async function ProjectsPage({
 
       <section className="mt-5 grid gap-3 md:grid-cols-2">
         {projects.map((project) => {
-          const unbilledMinutes = project.timeEntries.reduce((sum, entry) => sum + entry.durationMinutes, 0);
-          const unbilledValue =
-            unbilledTimeValue(project.timeEntries) +
-            project.expenseItems.reduce((sum, item) => sum + item.totalCostCents, 0);
-
           return (
             <Link key={project.id} href={`/projects/${project.id}`} className="card block transition hover:border-mint">
               <div className="flex items-start justify-between gap-3">
                 <div>
                   <h2 className="text-xl font-black tracking-normal">{project.title}</h2>
-                  <p className="mt-1 text-sm font-bold text-moss">{project.client.businessName}</p>
+                  <p className="mt-1 text-sm font-bold text-moss">{project.clientBusinessName}</p>
                 </div>
                 <ProjectStatusPill status={project.status} />
               </div>
@@ -118,11 +62,11 @@ export default async function ProjectsPage({
                 </div>
                 <div>
                   <dt className="font-bold text-moss">Unbilled hours</dt>
-                  <dd className="mt-1 text-lg font-black">{formatHours(unbilledMinutes)}h</dd>
+                  <dd className="mt-1 text-lg font-black">{formatHours(project.unbilledMinutes)}h</dd>
                 </div>
                 <div className="col-span-2 rounded-lg bg-paper p-3">
                   <dt className="font-bold text-moss">Unbilled value</dt>
-                  <dd className="mt-1 text-2xl font-black">{formatMoney(unbilledValue)}</dd>
+                  <dd className="mt-1 text-2xl font-black">{formatMoney(project.unbilledValueCents)}</dd>
                 </div>
               </dl>
             </Link>
@@ -139,29 +83,24 @@ export default async function ProjectsPage({
         <div className="grid gap-3 md:grid-cols-2">
           {archivedProjects.length ? (
             archivedProjects.map((project) => {
-              const unbilledMinutes = project.timeEntries.reduce((sum, entry) => sum + entry.durationMinutes, 0);
-              const unbilledValue =
-                unbilledTimeValue(project.timeEntries) +
-                project.expenseItems.reduce((sum, item) => sum + item.totalCostCents, 0);
-
               return (
                 <article key={project.id} className="card">
                   <Link href={`/projects/${project.id}`} className="block">
                     <div className="flex items-start justify-between gap-3">
                       <div>
                         <h3 className="text-lg font-black tracking-normal">{project.title}</h3>
-                        <p className="mt-1 text-sm font-bold text-moss">{project.client.businessName}</p>
+                        <p className="mt-1 text-sm font-bold text-moss">{project.clientBusinessName}</p>
                       </div>
                       <ProjectStatusPill status={project.status} />
                     </div>
                     <dl className="mt-4 grid grid-cols-2 gap-3 text-sm">
                       <div>
                         <dt className="font-bold text-moss">Unbilled hours</dt>
-                        <dd className="mt-1 text-lg font-black">{formatHours(unbilledMinutes)}h</dd>
+                        <dd className="mt-1 text-lg font-black">{formatHours(project.unbilledMinutes)}h</dd>
                       </div>
                       <div>
                         <dt className="font-bold text-moss">Unbilled value</dt>
-                        <dd className="mt-1 text-lg font-black">{formatMoney(unbilledValue)}</dd>
+                        <dd className="mt-1 text-lg font-black">{formatMoney(project.unbilledValueCents)}</dd>
                       </div>
                     </dl>
                   </Link>
