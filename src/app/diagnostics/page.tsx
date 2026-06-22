@@ -4,6 +4,7 @@ import { Prisma } from "@prisma/client";
 import { loadDashboardData } from "@/lib/app-data";
 import { prisma } from "@/lib/prisma";
 import { prismaRuntimeDiagnostics } from "@/lib/prisma";
+import { requireUserId } from "@/lib/auth";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -154,6 +155,7 @@ export default async function DiagnosticsPage({
       </main>
     );
   }
+  const ownerId = await requireUserId();
 
   const requestHeaders = await headers();
   const vercelId = requestHeaders.get("x-vercel-id");
@@ -166,10 +168,10 @@ export default async function DiagnosticsPage({
   const prismaPing = await timed("Prisma SELECT 1 first query", async () => prisma.$queryRaw`SELECT 1`);
   const prismaPingSecond = await timed("Prisma SELECT 1 second query", async () => prisma.$queryRaw`SELECT 1`);
   const prismaDoublePing = await timed("Prisma two SELECTs in one round trip", async () => prisma.$queryRaw`SELECT 1 AS one, 2 AS two`);
-  const clientCount = await timed("Client count query", async () => prisma.client.count());
-  const projectCount = await timed("Project count query", async () => prisma.project.count());
-  const timeEntryCount = await timed("Time entry count query", async () => prisma.timeEntry.count());
-  const dashboardTiming = await timed("Dashboard aggregate query", loadDashboardData);
+  const clientCount = await timed("Client count query", async () => prisma.client.count({ where: { ownerId } }));
+  const projectCount = await timed("Project count query", async () => prisma.project.count({ where: { ownerId } }));
+  const timeEntryCount = await timed("Time entry count query", async () => prisma.timeEntry.count({ where: { ownerId } }));
+  const dashboardTiming = await timed("Dashboard aggregate query", () => loadDashboardData(ownerId));
   const totalServerMs = performance.now() - pageStartedAt;
   const diagnosisText = diagnosis({
     prismaPingMs: prismaPing.durationMs,

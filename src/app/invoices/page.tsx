@@ -1,14 +1,16 @@
 import Link from "next/link";
 import { Plus } from "lucide-react";
+import { requireUserId } from "@/lib/auth";
 import { getInvoicesPageData } from "@/lib/app-data";
 import { formatDateAU } from "@/lib/dates";
 import { formatMoney } from "@/lib/money";
 import { InvoiceStatusPill } from "@/components/StatusPill";
 
-export const revalidate = 20;
+export const dynamic = "force-dynamic";
 
 export default async function InvoicesPage() {
-  const invoices = await getInvoicesPageData();
+  const ownerId = await requireUserId();
+  const invoices = await getInvoicesPageData(ownerId);
 
   return (
     <main className="page-shell">

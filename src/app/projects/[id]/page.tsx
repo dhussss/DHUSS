@@ -2,6 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ArrowLeft, Clock3, Edit, FilePlus, FileText, RotateCcw } from "lucide-react";
 import { deleteTimeEntryAction, unarchiveProjectAction } from "@/app/actions";
+import { requireUserId } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { dateInputValue, formatDateAU } from "@/lib/dates";
 import { formatMoney } from "@/lib/money";
@@ -14,9 +15,10 @@ export const dynamic = "force-dynamic";
 
 export default async function ProjectDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
+  const ownerId = await requireUserId();
   const [project, activeProjects] = await Promise.all([
-    prisma.project.findUnique({
-      where: { id },
+    prisma.project.findFirst({
+      where: { id, ownerId },
       include: {
         client: true,
         rateHistory: { orderBy: { startsAt: "desc" } },
@@ -26,7 +28,7 @@ export default async function ProjectDetailPage({ params }: { params: Promise<{ 
       }
     }),
     prisma.project.findMany({
-      where: { status: "ACTIVE" },
+      where: { status: "ACTIVE", ownerId },
       include: { client: true },
       orderBy: { title: "asc" }
     })

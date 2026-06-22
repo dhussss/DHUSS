@@ -2,6 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ArrowLeft, Archive, Save } from "lucide-react";
 import { archiveProjectAction, deleteProjectAction, updateProjectAction } from "@/app/actions";
+import { requireUserId } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { centsToDollars } from "@/lib/money";
 import { ConfirmSubmitButton } from "@/components/ConfirmSubmitButton";
@@ -11,9 +12,10 @@ export const dynamic = "force-dynamic";
 
 export default async function EditProjectPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
+  const ownerId = await requireUserId();
   const [project, clients] = await Promise.all([
-    prisma.project.findUnique({ where: { id }, include: { client: true } }),
-    prisma.client.findMany({ orderBy: { businessName: "asc" } })
+    prisma.project.findFirst({ where: { id, ownerId }, include: { client: true } }),
+    prisma.client.findMany({ where: { ownerId }, orderBy: { businessName: "asc" } })
   ]);
 
   if (!project) notFound();

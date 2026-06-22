@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { ArrowLeft, Eye, FilePlus } from "lucide-react";
 import { createInvoiceDraftAction } from "@/app/actions";
+import { requireUserId } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { endOfDay, formatDateAU, parseInputDate, todayInputValue } from "@/lib/dates";
 import { invoiceTotals, timeEntryTotalCents, type InvoiceSourceExpense, type InvoiceSourceTimeEntry } from "@/lib/invoices";
@@ -23,8 +24,9 @@ export default async function NewInvoicePage({
   searchParams?: Promise<SearchParams>;
 }) {
   const params = await searchParams;
+  const ownerId = await requireUserId();
   const projects = await prisma.project.findMany({
-    where: { status: "ACTIVE" },
+    where: { status: "ACTIVE", ownerId },
     select: {
       id: true,
       title: true,
@@ -53,12 +55,12 @@ export default async function NewInvoicePage({
       } else {
         [entries, expenses] = await Promise.all([
           prisma.timeEntry.findMany({
-            where: { projectId, billingStatus: "UNBILLED", date: { gte: start, lte: end } },
+            where: { projectId, ownerId, billingStatus: "UNBILLED", date: { gte: start, lte: end } },
             select: { id: true, date: true, durationMinutes: true, notes: true, hourlyRateCentsSnapshot: true },
             orderBy: [{ date: "asc" }, { createdAt: "asc" }]
           }),
           prisma.expenseItem.findMany({
-            where: { projectId, billingStatus: "UNBILLED", datePurchased: { gte: start, lte: end } },
+            where: { projectId, ownerId, billingStatus: "UNBILLED", datePurchased: { gte: start, lte: end } },
             select: {
               id: true,
               datePurchased: true,

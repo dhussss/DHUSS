@@ -32,6 +32,7 @@ enum LineItemType {
 
 model Client {
   id           String    @id @default(cuid())
+  ownerId      String?
   businessName String
   contactName  String?
   email        String?
@@ -46,10 +47,13 @@ model Client {
 
   @@index([businessName])
   @@index([updatedAt])
+  @@index([ownerId])
+  @@index([ownerId, businessName])
 }
 
 model Project {
   id                      String        @id @default(cuid())
+  ownerId                 String?
   title                   String
   clientId                String
   currentHourlyRateCents  Int
@@ -66,10 +70,14 @@ model Project {
   @@index([clientId])
   @@index([status])
   @@index([updatedAt])
+  @@index([ownerId])
+  @@index([ownerId, clientId])
+  @@index([ownerId, status])
 }
 
 model RateHistory {
   id        String   @id @default(cuid())
+  ownerId   String?
   projectId String
   rateCents Int
   startsAt  DateTime @default(now())
@@ -77,10 +85,12 @@ model RateHistory {
   project   Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
 
   @@index([projectId, startsAt])
+  @@index([ownerId, projectId])
 }
 
 model TimeEntry {
   id                       String        @id @default(cuid())
+  ownerId                  String?
   projectId                String
   invoiceId                String?
   date                     DateTime
@@ -101,10 +111,15 @@ model TimeEntry {
   @@index([invoiceId])
   @@index([date])
   @@index([updatedAt])
+  @@index([ownerId, projectId])
+  @@index([ownerId, date])
+  @@index([ownerId, billingStatus])
+  @@index([ownerId, invoiceId])
 }
 
 model ExpenseItem {
   id              String        @id @default(cuid())
+  ownerId         String?
   projectId       String
   invoiceId       String?
   datePurchased   DateTime
@@ -125,11 +140,16 @@ model ExpenseItem {
   @@index([invoiceId])
   @@index([datePurchased])
   @@index([updatedAt])
+  @@index([ownerId, projectId])
+  @@index([ownerId, datePurchased])
+  @@index([ownerId, billingStatus])
+  @@index([ownerId, invoiceId])
 }
 
 model Invoice {
   id             String            @id @default(cuid())
-  invoiceNumber  String            @unique
+  ownerId        String?
+  invoiceNumber  String
   projectId      String
   clientId       String
   invoiceDate    DateTime
@@ -156,10 +176,16 @@ model Invoice {
   @@index([invoiceDate])
   @@index([paymentDate])
   @@index([updatedAt])
+  @@index([ownerId, projectId])
+  @@index([ownerId, clientId])
+  @@index([ownerId, status])
+  @@index([ownerId, invoiceDate])
+  @@unique([ownerId, invoiceNumber])
 }
 
 model InvoiceLineItem {
   id                String       @id @default(cuid())
+  ownerId           String?
   invoiceId         String
   timeEntryId       String?
   expenseItemId     String?
@@ -179,4 +205,34 @@ model InvoiceLineItem {
   @@index([invoiceId])
   @@index([timeEntryId])
   @@index([expenseItemId])
+  @@index([ownerId, invoiceId])
+}
+
+model BusinessProfile {
+  id                         String   @id @default(cuid())
+  ownerId                    String   @unique
+  tradingName                String
+  legalName                  String?
+  abn                        String?
+  acn                        String?
+  contactName                String?
+  email                      String?
+  phone                      String?
+  address                    String?
+  website                    String?
+  defaultHourlyRateCents     Int?
+  gstRegistered              Boolean  @default(false)
+  gstRate                    Decimal  @default(10)
+  bankAccountName            String?
+  bsb                        String?
+  accountNumber              String?
+  paymentTermsDays           Int      @default(14)
+  defaultInvoiceNotes        String?
+  defaultInvoiceEmailMessage String?
+  logoPath                   String?
+  signatureFooter            String?
+  createdAt                  DateTime @default(now())
+  updatedAt                  DateTime @updatedAt
+
+  @@index([ownerId])
 }

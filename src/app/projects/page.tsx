@@ -1,12 +1,13 @@
 import Link from "next/link";
 import { Archive, Plus, RotateCcw, Search } from "lucide-react";
 import { unarchiveProjectAction } from "@/app/actions";
+import { requireUserId } from "@/lib/auth";
 import { getProjectsPageData } from "@/lib/app-data";
 import { formatMoney } from "@/lib/money";
 import { formatHours } from "@/lib/time";
 import { ProjectStatusPill } from "@/components/StatusPill";
 
-export const revalidate = 20;
+export const dynamic = "force-dynamic";
 
 export default async function ProjectsPage({
   searchParams
@@ -14,9 +15,10 @@ export default async function ProjectsPage({
   searchParams?: Promise<Record<string, string | string[] | undefined>>;
 }) {
   const params = await searchParams;
+  const ownerId = await requireUserId();
   const q = typeof params?.q === "string" ? params.q.trim() : "";
 
-  const rows = await getProjectsPageData(q);
+  const rows = await getProjectsPageData(ownerId, q);
   const projects = rows.filter((project) => project.status === "ACTIVE");
   const archivedProjects = rows.filter((project) => project.status === "ARCHIVED");
 

@@ -4,11 +4,13 @@ import type { ProjectStatus } from "@prisma/client";
 import { revalidatePath, revalidateTag } from "next/cache";
 import { redirect } from "next/navigation";
 import { prisma } from "@/lib/prisma";
+import { requireUserId } from "@/lib/auth";
 import { CACHE_TAGS } from "@/lib/app-data";
 import { dollarsToCents } from "@/lib/money";
 import { endOfDay, parseInputDate } from "@/lib/dates";
 import { buildInvoiceLineData, invoiceTotals, summaryText } from "@/lib/invoices";
 import { isQuarterHour, isQuarterHourClock, parseClockTime } from "@/lib/time";
+import { createClient } from "@/lib/supabase/server";
 
 function text(formData: FormData, key: string) {
   return String(formData.get(key) ?? "").trim();
@@ -18,6 +20,19 @@ function positive(value: number, message: string) {
   if (!Number.isFinite(value) || value <= 0) {
     throw new Error(message);
   }
+}
+
+function optionalPositiveCents(formData: FormData, key: string) {
+  const raw = text(formData, key);
+  return raw ? dollarsToCents(raw) : null;
+}
+
+function optionalInt(formData: FormData, key: string, fallback: number) {
+  const raw = text(formData, key);
+  if (!raw) return fallback;
+  const value = Number.parseInt(raw, 10);
+  if (!Number.isFinite(value) || value < 0) throw new Error(`${key} must be a valid number.`);
+  return value;
 }
 
 function returnTo(formData: FormData) {
@@ -31,13 +46,113 @@ function revalidateAppData() {
   }
 }
 
+export async function logoutAction() {
+  const supabase = await createClient();
+  await supabase.auth.signOut();
+  redirect("/login");
+}
+
+export async function updateBusinessProfileAction(formData: FormData) {
+  const ownerId = await requireUserId();
+  const tradingName = text(formData, "tradingName");
+  if (!tradingName) throw new Error("Trading/business name is required.");
+
+  const gstRegistered = text(formData, "gstRegistered") === "on";
+  const gstRate = gstRegistered ? Number.parseFloat(text(formData, "gstRate") || "10") : 0;
+  if (!Number.isFinite(gstRate) || gstRate < 0) throw new Error("GST rate must be valid.");
+
+  const existing = await prisma.businessProfile.findUnique({ where: { ownerId } });
+  let logoPath = existing?.logoPath ?? null;
+  const removeLogo = text(formData, "removeLogo") === "on";
+  const logo = formData.get("logo");
+  const supabase = await createClient();
+
+  if (removeLogo && logoPath) {
+    await supabase.storage.from("business-logos").remove([logoPath]);
+    logoPath = null;
+  }
+
+  if (logo instanceof File && logo.size > 0) {
+    if (!["image/png", "image/jpeg", "image/webp", "image/svg+xml"].includes(logo.type)) {
+      throw new Error("Logo must be PNG, JPG, WEBP, or SVG.");
+    }
+    if (logo.size > 1024 * 1024) {
+      throw new Error("Logo must be 1MB or smaller.");
+    }
+
+    const extension = logo.name.split(".").pop()?.toLowerCase() || "png";
+    const path = `${ownerId}/logo-${Date.now()}.${extension}`;
+    const { error } = await supabase.storage.from("business-logos").upload(path, logo, {
+      upsert: true,
+      contentType: logo.type
+    });
+    if (error) throw new Error(error.message);
+    if (logoPath) await supabase.storage.from("business-logos").remove([logoPath]);
+    logoPath = path;
+  }
+
+  await prisma.businessProfile.upsert({
+    where: { ownerId },
+    create: {
+      ownerId,
+      tradingName,
+      legalName: text(formData, "legalName") || null,
+      abn: text(formData, "abn") || null,
+      acn: text(formData, "acn") || null,
+      contactName: text(formData, "contactName") || null,
+      email: text(formData, "email") || null,
+      phone: text(formData, "phone") || null,
+      address: text(formData, "address") || null,
+      website: text(formData, "website") || null,
+      defaultHourlyRateCents: optionalPositiveCents(formData, "defaultHourlyRate"),
+      gstRegistered,
+      gstRate,
+      bankAccountName: text(formData, "bankAccountName") || null,
+      bsb: text(formData, "bsb") || null,
+      accountNumber: text(formData, "accountNumber") || null,
+      paymentTermsDays: optionalInt(formData, "paymentTermsDays", 14),
+      defaultInvoiceNotes: text(formData, "defaultInvoiceNotes") || null,
+      defaultInvoiceEmailMessage: text(formData, "defaultInvoiceEmailMessage") || null,
+      logoPath,
+      signatureFooter: text(formData, "signatureFooter") || null
+    },
+    update: {
+      tradingName,
+      legalName: text(formData, "legalName") || null,
+      abn: text(formData, "abn") || null,
+      acn: text(formData, "acn") || null,
+      contactName: text(formData, "contactName") || null,
+      email: text(formData, "email") || null,
+      phone: text(formData, "phone") || null,
+      address: text(formData, "address") || null,
+      website: text(formData, "website") || null,
+      defaultHourlyRateCents: optionalPositiveCents(formData, "defaultHourlyRate"),
+      gstRegistered,
+      gstRate,
+      bankAccountName: text(formData, "bankAccountName") || null,
+      bsb: text(formData, "bsb") || null,
+      accountNumber: text(formData, "accountNumber") || null,
+      paymentTermsDays: optionalInt(formData, "paymentTermsDays", 14),
+      defaultInvoiceNotes: text(formData, "defaultInvoiceNotes") || null,
+      defaultInvoiceEmailMessage: text(formData, "defaultInvoiceEmailMessage") || null,
+      logoPath,
+      signatureFooter: text(formData, "signatureFooter") || null
+    }
+  });
+
+  revalidatePath("/business-profile");
+  revalidatePath("/invoices");
+  redirect("/business-profile");
+}
+
 export async function createTimeEntryAction(formData: FormData) {
+  const ownerId = await requireUserId();
   const projectId = text(formData, "projectId");
   const date = parseInputDate(formData.get("date"));
   const notes = text(formData, "notes") || null;
   const mode = text(formData, "entryMode");
 
-  const project = await prisma.project.findUnique({ where: { id: projectId } });
+  const project = await prisma.project.findFirst({ where: { id: projectId, ownerId } });
   if (!project || project.status !== "ACTIVE") {
     throw new Error("Choose an active project.");
   }
@@ -74,6 +189,7 @@ export async function createTimeEntryAction(formData: FormData) {
   await prisma.timeEntry.create({
     data: {
       projectId,
+      ownerId,
       date,
       startTime,
       endTime,
@@ -127,6 +243,7 @@ function timeEntryDataFromForm(formData: FormData) {
 }
 
 export async function updateTimeEntryAction(formData: FormData) {
+  const ownerId = await requireUserId();
   const entryId = text(formData, "entryId");
   const projectId = text(formData, "projectId");
   const entry = await prisma.timeEntry.findUnique({
@@ -135,6 +252,8 @@ export async function updateTimeEntryAction(formData: FormData) {
   });
 
   if (!entry || entry.projectId !== projectId) throw new Error("Time entry not found.");
+  const project = await prisma.project.findFirst({ where: { id: projectId, ownerId }, select: { id: true } });
+  if (!project) throw new Error("Time entry not found.");
   if (entry.billingStatus !== "UNBILLED") throw new Error("Billed time entries cannot be edited.");
 
   await prisma.timeEntry.update({
@@ -151,6 +270,7 @@ export async function updateTimeEntryAction(formData: FormData) {
 }
 
 export async function deleteTimeEntryAction(formData: FormData) {
+  const ownerId = await requireUserId();
   const entryId = text(formData, "entryId");
   const projectId = text(formData, "projectId");
   const entry = await prisma.timeEntry.findUnique({
@@ -159,6 +279,8 @@ export async function deleteTimeEntryAction(formData: FormData) {
   });
 
   if (!entry || entry.projectId !== projectId) throw new Error("Time entry not found.");
+  const project = await prisma.project.findFirst({ where: { id: projectId, ownerId }, select: { id: true } });
+  if (!project) throw new Error("Time entry not found.");
   if (entry.billingStatus !== "UNBILLED") throw new Error("Billed time entries cannot be deleted.");
 
   await prisma.timeEntry.delete({ where: { id: entryId } });
@@ -172,6 +294,7 @@ export async function deleteTimeEntryAction(formData: FormData) {
 }
 
 export async function createExpenseItemAction(formData: FormData) {
+  const ownerId = await requireUserId();
   const projectId = text(formData, "projectId");
   const datePurchased = parseInputDate(formData.get("datePurchased"));
   const description = text(formData, "description");
@@ -183,7 +306,7 @@ export async function createExpenseItemAction(formData: FormData) {
   positive(quantity, "Quantity must be greater than zero.");
   positive(unitCostCents, "Unit cost must be greater than zero.");
 
-  const project = await prisma.project.findUnique({ where: { id: projectId } });
+  const project = await prisma.project.findFirst({ where: { id: projectId, ownerId } });
   if (!project || project.status !== "ACTIVE") {
     throw new Error("Choose an active project.");
   }
@@ -191,6 +314,7 @@ export async function createExpenseItemAction(formData: FormData) {
   await prisma.expenseItem.create({
     data: {
       projectId,
+      ownerId,
       datePurchased,
       description,
       quantity,
@@ -207,6 +331,7 @@ export async function createExpenseItemAction(formData: FormData) {
 }
 
 export async function createProjectAction(formData: FormData) {
+  const ownerId = await requireUserId();
   const title = text(formData, "title");
   const rateCents = dollarsToCents(formData.get("hourlyRate"));
   let clientId = text(formData, "clientId");
@@ -222,6 +347,7 @@ export async function createProjectAction(formData: FormData) {
     const client = await prisma.client.create({
       data: {
         businessName,
+        ownerId,
         contactName: text(formData, "newClientContactName") || null,
         email: text(formData, "newClientEmail") || null,
         phone: text(formData, "newClientPhone") || null,
@@ -234,15 +360,19 @@ export async function createProjectAction(formData: FormData) {
   }
 
   if (!clientId) throw new Error("Choose or add a client.");
+  const client = await prisma.client.findFirst({ where: { id: clientId, ownerId }, select: { id: true } });
+  if (!client) throw new Error("Choose one of your clients.");
 
   const project = await prisma.project.create({
     data: {
       title,
       clientId,
+      ownerId,
       currentHourlyRateCents: rateCents,
       notes,
       rateHistory: {
         create: {
+          ownerId,
           rateCents,
           notes: "Initial rate"
         }
@@ -256,6 +386,7 @@ export async function createProjectAction(formData: FormData) {
 }
 
 export async function updateProjectAction(formData: FormData) {
+  const ownerId = await requireUserId();
   const projectId = text(formData, "projectId");
   const title = text(formData, "title");
   const clientId = text(formData, "clientId");
@@ -267,8 +398,10 @@ export async function updateProjectAction(formData: FormData) {
   if (!clientId) throw new Error("Choose a client.");
   positive(rateCents, "Hourly rate must be greater than zero.");
 
-  const existing = await prisma.project.findUnique({ where: { id: projectId } });
+  const existing = await prisma.project.findFirst({ where: { id: projectId, ownerId } });
   if (!existing) throw new Error("Project not found.");
+  const client = await prisma.client.findFirst({ where: { id: clientId, ownerId }, select: { id: true } });
+  if (!client) throw new Error("Choose one of your clients.");
 
   await prisma.$transaction(async (tx) => {
     await tx.project.update({
@@ -286,6 +419,7 @@ export async function updateProjectAction(formData: FormData) {
       await tx.rateHistory.create({
         data: {
           projectId,
+          ownerId,
           rateCents,
           notes: "Rate changed from project edit"
         }
@@ -299,12 +433,14 @@ export async function updateProjectAction(formData: FormData) {
 }
 
 export async function archiveProjectAction(formData: FormData) {
+  const ownerId = await requireUserId();
   const projectId = text(formData, "projectId");
 
-  await prisma.project.update({
-    where: { id: projectId },
+  const result = await prisma.project.updateMany({
+    where: { id: projectId, ownerId },
     data: { status: "ARCHIVED" }
   });
+  if (result.count === 0) throw new Error("Project not found.");
 
   revalidatePath("/projects");
   revalidateAppData();
@@ -312,12 +448,14 @@ export async function archiveProjectAction(formData: FormData) {
 }
 
 export async function unarchiveProjectAction(formData: FormData) {
+  const ownerId = await requireUserId();
   const projectId = text(formData, "projectId");
 
-  await prisma.project.update({
-    where: { id: projectId },
+  const result = await prisma.project.updateMany({
+    where: { id: projectId, ownerId },
     data: { status: "ACTIVE" }
   });
+  if (result.count === 0) throw new Error("Project not found.");
 
   revalidatePath("/");
   revalidatePath("/projects");
@@ -326,26 +464,27 @@ export async function unarchiveProjectAction(formData: FormData) {
 }
 
 export async function deleteProjectAction(formData: FormData) {
+  const ownerId = await requireUserId();
   const projectId = text(formData, "projectId");
-  const project = await prisma.project.findUnique({ where: { id: projectId }, select: { id: true } });
+  const project = await prisma.project.findFirst({ where: { id: projectId, ownerId }, select: { id: true } });
 
   if (!project) throw new Error("Project not found.");
 
   await prisma.$transaction(async (tx) => {
     const [invoiceCount, billedTimeCount, billedExpenseCount] = await Promise.all([
-      tx.invoice.count({ where: { projectId } }),
-      tx.timeEntry.count({ where: { projectId, billingStatus: "BILLED" } }),
-      tx.expenseItem.count({ where: { projectId, billingStatus: "BILLED" } })
+      tx.invoice.count({ where: { projectId, ownerId } }),
+      tx.timeEntry.count({ where: { projectId, ownerId, billingStatus: "BILLED" } }),
+      tx.expenseItem.count({ where: { projectId, ownerId, billingStatus: "BILLED" } })
     ]);
 
     if (invoiceCount || billedTimeCount || billedExpenseCount) {
       throw new Error("This project has invoice or billed history. Archive it instead of deleting it.");
     }
 
-    await tx.timeEntry.deleteMany({ where: { projectId } });
-    await tx.expenseItem.deleteMany({ where: { projectId } });
-    await tx.rateHistory.deleteMany({ where: { projectId } });
-    await tx.project.delete({ where: { id: projectId } });
+    await tx.timeEntry.deleteMany({ where: { projectId, ownerId } });
+    await tx.expenseItem.deleteMany({ where: { projectId, ownerId } });
+    await tx.rateHistory.deleteMany({ where: { projectId, ownerId } });
+    await tx.project.deleteMany({ where: { id: projectId, ownerId } });
   });
 
   revalidatePath("/");
@@ -356,9 +495,10 @@ export async function deleteProjectAction(formData: FormData) {
 }
 
 export async function deleteClientAction(formData: FormData) {
+  const ownerId = await requireUserId();
   const clientId = text(formData, "clientId");
-  const client = await prisma.client.findUnique({
-    where: { id: clientId },
+  const client = await prisma.client.findFirst({
+    where: { id: clientId, ownerId },
     select: { id: true }
   });
 
@@ -366,7 +506,7 @@ export async function deleteClientAction(formData: FormData) {
 
   await prisma.$transaction(async (tx) => {
     const projects = await tx.project.findMany({
-      where: { clientId },
+      where: { clientId, ownerId },
       select: { id: true }
     });
     const projectIds = projects.map((project) => project.id);
@@ -374,11 +514,12 @@ export async function deleteClientAction(formData: FormData) {
     const [invoiceCount, billedTimeCount, billedExpenseCount] = await Promise.all([
       tx.invoice.count({
         where: {
+          ownerId,
           OR: [{ clientId }, { projectId: { in: projectIds } }]
         }
       }),
-      tx.timeEntry.count({ where: { projectId: { in: projectIds }, billingStatus: "BILLED" } }),
-      tx.expenseItem.count({ where: { projectId: { in: projectIds }, billingStatus: "BILLED" } })
+      tx.timeEntry.count({ where: { ownerId, projectId: { in: projectIds }, billingStatus: "BILLED" } }),
+      tx.expenseItem.count({ where: { ownerId, projectId: { in: projectIds }, billingStatus: "BILLED" } })
     ]);
 
     if (invoiceCount || billedTimeCount || billedExpenseCount) {
@@ -386,18 +527,18 @@ export async function deleteClientAction(formData: FormData) {
     }
 
     await tx.timeEntry.deleteMany({
-      where: { projectId: { in: projectIds } }
+      where: { ownerId, projectId: { in: projectIds } }
     });
     await tx.expenseItem.deleteMany({
-      where: { projectId: { in: projectIds } }
+      where: { ownerId, projectId: { in: projectIds } }
     });
     await tx.rateHistory.deleteMany({
-      where: { projectId: { in: projectIds } }
+      where: { ownerId, projectId: { in: projectIds } }
     });
     await tx.project.deleteMany({
-      where: { id: { in: projectIds } }
+      where: { ownerId, id: { in: projectIds } }
     });
-    await tx.client.delete({ where: { id: clientId } });
+    await tx.client.deleteMany({ where: { id: clientId, ownerId } });
   });
 
   revalidatePath("/");
@@ -409,16 +550,17 @@ export async function deleteClientAction(formData: FormData) {
   redirect("/clients");
 }
 
-async function nextInvoiceNumber() {
+async function nextInvoiceNumber(ownerId: string) {
   const year = new Date().getUTCFullYear();
   const count = await prisma.invoice.count({
-    where: { invoiceNumber: { startsWith: `INV-${year}-` } }
+    where: { ownerId, invoiceNumber: { startsWith: `INV-${year}-` } }
   });
 
   return `INV-${year}-${String(count + 1).padStart(4, "0")}`;
 }
 
 export async function createInvoiceDraftAction(formData: FormData) {
+  const ownerId = await requireUserId();
   const projectId = text(formData, "projectId");
   const start = parseInputDate(formData.get("dateRangeStart"));
   const end = endOfDay(parseInputDate(formData.get("dateRangeEnd")));
@@ -427,8 +569,8 @@ export async function createInvoiceDraftAction(formData: FormData) {
     throw new Error("End date must be after start date.");
   }
 
-  const project = await prisma.project.findUnique({
-    where: { id: projectId },
+  const project = await prisma.project.findFirst({
+    where: { id: projectId, ownerId },
     select: { id: true, clientId: true }
   });
   if (!project) throw new Error("Project not found.");
@@ -437,6 +579,7 @@ export async function createInvoiceDraftAction(formData: FormData) {
     prisma.timeEntry.findMany({
       where: {
         projectId,
+        ownerId,
         billingStatus: "UNBILLED",
         date: { gte: start, lte: end }
       },
@@ -446,6 +589,7 @@ export async function createInvoiceDraftAction(formData: FormData) {
     prisma.expenseItem.findMany({
       where: {
         projectId,
+        ownerId,
         billingStatus: "UNBILLED",
         datePurchased: { gte: start, lte: end }
       },
@@ -469,9 +613,10 @@ export async function createInvoiceDraftAction(formData: FormData) {
   const totals = invoiceTotals(entries, expenses);
   const invoice = await prisma.invoice.create({
     data: {
-      invoiceNumber: await nextInvoiceNumber(),
+      invoiceNumber: await nextInvoiceNumber(ownerId),
       projectId,
       clientId: project.clientId,
+      ownerId,
       invoiceDate: new Date(),
       dateRangeStart: start,
       dateRangeEnd: parseInputDate(formData.get("dateRangeEnd")),
@@ -482,7 +627,7 @@ export async function createInvoiceDraftAction(formData: FormData) {
       grandTotalCents: totals.grandTotalCents,
       summary: summaryText(entries, expenses),
       lineItems: {
-        create: buildInvoiceLineData(entries, expenses)
+        create: buildInvoiceLineData(entries, expenses).map((line) => ({ ...line, ownerId }))
       }
     }
   });
@@ -492,13 +637,14 @@ export async function createInvoiceDraftAction(formData: FormData) {
   redirect(`/invoices/${invoice.id}`);
 }
 
-async function finaliseInvoice(invoiceId: string, status: "SENT" | "PAID") {
+async function finaliseInvoice(ownerId: string, invoiceId: string, status: "SENT" | "PAID") {
   const invoice = await prisma.invoice.findUnique({
     where: { id: invoiceId },
     include: { lineItems: true }
   });
 
   if (!invoice) throw new Error("Invoice not found.");
+  if (invoice.ownerId !== ownerId) throw new Error("Invoice not found.");
   if (invoice.status === "VOID") throw new Error("Void invoices cannot be finalised.");
 
   const timeEntryIds = invoice.lineItems
@@ -512,6 +658,7 @@ async function finaliseInvoice(invoiceId: string, status: "SENT" | "PAID") {
     timeEntryIds.length
       ? prisma.timeEntry.count({
           where: {
+            ownerId,
             id: { in: timeEntryIds },
             billingStatus: "BILLED",
             invoiceId: { not: invoiceId }
@@ -521,6 +668,7 @@ async function finaliseInvoice(invoiceId: string, status: "SENT" | "PAID") {
     expenseItemIds.length
       ? prisma.expenseItem.count({
           where: {
+            ownerId,
             id: { in: expenseItemIds },
             billingStatus: "BILLED",
             invoiceId: { not: invoiceId }
@@ -535,11 +683,11 @@ async function finaliseInvoice(invoiceId: string, status: "SENT" | "PAID") {
 
   await prisma.$transaction([
     prisma.timeEntry.updateMany({
-      where: { id: { in: timeEntryIds } },
+      where: { ownerId, id: { in: timeEntryIds } },
       data: { billingStatus: "BILLED", invoiceId }
     }),
     prisma.expenseItem.updateMany({
-      where: { id: { in: expenseItemIds } },
+      where: { ownerId, id: { in: expenseItemIds } },
       data: { billingStatus: "BILLED", invoiceId }
     }),
     prisma.invoice.update({
@@ -553,16 +701,18 @@ async function finaliseInvoice(invoiceId: string, status: "SENT" | "PAID") {
 }
 
 export async function markInvoiceSentAction(formData: FormData) {
+  const ownerId = await requireUserId();
   const invoiceId = text(formData, "invoiceId");
-  await finaliseInvoice(invoiceId, "SENT");
+  await finaliseInvoice(ownerId, invoiceId, "SENT");
   revalidatePath("/invoices");
   revalidateAppData();
   redirect(`/invoices/${invoiceId}`);
 }
 
 export async function markInvoicePaidAction(formData: FormData) {
+  const ownerId = await requireUserId();
   const invoiceId = text(formData, "invoiceId");
-  await finaliseInvoice(invoiceId, "PAID");
+  await finaliseInvoice(ownerId, invoiceId, "PAID");
   revalidatePath("/");
   revalidatePath("/invoices");
   revalidateAppData();
@@ -570,6 +720,7 @@ export async function markInvoicePaidAction(formData: FormData) {
 }
 
 export async function voidInvoiceAction(formData: FormData) {
+  const ownerId = await requireUserId();
   const invoiceId = text(formData, "invoiceId");
   const invoice = await prisma.invoice.findUnique({
     where: { id: invoiceId },
@@ -577,6 +728,7 @@ export async function voidInvoiceAction(formData: FormData) {
   });
 
   if (!invoice) throw new Error("Invoice not found.");
+  if (invoice.ownerId !== ownerId) throw new Error("Invoice not found.");
 
   const timeEntryIds = invoice.lineItems
     .map((line) => line.timeEntryId)
@@ -587,11 +739,11 @@ export async function voidInvoiceAction(formData: FormData) {
 
   await prisma.$transaction([
     prisma.timeEntry.updateMany({
-      where: { id: { in: timeEntryIds }, invoiceId },
+      where: { ownerId, id: { in: timeEntryIds }, invoiceId },
       data: { billingStatus: "UNBILLED", invoiceId: null }
     }),
     prisma.expenseItem.updateMany({
-      where: { id: { in: expenseItemIds }, invoiceId },
+      where: { ownerId, id: { in: expenseItemIds }, invoiceId },
       data: { billingStatus: "UNBILLED", invoiceId: null }
     }),
     prisma.invoice.update({
@@ -608,9 +760,10 @@ export async function voidInvoiceAction(formData: FormData) {
 }
 
 export async function unvoidInvoiceAction(formData: FormData) {
+  const ownerId = await requireUserId();
   const invoiceId = text(formData, "invoiceId");
 
-  const invoice = await prisma.invoice.findUnique({ where: { id: invoiceId } });
+  const invoice = await prisma.invoice.findFirst({ where: { id: invoiceId, ownerId } });
   if (!invoice) throw new Error("Invoice not found.");
   if (invoice.status !== "VOID") throw new Error("Only void invoices can be restored.");
 
@@ -626,6 +779,7 @@ export async function unvoidInvoiceAction(formData: FormData) {
 }
 
 export async function deleteInvoiceAction(formData: FormData) {
+  const ownerId = await requireUserId();
   const invoiceId = text(formData, "invoiceId");
   const invoice = await prisma.invoice.findUnique({
     where: { id: invoiceId },
@@ -633,6 +787,7 @@ export async function deleteInvoiceAction(formData: FormData) {
   });
 
   if (!invoice) throw new Error("Invoice not found.");
+  if (invoice.ownerId !== ownerId) throw new Error("Invoice not found.");
 
   const timeEntryIds = invoice.lineItems
     .map((line) => line.timeEntryId)
@@ -643,11 +798,11 @@ export async function deleteInvoiceAction(formData: FormData) {
 
   await prisma.$transaction([
     prisma.timeEntry.updateMany({
-      where: { id: { in: timeEntryIds }, invoiceId },
+      where: { ownerId, id: { in: timeEntryIds }, invoiceId },
       data: { billingStatus: "UNBILLED", invoiceId: null }
     }),
     prisma.expenseItem.updateMany({
-      where: { id: { in: expenseItemIds }, invoiceId },
+      where: { ownerId, id: { in: expenseItemIds }, invoiceId },
       data: { billingStatus: "UNBILLED", invoiceId: null }
     }),
     prisma.invoice.delete({ where: { id: invoiceId } })

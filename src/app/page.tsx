@@ -1,5 +1,7 @@
 import Link from "next/link";
-import { ArrowRight, Banknote, ClipboardList, Download, FileClock, ReceiptText } from "lucide-react";
+import { ArrowRight, Banknote, Building2, ClipboardList, Download, FileClock, LogOut, ReceiptText } from "lucide-react";
+import { logoutAction } from "@/app/actions";
+import { requireUserId } from "@/lib/auth";
 import { buildPaidWeeklyTotals } from "@/lib/dashboard";
 import { getDashboardData } from "@/lib/app-data";
 import { dateInputValue, formatDateAU, previousWeekMondayToSunday } from "@/lib/dates";
@@ -10,14 +12,15 @@ import { LogTimeSheet } from "@/components/LogTimeSheet";
 import { SummaryCard } from "@/components/SummaryCard";
 import { WeeklyPaidChart } from "@/components/WeeklyPaidChart";
 
-export const revalidate = 20;
+export const dynamic = "force-dynamic";
 
 export default async function DashboardPage() {
+  const ownerId = await requireUserId();
   const previousWeek = previousWeekMondayToSunday();
   const previousWeekExportLink = `/hours-export?start=${dateInputValue(previousWeek.start)}&end=${dateInputValue(previousWeek.end)}`;
 
   const { projects, sentInvoices, paidInvoices, previousWeekEntries, unbilledEntryCount, unbilledItemCount, pendingPaymentCents, pendingInvoicesCents } =
-    await getDashboardData();
+    await getDashboardData(ownerId);
   const paidWeeks = buildPaidWeeklyTotals(paidInvoices);
 
   return (
@@ -32,6 +35,16 @@ export default async function DashboardPage() {
             <Download size={20} aria-hidden="true" />
             Export Backup
           </a>
+          <Link className="tap-secondary" href="/business-profile">
+            <Building2 size={20} aria-hidden="true" />
+            Profile
+          </Link>
+          <form action={logoutAction}>
+            <button className="tap-secondary w-full" type="submit">
+              <LogOut size={20} aria-hidden="true" />
+              Logout
+            </button>
+          </form>
           <LogTimeSheet projects={projects} />
         </div>
       </header>

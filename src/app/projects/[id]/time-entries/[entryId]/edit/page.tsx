@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ArrowLeft } from "lucide-react";
+import { requireUserId } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { dateInputValue } from "@/lib/dates";
 import { formatHours } from "@/lib/time";
@@ -14,8 +15,9 @@ export default async function EditTimeEntryPage({
   params: Promise<{ id: string; entryId: string }>;
 }) {
   const { id, entryId } = await params;
-  const entry = await prisma.timeEntry.findUnique({
-    where: { id: entryId },
+  const ownerId = await requireUserId();
+  const entry = await prisma.timeEntry.findFirst({
+    where: { id: entryId, ownerId },
     include: {
       project: {
         include: { client: true }

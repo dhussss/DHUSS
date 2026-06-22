@@ -12,12 +12,13 @@ import {
   UsersRound
 } from "lucide-react";
 import { deleteClientAction } from "@/app/actions";
+import { requireUserId } from "@/lib/auth";
 import { getClientsPageData } from "@/lib/app-data";
 import { formatDateAU } from "@/lib/dates";
 import { formatMoney } from "@/lib/money";
 import { ConfirmSubmitButton } from "@/components/ConfirmSubmitButton";
 
-export const revalidate = 20;
+export const dynamic = "force-dynamic";
 
 function detail(value: string | null) {
   return value?.trim() ? value : "Not recorded";
@@ -29,9 +30,10 @@ export default async function ClientsPage({
   searchParams?: Promise<Record<string, string | string[] | undefined>>;
 }) {
   const params = await searchParams;
+  const ownerId = await requireUserId();
   const q = typeof params?.q === "string" ? params.q.trim() : "";
 
-  const clients = await getClientsPageData(q);
+  const clients = await getClientsPageData(ownerId, q);
 
   return (
     <main className="page-shell">

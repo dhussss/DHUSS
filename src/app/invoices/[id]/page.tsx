@@ -8,7 +8,9 @@ import {
   unvoidInvoiceAction,
   voidInvoiceAction
 } from "@/app/actions";
+import { requireUserId } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { createClient } from "@/lib/supabase/server";
 import { formatDateAU } from "@/lib/dates";
 import { formatMoney } from "@/lib/money";
 import { formatHours } from "@/lib/time";
@@ -20,16 +22,26 @@ export const dynamic = "force-dynamic";
 
 export default async function InvoiceDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  const invoice = await prisma.invoice.findUnique({
-    where: { id },
-    include: {
-      project: true,
-      client: true,
-      lineItems: { orderBy: { sortOrder: "asc" } }
-    }
-  });
+  const ownerId = await requireUserId();
+  const [invoice, profile] = await Promise.all([
+    prisma.invoice.findFirst({
+      where: { id, ownerId },
+      include: {
+        project: true,
+        client: true,
+        lineItems: { orderBy: { sortOrder: "asc" } }
+      }
+    }),
+    prisma.businessProfile.findUnique({ where: { ownerId } })
+  ]);
 
   if (!invoice) notFound();
+  let logoUrl: string | null = null;
+  if (profile?.logoPath) {
+    const supabase = await createClient();
+    const { data } = await supabase.storage.from("business-logos").createSignedUrl(profile.logoPath, 60 * 10);
+    logoUrl = data?.signedUrl ?? null;
+  }
 
   return (
     <main className="page-shell">
@@ -39,7 +51,12 @@ export default async function InvoiceDetailPage({ params }: { params: Promise<{ 
       </Link>
 
       <header className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-        <div>
+        <div className="flex items-start gap-4">
+          {logoUrl ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img src={logoUrl} alt={`${profile?.tradingName ?? "Business"} logo`} className="h-16 w-16 rounded-lg border border-line object-contain bg-white" />
+          ) : null}
+          <div>
           <div className="flex items-center gap-2">
             <p className="section-title">Invoice</p>
             <InvoiceStatusPill status={invoice.status} />
@@ -48,6 +65,8 @@ export default async function InvoiceDetailPage({ params }: { params: Promise<{ 
           <p className="mt-1 font-bold text-moss">
             {invoice.project.title} - {invoice.client.businessName}
           </p>
+          {profile ? <p className="mt-1 text-sm font-bold text-moss">{profile.tradingName}</p> : null}
+          </div>
         </div>
         <p className="text-3xl font-black">{formatMoney(invoice.grandTotalCents)}</p>
       </header>

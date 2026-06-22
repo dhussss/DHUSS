@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { createClient } from "@/lib/supabase/server";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -18,15 +19,24 @@ export async function GET(request: NextRequest) {
   if (!authorised(request)) {
     return NextResponse.json({ error: "Backup export is not authorised." }, { status: 401 });
   }
+  const supabase = await createClient();
+  const {
+    data: { user }
+  } = await supabase.auth.getUser();
+  if (!user) {
+    return NextResponse.json({ error: "Login is required for backup export." }, { status: 401 });
+  }
+  const ownerId = user.id;
 
-  const [clients, projects, rateHistory, timeEntries, expenseItems, invoices, invoiceLineItems] = await Promise.all([
-    prisma.client.findMany({ orderBy: [{ businessName: "asc" }, { createdAt: "asc" }] }),
-    prisma.project.findMany({ orderBy: [{ updatedAt: "desc" }, { createdAt: "asc" }] }),
-    prisma.rateHistory.findMany({ orderBy: [{ projectId: "asc" }, { startsAt: "asc" }] }),
-    prisma.timeEntry.findMany({ orderBy: [{ date: "asc" }, { createdAt: "asc" }] }),
-    prisma.expenseItem.findMany({ orderBy: [{ datePurchased: "asc" }, { createdAt: "asc" }] }),
-    prisma.invoice.findMany({ orderBy: [{ invoiceDate: "asc" }, { invoiceNumber: "asc" }] }),
-    prisma.invoiceLineItem.findMany({ orderBy: [{ invoiceId: "asc" }, { sortOrder: "asc" }] })
+  const [profile, clients, projects, rateHistory, timeEntries, expenseItems, invoices, invoiceLineItems] = await Promise.all([
+    prisma.businessProfile.findUnique({ where: { ownerId } }),
+    prisma.client.findMany({ where: { ownerId }, orderBy: [{ businessName: "asc" }, { createdAt: "asc" }] }),
+    prisma.project.findMany({ where: { ownerId }, orderBy: [{ updatedAt: "desc" }, { createdAt: "asc" }] }),
+    prisma.rateHistory.findMany({ where: { ownerId }, orderBy: [{ projectId: "asc" }, { startsAt: "asc" }] }),
+    prisma.timeEntry.findMany({ where: { ownerId }, orderBy: [{ date: "asc" }, { createdAt: "asc" }] }),
+    prisma.expenseItem.findMany({ where: { ownerId }, orderBy: [{ datePurchased: "asc" }, { createdAt: "asc" }] }),
+    prisma.invoice.findMany({ where: { ownerId }, orderBy: [{ invoiceDate: "asc" }, { invoiceNumber: "asc" }] }),
+    prisma.invoiceLineItem.findMany({ where: { ownerId }, orderBy: [{ invoiceId: "asc" }, { sortOrder: "asc" }] })
   ]);
 
   const exportedAt = new Date().toISOString();
@@ -38,6 +48,7 @@ export async function GET(request: NextRequest) {
       version: 1,
       exportedAt,
       tables: {
+        profile,
         clients,
         projects,
         rateHistory,

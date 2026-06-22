@@ -1,7 +1,8 @@
+import { requireUserId } from "@/lib/auth";
 import { getHoursExportData } from "@/lib/app-data";
 import { HoursExportClient } from "@/components/HoursExportClient";
 
-export const revalidate = 20;
+export const dynamic = "force-dynamic";
 
 type SearchParams = Record<string, string | string[] | undefined>;
 
@@ -16,7 +17,8 @@ export default async function HoursExportPage({
   searchParams?: Promise<SearchParams>;
 }) {
   const params = await searchParams;
-  const { projects, entries } = await getHoursExportData();
+  const ownerId = await requireUserId();
+  const { projects, entries } = await getHoursExportData(ownerId);
 
   return (
     <main className="page-shell">

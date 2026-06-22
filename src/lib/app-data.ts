@@ -52,7 +52,7 @@ function numberValue(value: bigint | number | null | undefined) {
   return Number(value ?? 0);
 }
 
-export async function loadDashboardData(): Promise<DashboardData> {
+export async function loadDashboardData(ownerId: string): Promise<DashboardData> {
   const previousWeek = previousWeekMondayToSunday();
   const rows = await prisma.$queryRaw<DashboardRow[]>`
     WITH bounds AS (
@@ -72,7 +72,7 @@ export async function loadDashboardData(): Promise<DashboardData> {
       ) AS data
       FROM "Project" p
       JOIN "Client" c ON c.id = p."clientId"
-      WHERE p.status = 'ACTIVE'
+      WHERE p.status = 'ACTIVE' AND p."ownerId" = ${ownerId}
     ),
     sent_invoices AS (
       SELECT
@@ -94,7 +94,7 @@ export async function loadDashboardData(): Promise<DashboardData> {
         COALESCE(SUM(i."grandTotalCents"), 0) AS invoice_total
       FROM "Invoice" i
       JOIN "Project" p ON p.id = i."projectId"
-      WHERE i.status = 'SENT'
+      WHERE i.status = 'SENT' AND i."ownerId" = ${ownerId}
     ),
     paid_invoices AS (
       SELECT COALESCE(
@@ -108,21 +108,21 @@ export async function loadDashboardData(): Promise<DashboardData> {
         '[]'::jsonb
       ) AS data
       FROM "Invoice" i
-      WHERE i.status = 'PAID' AND i."paymentDate" IS NOT NULL
+      WHERE i.status = 'PAID' AND i."paymentDate" IS NOT NULL AND i."ownerId" = ${ownerId}
     ),
     unbilled_time AS (
       SELECT
         COUNT(*) AS entry_count,
         COALESCE(SUM(ROUND(("durationMinutes"::numeric / 60) * "hourlyRateCentsSnapshot")), 0) AS entry_total
       FROM "TimeEntry"
-      WHERE "billingStatus" = 'UNBILLED'
+      WHERE "billingStatus" = 'UNBILLED' AND "ownerId" = ${ownerId}
     ),
     unbilled_items AS (
       SELECT
         COUNT(*) AS item_count,
         COALESCE(SUM("totalCostCents"), 0) AS item_total
       FROM "ExpenseItem"
-      WHERE "billingStatus" = 'UNBILLED'
+      WHERE "billingStatus" = 'UNBILLED' AND "ownerId" = ${ownerId}
     ),
     previous_week_entries AS (
       SELECT COALESCE(
@@ -145,7 +145,7 @@ export async function loadDashboardData(): Promise<DashboardData> {
       JOIN "Project" p ON p.id = t."projectId"
       JOIN "Client" c ON c.id = p."clientId"
       CROSS JOIN bounds b
-      WHERE t.date >= b.start_at AND t.date <= b.end_at
+      WHERE t.date >= b.start_at AND t.date <= b.end_at AND t."ownerId" = ${ownerId}
     )
     SELECT
       active_projects.data AS "projects",
@@ -188,7 +188,7 @@ export type ProjectListRow = {
 };
 
 export const getProjectsPageData = unstable_cache(
-  async (q: string): Promise<ProjectListRow[]> => {
+  async (ownerId: string, q: string): Promise<ProjectListRow[]> => {
     const like = `%${q}%`;
     const search = q
       ? Prisma.sql`AND (p.title ILIKE ${like} OR c."businessName" ILIKE ${like} OR c."contactName" ILIKE ${like})`
@@ -206,13 +206,13 @@ export const getProjectsPageData = unstable_cache(
           COALESCE(SUM("durationMinutes"), 0) AS minutes,
           COALESCE(SUM(ROUND(("durationMinutes"::numeric / 60) * "hourlyRateCentsSnapshot")), 0) AS value_cents
         FROM "TimeEntry"
-        WHERE "billingStatus" = 'UNBILLED'
+        WHERE "billingStatus" = 'UNBILLED' AND "ownerId" = ${ownerId}
         GROUP BY "projectId"
       ),
       item_totals AS (
         SELECT "projectId", COALESCE(SUM("totalCostCents"), 0) AS value_cents
         FROM "ExpenseItem"
-        WHERE "billingStatus" = 'UNBILLED'
+        WHERE "billingStatus" = 'UNBILLED' AND "ownerId" = ${ownerId}
         GROUP BY "projectId"
       )
       SELECT
@@ -227,7 +227,7 @@ export const getProjectsPageData = unstable_cache(
       JOIN "Client" c ON c.id = p."clientId"
       LEFT JOIN time_totals ON time_totals."projectId" = p.id
       LEFT JOIN item_totals ON item_totals."projectId" = p.id
-      WHERE p.status IN ('ACTIVE', 'ARCHIVED') ${search}
+      WHERE p."ownerId" = ${ownerId} AND p.status IN ('ACTIVE', 'ARCHIVED') ${search}
       ORDER BY p.status ASC, p."updatedAt" DESC
     `;
 
@@ -259,10 +259,10 @@ export type ClientListRow = {
 };
 
 export const getClientsPageData = unstable_cache(
-  async (q: string): Promise<ClientListRow[]> => {
+  async (ownerId: string, q: string): Promise<ClientListRow[]> => {
     const like = `%${q}%`;
     const search = q
-      ? Prisma.sql`WHERE c."businessName" ILIKE ${like} OR c."contactName" ILIKE ${like} OR c.email ILIKE ${like} OR c.phone ILIKE ${like} OR c.abn ILIKE ${like} OR c.address ILIKE ${like} OR c.notes ILIKE ${like}`
+      ? Prisma.sql`AND (c."businessName" ILIKE ${like} OR c."contactName" ILIKE ${like} OR c.email ILIKE ${like} OR c.phone ILIKE ${like} OR c.abn ILIKE ${like} OR c.address ILIKE ${like} OR c.notes ILIKE ${like})`
       : Prisma.empty;
 
     const rows = await prisma.$queryRaw<
@@ -280,6 +280,7 @@ export const getClientsPageData = unstable_cache(
           COUNT(*) FILTER (WHERE status = 'ARCHIVED') AS archived_count,
           STRING_AGG(title, ', ' ORDER BY title ASC) AS project_names
         FROM "Project"
+        WHERE "ownerId" = ${ownerId}
         GROUP BY "clientId"
       ),
       invoice_totals AS (
@@ -288,6 +289,7 @@ export const getClientsPageData = unstable_cache(
           COUNT(*) AS invoice_count,
           COALESCE(SUM("grandTotalCents") FILTER (WHERE status <> 'VOID'), 0) AS invoice_value
         FROM "Invoice"
+        WHERE "ownerId" = ${ownerId}
         GROUP BY "clientId"
       )
       SELECT
@@ -308,7 +310,7 @@ export const getClientsPageData = unstable_cache(
       FROM "Client" c
       LEFT JOIN project_totals ON project_totals."clientId" = c.id
       LEFT JOIN invoice_totals ON invoice_totals."clientId" = c.id
-      ${search}
+      WHERE c."ownerId" = ${ownerId} ${search}
       ORDER BY c."businessName" ASC
     `;
 
@@ -325,8 +327,9 @@ export const getClientsPageData = unstable_cache(
 );
 
 export const getInvoicesPageData = unstable_cache(
-  async () =>
+  async (ownerId: string) =>
     prisma.invoice.findMany({
+      where: { ownerId },
       select: {
         id: true,
         invoiceNumber: true,
@@ -361,7 +364,7 @@ export type HoursExportEntry = {
 };
 
 export const getHoursExportData = unstable_cache(
-  async (): Promise<{ projects: HoursExportProject[]; entries: HoursExportEntry[] }> => {
+  async (ownerId: string): Promise<{ projects: HoursExportProject[]; entries: HoursExportEntry[] }> => {
     const [projects, entries] = await Promise.all([
       prisma.$queryRaw<
         (Omit<HoursExportProject, "unbilledMinutes"> & {
@@ -376,11 +379,12 @@ export const getHoursExportData = unstable_cache(
         FROM "Project" p
         JOIN "Client" c ON c.id = p."clientId"
         LEFT JOIN "TimeEntry" t ON t."projectId" = p.id AND t."billingStatus" = 'UNBILLED'
-        WHERE p.status = 'ACTIVE'
+        WHERE p.status = 'ACTIVE' AND p."ownerId" = ${ownerId}
         GROUP BY p.id, p.title, c."businessName"
         ORDER BY p.title ASC
       `,
       prisma.timeEntry.findMany({
+        where: { ownerId },
         select: { id: true, projectId: true, date: true, durationMinutes: true, notes: true },
         orderBy: { date: "asc" }
       })
