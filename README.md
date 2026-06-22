@@ -122,6 +122,10 @@ Use `/backup` locally to download a JSON backup. In production, set `BACKUP_EXPO
 
 Run a backup before production migrations or any manual database maintenance.
 
+## Private Diagnostics
+
+Use `/diagnostics?token=<BACKUP_EXPORT_TOKEN>` to open a private performance diagnostics page. It shows the Vercel region signals available to the app plus server, Prisma, count-query, and dashboard-query timings in milliseconds. The page does not print secrets and is blocked in production unless `BACKUP_EXPORT_TOKEN` is set.
+
 ## Production Safety
 
 - Keep `DATABASE_URL` and `DIRECT_URL` only in local `.env`, Vercel environment variables, and secure password storage.
