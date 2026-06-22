@@ -41,7 +41,7 @@ export default async function HoursExportPage({
           entries={entries.map((entry) => ({
             id: entry.id,
             projectId: entry.projectId,
-            date: entry.date.toISOString(),
+            date: new Date(entry.date).toISOString(),
             durationMinutes: entry.durationMinutes,
             notes: entry.notes
           }))}
