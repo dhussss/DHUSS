@@ -108,7 +108,8 @@ export default async function ClientsPage({
                     <input type="hidden" name="clientId" value={client.id} />
                     <ConfirmSubmitButton
                       className="tap-danger w-full"
-                      message={`Delete ${client.businessName}? This permanently removes the client, their projects, invoices, logged hours and expense items. This cannot be undone.`}
+                      message={`Remove ${client.businessName}? This only works when the client has no invoices or billed history. Projects with real history should be archived instead.`}
+                      pendingLabel="Checking..."
                     >
                       Remove Client
                     </ConfirmSubmitButton>

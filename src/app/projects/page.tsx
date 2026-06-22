@@ -31,10 +31,20 @@ export default async function ProjectsPage({
         status: "ACTIVE",
         OR: searchWhere
       },
-      include: {
-        client: true,
-        timeEntries: { where: { billingStatus: "UNBILLED" } },
-        expenseItems: { where: { billingStatus: "UNBILLED" } }
+      select: {
+        id: true,
+        title: true,
+        status: true,
+        currentHourlyRateCents: true,
+        client: { select: { businessName: true } },
+        timeEntries: {
+          where: { billingStatus: "UNBILLED" },
+          select: { durationMinutes: true, hourlyRateCentsSnapshot: true }
+        },
+        expenseItems: {
+          where: { billingStatus: "UNBILLED" },
+          select: { totalCostCents: true }
+        }
       },
       orderBy: { updatedAt: "desc" }
     }),
@@ -43,10 +53,19 @@ export default async function ProjectsPage({
         status: "ARCHIVED",
         OR: searchWhere
       },
-      include: {
-        client: true,
-        timeEntries: { where: { billingStatus: "UNBILLED" } },
-        expenseItems: { where: { billingStatus: "UNBILLED" } }
+      select: {
+        id: true,
+        title: true,
+        status: true,
+        client: { select: { businessName: true } },
+        timeEntries: {
+          where: { billingStatus: "UNBILLED" },
+          select: { durationMinutes: true, hourlyRateCentsSnapshot: true }
+        },
+        expenseItems: {
+          where: { billingStatus: "UNBILLED" },
+          select: { totalCostCents: true }
+        }
       },
       orderBy: { updatedAt: "desc" }
     })

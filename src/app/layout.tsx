@@ -3,6 +3,9 @@ import "./globals.css";
 import { BottomNav } from "@/components/BottomNav";
 import { ServiceWorkerRegister } from "@/components/ServiceWorkerRegister";
 
+export const runtime = "nodejs";
+export const preferredRegion = "hnd1";
+
 export const metadata: Metadata = {
   title: "Trade Invoice Tracker",
   description: "Mobile-first time, item, invoice and hours export tracker for sole traders.",

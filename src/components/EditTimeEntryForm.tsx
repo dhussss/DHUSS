@@ -4,6 +4,7 @@ import { useMemo, useState } from "react";
 import { Save } from "lucide-react";
 import { updateTimeEntryAction } from "@/app/actions";
 import { formatHours, parseClockTime } from "@/lib/time";
+import { SubmitButton } from "@/components/SubmitButton";
 
 type EditableTimeEntry = {
   id: string;
@@ -100,10 +101,10 @@ export function EditTimeEntryForm({ entry }: { entry: EditableTimeEntry }) {
         <textarea name="notes" defaultValue={entry.notes} placeholder="Work completed, site notes, materials handled" />
       </label>
 
-      <button className="tap-primary" type="submit">
+      <SubmitButton className="tap-primary" pendingLabel="Saving changes...">
         <Save size={20} aria-hidden="true" />
         Save Changes
-      </button>
+      </SubmitButton>
     </form>
   );
 }

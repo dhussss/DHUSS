@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { Save } from "lucide-react";
 import { createProjectAction } from "@/app/actions";
+import { SubmitButton } from "@/components/SubmitButton";
 
 type ClientOption = {
   id: string;
@@ -76,10 +77,10 @@ export function CreateProjectForm({ clients }: { clients: ClientOption[] }) {
         <textarea name="notes" placeholder="Scope, billing notes, access details" />
       </label>
 
-      <button className="tap-primary" type="submit">
+      <SubmitButton className="tap-primary" pendingLabel="Saving project...">
         <Save size={20} aria-hidden="true" />
         Save Project
-      </button>
+      </SubmitButton>
     </form>
   );
 }

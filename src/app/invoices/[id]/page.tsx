@@ -14,6 +14,7 @@ import { formatMoney } from "@/lib/money";
 import { formatHours } from "@/lib/time";
 import { InvoiceStatusPill } from "@/components/StatusPill";
 import { ConfirmSubmitButton } from "@/components/ConfirmSubmitButton";
+import { SubmitButton } from "@/components/SubmitButton";
 
 export const dynamic = "force-dynamic";
 
@@ -133,33 +134,33 @@ export default async function InvoiceDetailPage({ params }: { params: Promise<{ 
 
             <form action={markInvoiceSentAction}>
               <input type="hidden" name="invoiceId" value={invoice.id} />
-              <button className="tap-primary w-full" type="submit" disabled={invoice.status === "PAID" || invoice.status === "VOID"}>
+              <SubmitButton className="tap-primary w-full" pendingLabel="Marking sent..." disabled={invoice.status === "PAID" || invoice.status === "VOID"}>
                 <Send size={20} aria-hidden="true" />
                 Mark Sent
-              </button>
+              </SubmitButton>
             </form>
             <form action={markInvoicePaidAction}>
               <input type="hidden" name="invoiceId" value={invoice.id} />
-              <button className="tap-primary w-full bg-mint hover:bg-ink" type="submit" disabled={invoice.status === "PAID" || invoice.status === "VOID"}>
+              <SubmitButton className="tap-primary w-full bg-mint hover:bg-ink" pendingLabel="Marking paid..." disabled={invoice.status === "PAID" || invoice.status === "VOID"}>
                 <Banknote size={20} aria-hidden="true" />
                 Mark Paid
-              </button>
+              </SubmitButton>
             </form>
             {invoice.status === "VOID" ? (
               <form action={unvoidInvoiceAction}>
                 <input type="hidden" name="invoiceId" value={invoice.id} />
-                <button className="tap-secondary w-full" type="submit">
+                <SubmitButton className="tap-secondary w-full" pendingLabel="Restoring...">
                   <RotateCcw size={20} aria-hidden="true" />
                   Unvoid Invoice
-                </button>
+                </SubmitButton>
               </form>
             ) : (
               <form action={voidInvoiceAction}>
                 <input type="hidden" name="invoiceId" value={invoice.id} />
-                <button className="tap-danger w-full" type="submit">
+                <SubmitButton className="tap-danger w-full" pendingLabel="Voiding...">
                   <XCircle size={20} aria-hidden="true" />
                   Void Invoice
-                </button>
+                </SubmitButton>
               </form>
             )}
 
@@ -168,6 +169,7 @@ export default async function InvoiceDetailPage({ params }: { params: Promise<{ 
               <ConfirmSubmitButton
                 className="tap-danger w-full"
                 message={`Delete ${invoice.invoiceNumber} permanently? This cannot be undone and linked time/items will return to unbilled.`}
+                pendingLabel="Deleting..."
               >
                 Delete Invoice
               </ConfirmSubmitButton>

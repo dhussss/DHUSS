@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { ArrowRight, Banknote, ClipboardList, FileClock, ReceiptText } from "lucide-react";
+import { ArrowRight, Banknote, ClipboardList, Download, FileClock, ReceiptText } from "lucide-react";
 import { prisma } from "@/lib/prisma";
 import { buildPaidWeeklyTotals, unbilledTimeValue } from "@/lib/dashboard";
 import { dateInputValue, formatDateAU, previousWeekMondayToSunday } from "@/lib/dates";
@@ -19,26 +19,34 @@ export default async function DashboardPage() {
   const [projects, sentInvoices, paidInvoices, unbilledEntries, unbilledItems, previousWeekEntries] = await Promise.all([
     prisma.project.findMany({
       where: { status: "ACTIVE" },
-      include: { client: true },
+      select: { id: true, title: true, client: { select: { businessName: true } } },
       orderBy: { updatedAt: "desc" }
     }),
     prisma.invoice.findMany({
       where: { status: "SENT" },
-      include: { project: true, client: true },
+      select: {
+        id: true,
+        invoiceNumber: true,
+        status: true,
+        invoiceDate: true,
+        grandTotalCents: true,
+        project: { select: { title: true } }
+      },
       orderBy: { invoiceDate: "desc" }
     }),
     prisma.invoice.findMany({
       where: { status: "PAID", paymentDate: { not: null } },
+      select: { paymentDate: true, grandTotalCents: true },
       orderBy: { paymentDate: "desc" }
     }),
     prisma.timeEntry.findMany({
       where: { billingStatus: "UNBILLED" },
-      include: { project: { include: { client: true } } },
+      select: { durationMinutes: true, hourlyRateCentsSnapshot: true },
       orderBy: { date: "desc" }
     }),
     prisma.expenseItem.findMany({
       where: { billingStatus: "UNBILLED" },
-      include: { project: true },
+      select: { totalCostCents: true },
       orderBy: { datePurchased: "desc" }
     }),
     prisma.timeEntry.findMany({
@@ -48,7 +56,13 @@ export default async function DashboardPage() {
           lte: previousWeek.endInclusive
         }
       },
-      include: { project: { include: { client: true } } },
+      select: {
+        id: true,
+        date: true,
+        durationMinutes: true,
+        notes: true,
+        project: { select: { title: true, client: { select: { businessName: true } } } }
+      },
       orderBy: [{ date: "asc" }, { createdAt: "asc" }]
     })
   ]);
@@ -65,7 +79,13 @@ export default async function DashboardPage() {
           <p className="section-title">Trade Invoice Tracker</p>
           <h1 className="mt-2 text-3xl font-black tracking-normal sm:text-4xl">Today&apos;s work and invoices</h1>
         </div>
-        <LogTimeSheet projects={projects} />
+        <div className="flex flex-col gap-2 sm:flex-row">
+          <a className="tap-secondary" href="/backup">
+            <Download size={20} aria-hidden="true" />
+            Export Backup
+          </a>
+          <LogTimeSheet projects={projects} />
+        </div>
       </header>
 
       <section className="mt-6 grid gap-3 sm:grid-cols-2">

@@ -312,24 +312,21 @@ export async function unarchiveProjectAction(formData: FormData) {
 
 export async function deleteProjectAction(formData: FormData) {
   const projectId = text(formData, "projectId");
-  const project = await prisma.project.findUnique({
-    where: { id: projectId },
-    select: { id: true }
-  });
+  const project = await prisma.project.findUnique({ where: { id: projectId }, select: { id: true } });
 
   if (!project) throw new Error("Project not found.");
 
   await prisma.$transaction(async (tx) => {
-    const invoices = await tx.invoice.findMany({
-      where: { projectId },
-      select: { id: true }
-    });
-    const invoiceIds = invoices.map((invoice) => invoice.id);
+    const [invoiceCount, billedTimeCount, billedExpenseCount] = await Promise.all([
+      tx.invoice.count({ where: { projectId } }),
+      tx.timeEntry.count({ where: { projectId, billingStatus: "BILLED" } }),
+      tx.expenseItem.count({ where: { projectId, billingStatus: "BILLED" } })
+    ]);
 
-    await tx.invoiceLineItem.deleteMany({
-      where: { invoiceId: { in: invoiceIds } }
-    });
-    await tx.invoice.deleteMany({ where: { projectId } });
+    if (invoiceCount || billedTimeCount || billedExpenseCount) {
+      throw new Error("This project has invoice or billed history. Archive it instead of deleting it.");
+    }
+
     await tx.timeEntry.deleteMany({ where: { projectId } });
     await tx.expenseItem.deleteMany({ where: { projectId } });
     await tx.rateHistory.deleteMany({ where: { projectId } });
@@ -358,20 +355,20 @@ export async function deleteClientAction(formData: FormData) {
     });
     const projectIds = projects.map((project) => project.id);
 
-    const invoices = await tx.invoice.findMany({
-      where: {
-        OR: [{ clientId }, { projectId: { in: projectIds } }]
-      },
-      select: { id: true }
-    });
-    const invoiceIds = invoices.map((invoice) => invoice.id);
+    const [invoiceCount, billedTimeCount, billedExpenseCount] = await Promise.all([
+      tx.invoice.count({
+        where: {
+          OR: [{ clientId }, { projectId: { in: projectIds } }]
+        }
+      }),
+      tx.timeEntry.count({ where: { projectId: { in: projectIds }, billingStatus: "BILLED" } }),
+      tx.expenseItem.count({ where: { projectId: { in: projectIds }, billingStatus: "BILLED" } })
+    ]);
 
-    await tx.invoiceLineItem.deleteMany({
-      where: { invoiceId: { in: invoiceIds } }
-    });
-    await tx.invoice.deleteMany({
-      where: { id: { in: invoiceIds } }
-    });
+    if (invoiceCount || billedTimeCount || billedExpenseCount) {
+      throw new Error("This client has invoice or billed history. Archive their projects instead of deleting the client.");
+    }
+
     await tx.timeEntry.deleteMany({
       where: { projectId: { in: projectIds } }
     });
@@ -415,7 +412,7 @@ export async function createInvoiceDraftAction(formData: FormData) {
 
   const project = await prisma.project.findUnique({
     where: { id: projectId },
-    include: { client: true }
+    select: { id: true, clientId: true }
   });
   if (!project) throw new Error("Project not found.");
 
@@ -426,6 +423,7 @@ export async function createInvoiceDraftAction(formData: FormData) {
         billingStatus: "UNBILLED",
         date: { gte: start, lte: end }
       },
+      select: { id: true, date: true, durationMinutes: true, notes: true, hourlyRateCentsSnapshot: true },
       orderBy: [{ date: "asc" }, { createdAt: "asc" }]
     }),
     prisma.expenseItem.findMany({
@@ -433,6 +431,15 @@ export async function createInvoiceDraftAction(formData: FormData) {
         projectId,
         billingStatus: "UNBILLED",
         datePurchased: { gte: start, lte: end }
+      },
+      select: {
+        id: true,
+        datePurchased: true,
+        description: true,
+        quantity: true,
+        unitCostCents: true,
+        totalCostCents: true,
+        notes: true
       },
       orderBy: [{ datePurchased: "asc" }, { createdAt: "asc" }]
     })

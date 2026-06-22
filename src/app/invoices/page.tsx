@@ -9,9 +9,17 @@ export const dynamic = "force-dynamic";
 
 export default async function InvoicesPage() {
   const invoices = await prisma.invoice.findMany({
-    include: {
-      project: true,
-      client: true
+    select: {
+      id: true,
+      invoiceNumber: true,
+      status: true,
+      dateRangeStart: true,
+      dateRangeEnd: true,
+      invoiceDate: true,
+      grandTotalCents: true,
+      totalHours: true,
+      project: { select: { title: true } },
+      client: { select: { businessName: true } }
     },
     orderBy: [{ invoiceDate: "desc" }, { invoiceNumber: "desc" }]
   });

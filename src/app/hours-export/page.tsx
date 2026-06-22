@@ -19,13 +19,16 @@ export default async function HoursExportPage({
   const [projects, entries] = await Promise.all([
     prisma.project.findMany({
       where: { status: "ACTIVE" },
-      include: {
-        client: true,
-        timeEntries: { where: { billingStatus: "UNBILLED" } }
+      select: {
+        id: true,
+        title: true,
+        client: { select: { businessName: true } },
+        timeEntries: { where: { billingStatus: "UNBILLED" }, select: { durationMinutes: true } }
       },
       orderBy: { title: "asc" }
     }),
     prisma.timeEntry.findMany({
+      select: { id: true, projectId: true, date: true, durationMinutes: true, notes: true },
       orderBy: { date: "asc" }
     })
   ]);

@@ -45,6 +45,7 @@ model Client {
   invoices     Invoice[]
 
   @@index([businessName])
+  @@index([updatedAt])
 }
 
 model Project {
@@ -64,6 +65,7 @@ model Project {
 
   @@index([clientId])
   @@index([status])
+  @@index([updatedAt])
 }
 
 model RateHistory {
@@ -97,6 +99,8 @@ model TimeEntry {
   @@index([projectId, date])
   @@index([billingStatus])
   @@index([invoiceId])
+  @@index([date])
+  @@index([updatedAt])
 }
 
 model ExpenseItem {
@@ -119,6 +123,8 @@ model ExpenseItem {
   @@index([projectId, datePurchased])
   @@index([billingStatus])
   @@index([invoiceId])
+  @@index([datePurchased])
+  @@index([updatedAt])
 }
 
 model Invoice {
@@ -148,6 +154,8 @@ model Invoice {
   @@index([clientId])
   @@index([status])
   @@index([invoiceDate])
+  @@index([paymentDate])
+  @@index([updatedAt])
 }
 
 model InvoiceLineItem {

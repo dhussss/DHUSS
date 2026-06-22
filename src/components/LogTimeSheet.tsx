@@ -6,6 +6,7 @@ import { CalendarPlus, ClipboardPlus, Clock3, PackagePlus, X } from "lucide-reac
 import { createExpenseItemAction, createTimeEntryAction } from "@/app/actions";
 import { todayInputValue } from "@/lib/dates";
 import { formatHours, parseClockTime } from "@/lib/time";
+import { SubmitButton } from "@/components/SubmitButton";
 
 type ProjectOption = {
   id: string;
@@ -171,10 +172,10 @@ export function LogTimeSheet({
                   <textarea name="notes" placeholder="Work completed, site notes, materials handled" />
                 </label>
 
-                <button className="tap-primary" type="submit">
+                <SubmitButton className="tap-primary" pendingLabel="Saving time...">
                   <ClipboardPlus size={20} aria-hidden="true" />
                   Save Time
-                </button>
+                </SubmitButton>
               </form>
             ) : (
               <form action={createExpenseItemAction} className="mt-5 grid gap-4">
@@ -202,10 +203,10 @@ export function LogTimeSheet({
                   Notes
                   <textarea name="itemNotes" placeholder="Receipt detail or item notes" />
                 </label>
-                <button className="tap-primary" type="submit">
+                <SubmitButton className="tap-primary" pendingLabel="Saving item...">
                   <PackagePlus size={20} aria-hidden="true" />
                   Save Item
-                </button>
+                </SubmitButton>
               </form>
             )}
           </div>

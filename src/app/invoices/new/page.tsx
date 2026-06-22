@@ -3,9 +3,10 @@ import { ArrowLeft, Eye, FilePlus } from "lucide-react";
 import { createInvoiceDraftAction } from "@/app/actions";
 import { prisma } from "@/lib/prisma";
 import { endOfDay, formatDateAU, parseInputDate, todayInputValue } from "@/lib/dates";
-import { invoiceTotals, timeEntryTotalCents } from "@/lib/invoices";
+import { invoiceTotals, timeEntryTotalCents, type InvoiceSourceExpense, type InvoiceSourceTimeEntry } from "@/lib/invoices";
 import { formatMoney } from "@/lib/money";
 import { formatHours } from "@/lib/time";
+import { SubmitButton } from "@/components/SubmitButton";
 
 export const dynamic = "force-dynamic";
 
@@ -24,10 +25,12 @@ export default async function NewInvoicePage({
   const params = await searchParams;
   const projects = await prisma.project.findMany({
     where: { status: "ACTIVE" },
-    include: {
-      client: true,
-      timeEntries: { where: { billingStatus: "UNBILLED" } },
-      expenseItems: { where: { billingStatus: "UNBILLED" } }
+    select: {
+      id: true,
+      title: true,
+      client: { select: { businessName: true } },
+      timeEntries: { where: { billingStatus: "UNBILLED" }, select: { durationMinutes: true } },
+      expenseItems: { where: { billingStatus: "UNBILLED" }, select: { id: true } }
     },
     orderBy: { title: "asc" }
   });
@@ -36,8 +39,8 @@ export default async function NewInvoicePage({
   const startRaw = paramValue(params, "dateRangeStart") || todayInputValue();
   const endRaw = paramValue(params, "dateRangeEnd") || todayInputValue();
 
-  let entries: Awaited<ReturnType<typeof prisma.timeEntry.findMany>> = [];
-  let expenses: Awaited<ReturnType<typeof prisma.expenseItem.findMany>> = [];
+  let entries: InvoiceSourceTimeEntry[] = [];
+  let expenses: InvoiceSourceExpense[] = [];
   const selectedProject = projects.find((project) => project.id === projectId);
   let rangeError = "";
 
@@ -51,10 +54,20 @@ export default async function NewInvoicePage({
         [entries, expenses] = await Promise.all([
           prisma.timeEntry.findMany({
             where: { projectId, billingStatus: "UNBILLED", date: { gte: start, lte: end } },
+            select: { id: true, date: true, durationMinutes: true, notes: true, hourlyRateCentsSnapshot: true },
             orderBy: [{ date: "asc" }, { createdAt: "asc" }]
           }),
           prisma.expenseItem.findMany({
             where: { projectId, billingStatus: "UNBILLED", datePurchased: { gte: start, lte: end } },
+            select: {
+              id: true,
+              datePurchased: true,
+              description: true,
+              quantity: true,
+              unitCostCents: true,
+              totalCostCents: true,
+              notes: true
+            },
             orderBy: [{ datePurchased: "asc" }, { createdAt: "asc" }]
           })
         ]);
@@ -187,10 +200,10 @@ export default async function NewInvoicePage({
                 <input type="hidden" name="projectId" value={projectId} />
                 <input type="hidden" name="dateRangeStart" value={startRaw} />
                 <input type="hidden" name="dateRangeEnd" value={endRaw} />
-                <button className="tap-primary w-full" type="submit" disabled={entries.length === 0 && expenses.length === 0}>
+                <SubmitButton className="tap-primary w-full" pendingLabel="Saving draft..." disabled={entries.length === 0 && expenses.length === 0}>
                   <FilePlus size={20} aria-hidden="true" />
                   Save as Draft
-                </button>
+                </SubmitButton>
               </form>
             </aside>
           </div>

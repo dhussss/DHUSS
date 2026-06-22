@@ -5,6 +5,7 @@ import { archiveProjectAction, deleteProjectAction, updateProjectAction } from "
 import { prisma } from "@/lib/prisma";
 import { centsToDollars } from "@/lib/money";
 import { ConfirmSubmitButton } from "@/components/ConfirmSubmitButton";
+import { SubmitButton } from "@/components/SubmitButton";
 
 export const dynamic = "force-dynamic";
 
@@ -69,25 +70,26 @@ export default async function EditProjectPage({ params }: { params: Promise<{ id
             Notes
             <textarea name="notes" defaultValue={project.notes ?? ""} />
           </label>
-          <button className="tap-primary" type="submit">
+          <SubmitButton className="tap-primary" pendingLabel="Saving changes...">
             <Save size={20} aria-hidden="true" />
             Save Changes
-          </button>
+          </SubmitButton>
         </form>
 
         <form action={archiveProjectAction} className="mt-4">
           <input type="hidden" name="projectId" value={project.id} />
-          <button className="tap-danger w-full" type="submit">
+          <SubmitButton className="tap-danger w-full" pendingLabel="Archiving...">
             <Archive size={20} aria-hidden="true" />
             Archive Project
-          </button>
+          </SubmitButton>
         </form>
 
         <form action={deleteProjectAction} className="mt-4">
           <input type="hidden" name="projectId" value={project.id} />
           <ConfirmSubmitButton
             className="tap-danger w-full"
-            message={`Delete ${project.title} permanently? This removes the project, all time entries, expense items, invoices, and rate history. This cannot be undone.`}
+            message={`Delete ${project.title} permanently? This only works for unbilled/test projects with no invoice or billed history. Real project history should be archived instead.`}
+            pendingLabel="Checking..."
           >
             Delete Project
           </ConfirmSubmitButton>
