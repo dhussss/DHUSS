@@ -25,6 +25,11 @@ enum InvoiceStatus {
   VOID
 }
 
+enum InvoiceMode {
+  SIMPLE
+  DETAILED
+}
+
 enum LineItemType {
   LABOUR
   EXPENSE
@@ -153,15 +158,40 @@ model Invoice {
   projectId      String
   clientId       String
   invoiceDate    DateTime
+  dueDate        DateTime?
+  paymentTermsDays Int            @default(14)
   dateRangeStart DateTime
   dateRangeEnd   DateTime
   status         InvoiceStatus     @default(DRAFT)
+  mode           InvoiceMode       @default(DETAILED)
   totalHours     Decimal           @default(0)
+  totalDurationMinutes Int         @default(0)
+  subtotalCents     Int            @default(0)
+  expensesSubtotalCents Int        @default(0)
+  gstCents       Int               @default(0)
   labourTotalCents Int             @default(0)
   itemTotalCents   Int             @default(0)
   grandTotalCents  Int             @default(0)
   paymentDate    DateTime?
   summary        String?
+  businessNameSnapshot String?
+  businessLegalNameSnapshot String?
+  businessAbnSnapshot String?
+  businessEmailSnapshot String?
+  businessPhoneSnapshot String?
+  businessAddressSnapshot String?
+  businessBankAccountNameSnapshot String?
+  businessBsbSnapshot String?
+  businessAccountNumberSnapshot String?
+  businessGstRegisteredSnapshot Boolean @default(false)
+  businessGstRateSnapshot Decimal @default(0)
+  businessLogoPathSnapshot String?
+  clientBusinessNameSnapshot String?
+  clientContactNameSnapshot String?
+  clientEmailSnapshot String?
+  clientPhoneSnapshot String?
+  clientAddressSnapshot String?
+  clientAbnSnapshot String?
   createdAt      DateTime          @default(now())
   updatedAt      DateTime          @updatedAt
   project        Project           @relation(fields: [projectId], references: [id], onDelete: Restrict)
@@ -180,6 +210,7 @@ model Invoice {
   @@index([ownerId, clientId])
   @@index([ownerId, status])
   @@index([ownerId, invoiceDate])
+  @@index([ownerId, dueDate])
   @@unique([ownerId, invoiceNumber])
 }
 
@@ -212,6 +243,7 @@ model BusinessProfile {
   id                         String   @id @default(cuid())
   ownerId                    String   @unique
   tradingName                String
+  invoicePrefix              String   @default("INV-")
   legalName                  String?
   abn                        String?
   acn                        String?
@@ -235,4 +267,17 @@ model BusinessProfile {
   updatedAt                  DateTime @updatedAt
 
   @@index([ownerId])
+}
+
+model AuditLog {
+  id         String   @id @default(cuid())
+  ownerId    String
+  action     String
+  entityType String
+  entityId   String?
+  metadata   Json?
+  createdAt  DateTime @default(now())
+
+  @@index([ownerId, createdAt])
+  @@index([ownerId, entityType])
 }

@@ -96,6 +96,46 @@ For production-like workflows, prefer migrations.
 10. Run `pnpm run db:migrate:dev` to create the schema.
 11. Optionally run `pnpm run db:seed` for sample data.
 
+Storage policy SQL for the private `business-logos` bucket:
+
+```sql
+create policy "Users can read their own business logos"
+on storage.objects for select
+to authenticated
+using (
+  bucket_id = 'business-logos'
+  and (storage.foldername(name))[1] = auth.uid()::text
+);
+
+create policy "Users can upload their own business logos"
+on storage.objects for insert
+to authenticated
+with check (
+  bucket_id = 'business-logos'
+  and (storage.foldername(name))[1] = auth.uid()::text
+);
+
+create policy "Users can replace their own business logos"
+on storage.objects for update
+to authenticated
+using (
+  bucket_id = 'business-logos'
+  and (storage.foldername(name))[1] = auth.uid()::text
+)
+with check (
+  bucket_id = 'business-logos'
+  and (storage.foldername(name))[1] = auth.uid()::text
+);
+
+create policy "Users can delete their own business logos"
+on storage.objects for delete
+to authenticated
+using (
+  bucket_id = 'business-logos'
+  and (storage.foldername(name))[1] = auth.uid()::text
+);
+```
+
 ## Vercel Deployment
 
 1. Push the repository to GitHub.
@@ -140,6 +180,7 @@ Use `/backup` locally while logged in to download a JSON backup. In production, 
 - expense items
 - invoices
 - invoice line items
+- audit logs
 
 Run a backup before production migrations or any manual database maintenance.
 
@@ -153,8 +194,28 @@ Use `/diagnostics?token=<BACKUP_EXPORT_TOKEN>` while logged in to open a private
 - `/login` signs users in with Supabase Auth.
 - Dashboard, clients, projects, invoices, hours export, backup, diagnostics, and server actions require a logged-in user.
 - `/business-profile` lets each user save their own trading name, legal details, ABN/ACN, contact details, GST defaults, bank details, invoice notes, email message, logo, and footer.
-- Logo files are uploaded to the `business-logos` Storage bucket under the user's own folder.
+- Logo files are uploaded directly from the browser to the private `business-logos` Storage bucket under the user's own folder. The server action stores only the Storage path, which avoids Vercel's 1 MB Server Action body limit.
+- Logo validation allows PNG, JPG, WEBP, and SVG files up to 1 MB. 500 KB or smaller is recommended for fast invoice previews.
 - Invoice detail pages show the user's logo when available.
+- Business profile now includes an invoice prefix. The default is `INV-`.
+
+## Invoice Workflow
+
+- `/invoices/new` lets a user select a project, date range, and invoice mode.
+- Simple invoices show one labour line plus expenses.
+- Detailed invoices show each labour line, hours, rate, notes, and expenses.
+- Draft invoices do not mark time entries or expense items as billed.
+- Marking a draft invoice sent or paid finalises it, marks linked entries/items billed, calculates GST from the current business profile, and stores business/client snapshots on the invoice.
+- Sent and paid invoices do not silently mutate if the business profile or client changes later.
+- Invoice preview at `/invoices/<id>` is printable and supports browser Print / Save as PDF.
+- Invoice preview supports Copy Invoice Text and Copy Email Text. Real email sending is intentionally not implemented yet.
+- Invoice list supports filters for all, draft, sent, paid, and void invoices.
+
+## Audit Log And Privacy
+
+- `/audit-log` shows recent account-scoped activity for the logged-in user.
+- Audit metadata intentionally avoids passwords, auth tokens, full bank details, and secrets.
+- `/privacy` explains user isolation, stored data, backups, bank details, and the app's responsibility boundaries in plain English.
 
 ## Multi-User Data Migration Notes
 
@@ -195,6 +256,7 @@ If Prisma timings remain high while TCP/TLS is low, the cleanest options are:
 - Project/client deletion is intended only for test or unbilled setup data. If a record has invoices or billed entries, the server action blocks deletion.
 - Billed time entries cannot be edited or deleted. Void/delete invoice flows release linked entries/items back to unbilled before changing invoice state.
 - Supabase Postgres indexes are included for the common dashboard, invoice, project, and hours export filters.
+- Browser print-to-PDF is the current stable PDF export method. Server-side PDF generation is not implemented yet.
 
 ## Troubleshooting
 
@@ -218,6 +280,18 @@ pnpm run db:migrate
 pnpm run db:push
 pnpm run db:seed
 pnpm run prisma:studio
+```
+
+When deploying the invoice hardening/audit update to production, apply the committed migration:
+
+```bash
+pnpm run db:migrate
+```
+
+This applies:
+
+```text
+20260624000000_invoice_profile_audit_hardening
 ```
 
 ## Data Model Notes

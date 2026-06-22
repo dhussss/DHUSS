@@ -6,7 +6,12 @@ import { BusinessProfileForm } from "@/components/BusinessProfileForm";
 
 export const dynamic = "force-dynamic";
 
-export default async function BusinessProfilePage() {
+export default async function BusinessProfilePage({
+  searchParams
+}: {
+  searchParams?: Promise<Record<string, string | string[] | undefined>>;
+}) {
+  const params = await searchParams;
   const ownerId = await requireUserId();
   const profile = await prisma.businessProfile.findUnique({ where: { ownerId } });
   let logoUrl: string | null = null;
@@ -30,8 +35,10 @@ export default async function BusinessProfilePage() {
       <section className="mt-6 max-w-4xl">
         <BusinessProfileForm
           logoUrl={logoUrl}
+          saved={params?.saved === "1"}
           profile={{
             tradingName: profile?.tradingName ?? "",
+            invoicePrefix: profile?.invoicePrefix ?? "INV-",
             legalName: profile?.legalName ?? "",
             abn: profile?.abn ?? "",
             acn: profile?.acn ?? "",

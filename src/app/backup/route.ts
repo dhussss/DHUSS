@@ -28,7 +28,7 @@ export async function GET(request: NextRequest) {
   }
   const ownerId = user.id;
 
-  const [profile, clients, projects, rateHistory, timeEntries, expenseItems, invoices, invoiceLineItems] = await Promise.all([
+  const [profile, clients, projects, rateHistory, timeEntries, expenseItems, invoices, invoiceLineItems, auditLogs] = await Promise.all([
     prisma.businessProfile.findUnique({ where: { ownerId } }),
     prisma.client.findMany({ where: { ownerId }, orderBy: [{ businessName: "asc" }, { createdAt: "asc" }] }),
     prisma.project.findMany({ where: { ownerId }, orderBy: [{ updatedAt: "desc" }, { createdAt: "asc" }] }),
@@ -36,11 +36,22 @@ export async function GET(request: NextRequest) {
     prisma.timeEntry.findMany({ where: { ownerId }, orderBy: [{ date: "asc" }, { createdAt: "asc" }] }),
     prisma.expenseItem.findMany({ where: { ownerId }, orderBy: [{ datePurchased: "asc" }, { createdAt: "asc" }] }),
     prisma.invoice.findMany({ where: { ownerId }, orderBy: [{ invoiceDate: "asc" }, { invoiceNumber: "asc" }] }),
-    prisma.invoiceLineItem.findMany({ where: { ownerId }, orderBy: [{ invoiceId: "asc" }, { sortOrder: "asc" }] })
+    prisma.invoiceLineItem.findMany({ where: { ownerId }, orderBy: [{ invoiceId: "asc" }, { sortOrder: "asc" }] }),
+    prisma.auditLog.findMany({ where: { ownerId }, orderBy: { createdAt: "asc" } })
   ]);
 
   const exportedAt = new Date().toISOString();
-  const filename = `trade-invoice-tracker-backup-${exportedAt.slice(0, 10)}.json`;
+  const businessSlug = profile?.tradingName?.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
+  const filename = `trade-invoice-tracker-${businessSlug ? `${businessSlug}-` : ""}backup-${exportedAt.slice(0, 10)}.json`;
+
+  await prisma.auditLog.create({
+    data: {
+      ownerId,
+      action: "backup.exported",
+      entityType: "Backup",
+      metadata: { exportedAt }
+    }
+  });
 
   return NextResponse.json(
     {
@@ -55,7 +66,8 @@ export async function GET(request: NextRequest) {
         timeEntries,
         expenseItems,
         invoices,
-        invoiceLineItems
+        invoiceLineItems,
+        auditLogs
       }
     },
     {

@@ -46,16 +46,27 @@ export function buildInvoiceLineData(entries: InvoiceSourceTimeEntry[], expenses
   return [...labourLines, ...expenseLines];
 }
 
-export function invoiceTotals(entries: InvoiceSourceTimeEntry[], expenses: InvoiceSourceExpense[]) {
+export function invoiceTotals(
+  entries: InvoiceSourceTimeEntry[],
+  expenses: InvoiceSourceExpense[],
+  gst: { registered: boolean; rate: number } = { registered: false, rate: 0 }
+) {
   const totalMinutes = entries.reduce((sum, entry) => sum + entry.durationMinutes, 0);
   const labourTotalCents = entries.reduce((sum, entry) => sum + timeEntryTotalCents(entry), 0);
   const itemTotalCents = expenses.reduce((sum, expense) => sum + expense.totalCostCents, 0);
+  const subtotalCents = labourTotalCents + itemTotalCents;
+  const gstCents = gst.registered ? Math.round(subtotalCents * (gst.rate / 100)) : 0;
 
   return {
     totalHours: totalMinutes / 60,
+    totalDurationMinutes: totalMinutes,
     labourTotalCents,
+    labourSubtotalCents: labourTotalCents,
     itemTotalCents,
-    grandTotalCents: labourTotalCents + itemTotalCents
+    expensesSubtotalCents: itemTotalCents,
+    subtotalCents,
+    gstCents,
+    grandTotalCents: subtotalCents + gstCents
   };
 }
 

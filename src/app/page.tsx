@@ -1,9 +1,10 @@
 import Link from "next/link";
-import { ArrowRight, Banknote, Building2, ClipboardList, Download, FileClock, LogOut, ReceiptText } from "lucide-react";
+import { ArrowRight, Banknote, Building2, ClipboardList, Download, FileClock, LogOut, ReceiptText, ShieldCheck } from "lucide-react";
 import { logoutAction } from "@/app/actions";
 import { requireUserId } from "@/lib/auth";
 import { buildPaidWeeklyTotals } from "@/lib/dashboard";
 import { getDashboardData } from "@/lib/app-data";
+import { prisma } from "@/lib/prisma";
 import { dateInputValue, formatDateAU, previousWeekMondayToSunday } from "@/lib/dates";
 import { formatMoney } from "@/lib/money";
 import { formatHours } from "@/lib/time";
@@ -19,9 +20,14 @@ export default async function DashboardPage() {
   const previousWeek = previousWeekMondayToSunday();
   const previousWeekExportLink = `/hours-export?start=${dateInputValue(previousWeek.start)}&end=${dateInputValue(previousWeek.end)}`;
 
+  const [dashboardData, profile] = await Promise.all([
+    getDashboardData(ownerId),
+    prisma.businessProfile.findUnique({ where: { ownerId }, select: { id: true } })
+  ]);
   const { projects, sentInvoices, paidInvoices, previousWeekEntries, unbilledEntryCount, unbilledItemCount, pendingPaymentCents, pendingInvoicesCents } =
-    await getDashboardData(ownerId);
+    dashboardData;
   const paidWeeks = buildPaidWeeklyTotals(paidInvoices);
+  const showSetup = !profile || projects.length === 0 || (unbilledEntryCount === 0 && unbilledItemCount === 0 && sentInvoices.length === 0);
 
   return (
     <main className="page-shell">
@@ -39,6 +45,10 @@ export default async function DashboardPage() {
             <Building2 size={20} aria-hidden="true" />
             Profile
           </Link>
+          <Link className="tap-secondary" href="/audit-log">
+            <ShieldCheck size={20} aria-hidden="true" />
+            Audit
+          </Link>
           <form action={logoutAction}>
             <button className="tap-secondary w-full" type="submit">
               <LogOut size={20} aria-hidden="true" />
@@ -48,6 +58,27 @@ export default async function DashboardPage() {
           <LogTimeSheet projects={projects} />
         </div>
       </header>
+
+      {showSetup ? (
+        <section className="mt-6 rounded-lg border border-mint/30 bg-mint/10 p-4">
+          <p className="section-title">Setup</p>
+          <h2 className="mt-1 text-xl font-black tracking-normal">Get ready to invoice</h2>
+          <div className="mt-4 grid gap-2 sm:grid-cols-3">
+            <Link className="tap-secondary bg-white" href="/business-profile">
+              <Building2 size={18} aria-hidden="true" />
+              Business Profile
+            </Link>
+            <Link className="tap-secondary bg-white" href="/projects/new">
+              <ReceiptText size={18} aria-hidden="true" />
+              First Client / Project
+            </Link>
+            <Link className="tap-secondary bg-white" href="/invoices/new">
+              <ClipboardList size={18} aria-hidden="true" />
+              First Invoice
+            </Link>
+          </div>
+        </section>
+      ) : null}
 
       <section className="mt-6 grid gap-3 sm:grid-cols-2">
         <SummaryCard

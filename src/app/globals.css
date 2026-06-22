@@ -105,3 +105,44 @@ label {
     padding-bottom: env(safe-area-inset-bottom);
   }
 }
+
+@media print {
+  @page {
+    size: A4;
+    margin: 12mm;
+  }
+
+  html,
+  body {
+    min-height: auto;
+    background: #fff !important;
+  }
+
+  body {
+    color: #17211c;
+  }
+
+  .no-print,
+  nav,
+  .bottom-safe {
+    display: none !important;
+  }
+
+  .page-shell,
+  .print-shell {
+    display: block;
+    min-height: auto;
+    max-width: none;
+    padding: 0;
+  }
+
+  .invoice-print {
+    border: 0 !important;
+    box-shadow: none !important;
+    padding: 0 !important;
+  }
+
+  .card {
+    box-shadow: none !important;
+  }
+}

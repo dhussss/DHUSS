@@ -327,18 +327,22 @@ export const getClientsPageData = unstable_cache(
 );
 
 export const getInvoicesPageData = unstable_cache(
-  async (ownerId: string) =>
+  async (ownerId: string, status: "ALL" | "DRAFT" | "SENT" | "PAID" | "VOID" = "ALL") =>
     prisma.invoice.findMany({
-      where: { ownerId },
+      where: { ownerId, ...(status === "ALL" ? {} : { status }) },
       select: {
         id: true,
         invoiceNumber: true,
         status: true,
+        mode: true,
         dateRangeStart: true,
         dateRangeEnd: true,
         invoiceDate: true,
+        dueDate: true,
+        paymentDate: true,
         grandTotalCents: true,
         totalHours: true,
+        totalDurationMinutes: true,
         project: { select: { title: true } },
         client: { select: { businessName: true } }
       },

@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { ArrowLeft, Eye, FilePlus } from "lucide-react";
+import { AlertTriangle, ArrowLeft, Eye, FilePlus } from "lucide-react";
 import { createInvoiceDraftAction } from "@/app/actions";
 import { requireUserId } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
@@ -36,10 +36,23 @@ export default async function NewInvoicePage({
     },
     orderBy: { title: "asc" }
   });
+  const profile = await prisma.businessProfile.findUnique({
+    where: { ownerId },
+    select: {
+      tradingName: true,
+      abn: true,
+      bankAccountName: true,
+      bsb: true,
+      accountNumber: true,
+      gstRegistered: true,
+      gstRate: true
+    }
+  });
 
   const projectId = paramValue(params, "projectId") || projects[0]?.id || "";
   const startRaw = paramValue(params, "dateRangeStart") || todayInputValue();
   const endRaw = paramValue(params, "dateRangeEnd") || todayInputValue();
+  const invoiceMode = paramValue(params, "invoiceMode") === "SIMPLE" ? "SIMPLE" : "DETAILED";
 
   let entries: InvoiceSourceTimeEntry[] = [];
   let expenses: InvoiceSourceExpense[] = [];
@@ -79,7 +92,17 @@ export default async function NewInvoicePage({
     }
   }
 
-  const totals = invoiceTotals(entries, expenses);
+  const totals = invoiceTotals(entries, expenses, {
+    registered: profile?.gstRegistered ?? false,
+    rate: profile ? Number(profile.gstRate) : 0
+  });
+  const warnings = [
+    !profile ? "Create your business profile before sending this invoice." : "",
+    profile && !profile.abn ? "Your business profile has no ABN." : "",
+    profile && (!profile.bankAccountName || !profile.bsb || !profile.accountNumber) ? "Bank payment details are incomplete." : "",
+    profile?.gstRegistered && !profile.abn ? "GST is enabled but the business profile has no ABN." : "",
+    entries.length === 0 && expenses.length === 0 ? "No billable entries or expenses were found for this range." : ""
+  ].filter(Boolean);
 
   return (
     <main className="page-shell">
@@ -114,6 +137,25 @@ export default async function NewInvoicePage({
             <input type="date" name="dateRangeEnd" defaultValue={endRaw} required />
           </label>
         </div>
+        <fieldset className="grid gap-2">
+          <legend className="text-sm font-bold text-moss">Invoice mode</legend>
+          <div className="grid gap-3 sm:grid-cols-2">
+            <label className="flex min-h-12 cursor-pointer grid-cols-none flex-row items-center gap-3 rounded-lg border border-line bg-white px-3">
+              <input className="size-5 min-h-0 w-auto" type="radio" name="invoiceMode" value="SIMPLE" defaultChecked={invoiceMode === "SIMPLE"} />
+              <span>
+                <span className="block font-black">Simple</span>
+                <span className="text-xs font-bold text-moss">One labour line plus expenses.</span>
+              </span>
+            </label>
+            <label className="flex min-h-12 cursor-pointer grid-cols-none flex-row items-center gap-3 rounded-lg border border-line bg-white px-3">
+              <input className="size-5 min-h-0 w-auto" type="radio" name="invoiceMode" value="DETAILED" defaultChecked={invoiceMode === "DETAILED"} />
+              <span>
+                <span className="block font-black">Detailed</span>
+                <span className="text-xs font-bold text-moss">Shows each day, hours, rate, and notes.</span>
+              </span>
+            </label>
+          </div>
+        </fieldset>
         <button className="tap-secondary" type="submit">
           <Eye size={20} aria-hidden="true" />
           Review Unbilled Work
@@ -128,7 +170,7 @@ export default async function NewInvoicePage({
           </h2>
           {selectedProject ? (
             <p className="mt-1 text-sm font-bold text-moss">
-              {selectedProject.client.businessName} - found {entries.length} time entr{entries.length === 1 ? "y" : "ies"} and {expenses.length} expense item
+              {selectedProject.client.businessName} - {invoiceMode.toLowerCase()} mode - found {entries.length} time entr{entries.length === 1 ? "y" : "ies"} and {expenses.length} expense item
               {expenses.length === 1 ? "" : "s"}
             </p>
           ) : null}
@@ -139,6 +181,20 @@ export default async function NewInvoicePage({
         ) : (
           <div className="grid gap-4 lg:grid-cols-[1.1fr_0.9fr]">
             <div className="grid gap-3">
+              {warnings.length ? (
+                <div className="rounded-lg border border-gum/30 bg-gum/10 p-4 text-sm font-bold text-gum">
+                  <div className="mb-2 flex items-center gap-2">
+                    <AlertTriangle size={18} aria-hidden="true" />
+                    Review before sending
+                  </div>
+                  <ul className="grid gap-1">
+                    {warnings.map((warning) => (
+                      <li key={warning}>{warning}</li>
+                    ))}
+                  </ul>
+                </div>
+              ) : null}
+
               {entries.map((entry) => (
                 <article key={entry.id} className="card">
                   <div className="flex items-start justify-between gap-3">
@@ -187,9 +243,15 @@ export default async function NewInvoicePage({
                   <dd className="font-black">{formatMoney(totals.labourTotalCents)}</dd>
                 </div>
                 <div className="flex items-center justify-between gap-3">
-                  <dt className="font-bold text-moss">Items</dt>
+                  <dt className="font-bold text-moss">Expenses</dt>
                   <dd className="font-black">{formatMoney(totals.itemTotalCents)}</dd>
                 </div>
+                {profile?.gstRegistered ? (
+                  <div className="flex items-center justify-between gap-3">
+                    <dt className="font-bold text-moss">GST ({Number(profile.gstRate)}%)</dt>
+                    <dd className="font-black">{formatMoney(totals.gstCents)}</dd>
+                  </div>
+                ) : null}
                 <div className="border-t border-line pt-3">
                   <div className="flex items-center justify-between gap-3">
                     <dt className="font-bold text-moss">Grand total</dt>
@@ -202,6 +264,7 @@ export default async function NewInvoicePage({
                 <input type="hidden" name="projectId" value={projectId} />
                 <input type="hidden" name="dateRangeStart" value={startRaw} />
                 <input type="hidden" name="dateRangeEnd" value={endRaw} />
+                <input type="hidden" name="invoiceMode" value={invoiceMode} />
                 <SubmitButton className="tap-primary w-full" pendingLabel="Saving draft..." disabled={entries.length === 0 && expenses.length === 0}>
                   <FilePlus size={20} aria-hidden="true" />
                   Save as Draft
