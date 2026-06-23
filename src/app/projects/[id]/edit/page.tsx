@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { ArrowLeft, Archive, Save } from "lucide-react";
+import { AlertCircle, ArrowLeft, Archive, Save, Trash2 } from "lucide-react";
 import { archiveProjectAction, deleteProjectAction, updateProjectAction } from "@/app/actions";
 import { requireUserId } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
@@ -10,15 +10,34 @@ import { SubmitButton } from "@/components/SubmitButton";
 
 export const dynamic = "force-dynamic";
 
-export default async function EditProjectPage({ params }: { params: Promise<{ id: string }> }) {
+type SearchParams = Record<string, string | string[] | undefined>;
+
+export default async function EditProjectPage({
+  params,
+  searchParams
+}: {
+  params: Promise<{ id: string }>;
+  searchParams?: Promise<SearchParams>;
+}) {
   const { id } = await params;
+  const query = await searchParams;
+  const deleteError = typeof query?.deleteError === "string" ? query.deleteError : "";
   const ownerId = await requireUserId();
-  const [project, clients] = await Promise.all([
+  const [project, clients, invoiceCount, billedTimeCount, billedExpenseCount] = await Promise.all([
     prisma.project.findFirst({ where: { id, ownerId }, include: { client: true } }),
-    prisma.client.findMany({ where: { ownerId }, orderBy: { businessName: "asc" } })
+    prisma.client.findMany({ where: { ownerId }, orderBy: { businessName: "asc" } }),
+    prisma.invoice.count({ where: { projectId: id, ownerId } }),
+    prisma.timeEntry.count({ where: { projectId: id, ownerId, billingStatus: "BILLED" } }),
+    prisma.expenseItem.count({ where: { projectId: id, ownerId, billingStatus: "BILLED" } })
   ]);
 
   if (!project) notFound();
+  const deleteBlockers = [
+    invoiceCount ? `${invoiceCount} invoice${invoiceCount === 1 ? "" : "s"}` : "",
+    billedTimeCount ? `${billedTimeCount} billed time entr${billedTimeCount === 1 ? "y" : "ies"}` : "",
+    billedExpenseCount ? `${billedExpenseCount} billed expense item${billedExpenseCount === 1 ? "" : "s"}` : ""
+  ].filter(Boolean);
+  const canDelete = deleteBlockers.length === 0;
 
   return (
     <main className="page-shell">
@@ -33,6 +52,13 @@ export default async function EditProjectPage({ params }: { params: Promise<{ id
       </header>
 
       <section className="mt-6 max-w-2xl">
+        {deleteError ? (
+          <div className="mb-4 flex items-start gap-2 rounded-lg border border-gum/30 bg-gum/10 p-3 text-sm font-bold text-gum">
+            <AlertCircle size={18} aria-hidden="true" />
+            <span>{deleteError}</span>
+          </div>
+        ) : null}
+
         <form action={updateProjectAction} className="grid gap-5">
           <input type="hidden" name="projectId" value={project.id} />
           <label>
@@ -86,16 +112,35 @@ export default async function EditProjectPage({ params }: { params: Promise<{ id
           </SubmitButton>
         </form>
 
-        <form action={deleteProjectAction} className="mt-4">
-          <input type="hidden" name="projectId" value={project.id} />
-          <ConfirmSubmitButton
-            className="tap-danger w-full"
-            message={`Delete ${project.title} permanently? This only works for unbilled/test projects with no invoice or billed history. Real project history should be archived instead.`}
-            pendingLabel="Checking..."
-          >
-            Delete Project
-          </ConfirmSubmitButton>
-        </form>
+        <section className="mt-4 rounded-lg border border-line bg-white p-4">
+          <div className="flex items-start gap-3">
+            <span className="grid size-10 shrink-0 place-items-center rounded-lg bg-gum/10 text-gum">
+              <Trash2 size={20} aria-hidden="true" />
+            </span>
+            <div>
+              <p className="font-black text-ink">Delete project</p>
+              <p className="mt-1 text-sm font-bold text-moss">
+                Deleting is only for unbilled test/setup projects. Archive real project history instead.
+              </p>
+              {canDelete ? (
+                <form action={deleteProjectAction} className="mt-4">
+                  <input type="hidden" name="projectId" value={project.id} />
+                  <ConfirmSubmitButton
+                    className="tap-danger w-full"
+                    message={`Delete ${project.title} permanently? This cannot be undone.`}
+                    pendingLabel="Checking..."
+                  >
+                    Delete Project
+                  </ConfirmSubmitButton>
+                </form>
+              ) : (
+                <div className="mt-4 rounded-lg border border-gum/30 bg-gum/10 p-3 text-sm font-bold text-gum">
+                  This project cannot be deleted because it has {deleteBlockers.join(", ")}. Use Archive Project to keep history intact.
+                </div>
+              )}
+            </div>
+          </div>
+        </section>
       </section>
     </main>
   );

@@ -285,7 +285,7 @@ export default async function InvoiceDetailPage({ params }: { params: Promise<{ 
             <div className="mt-4 grid gap-2">
               <Link href={`/invoices/${invoice.id}/email`} className="tap-primary w-full">
                 <Mail size={20} aria-hidden="true" />
-                Email Invoice
+                Prepare Email
               </Link>
               <InvoiceExportActions invoiceText={invoiceText} />
             </div>

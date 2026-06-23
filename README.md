@@ -8,7 +8,7 @@ Mobile-first PWA for a sole trader/subcontractor to track clients, projects, log
 - Tailwind CSS
 - Prisma ORM
 - Supabase Postgres
-- Resend for invoice email delivery
+- User-owned email sending through the device's default mail app (`mailto:`)
 - PWA manifest and service worker for Add to Home Screen
 
 ## Architecture Notes
@@ -37,9 +37,10 @@ BACKUP_EXPORT_TOKEN="change-this-long-random-token"
 # Public app URL used for secure client invoice links.
 APP_BASE_URL="https://<your-vercel-domain>"
 
-# Email delivery. The sender must be verified in Resend.
-RESEND_API_KEY="re_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
-RESEND_FROM_EMAIL="invoices@yourdomain.com"
+# Optional future server-side email delivery. The normal workflow opens the
+# user's own email app and does not require these.
+# RESEND_API_KEY=""
+# RESEND_FROM_EMAIL=""
 
 # Supabase Auth and Storage. Legacy anon keys can be used here if your project
 # has not moved to publishable keys yet.
@@ -54,8 +55,6 @@ DATABASE_URL="postgresql://postgres.<PROJECT-REF>:<PASSWORD>@aws-1-ap-southeast-
 DIRECT_URL="postgresql://postgres.<PROJECT-REF>:<PASSWORD>@aws-1-ap-southeast-2.pooler.supabase.com:5432/postgres"
 BACKUP_EXPORT_TOKEN="change-this-long-random-token"
 APP_BASE_URL="https://<your-vercel-domain>"
-RESEND_API_KEY="re_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
-RESEND_FROM_EMAIL="invoices@yourdomain.com"
 NEXT_PUBLIC_SUPABASE_URL="https://<PROJECT-REF>.supabase.co"
 NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY="<SUPABASE-PUBLISHABLE-KEY>"
 ```
@@ -164,8 +163,6 @@ DATABASE_URL="postgresql://postgres.<PROJECT-REF>:<PASSWORD>@aws-1-ap-southeast-
 DIRECT_URL="postgresql://postgres.<PROJECT-REF>:<PASSWORD>@aws-1-ap-southeast-2.pooler.supabase.com:5432/postgres"
 BACKUP_EXPORT_TOKEN="change-this-long-random-token"
 APP_BASE_URL="https://<your-vercel-domain>"
-RESEND_API_KEY="re_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
-RESEND_FROM_EMAIL="invoices@yourdomain.com"
 NEXT_PUBLIC_SUPABASE_URL="https://<PROJECT-REF>.supabase.co"
 NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY="<SUPABASE-PUBLISHABLE-KEY>"
 ```
@@ -182,18 +179,13 @@ pnpm run db:migrate
 
 The diagnostics page helps choose the next fix: if TCP/TLS connect is fast but Prisma `SELECT 1` is high, Prisma engine/pooler overhead is the main problem; if both TCP/TLS and Prisma are high, network or Supabase pooler latency is the main problem; if `SELECT 1` is low but dashboard is high, query work is the main problem.
 
-## Resend Email Setup
+## Invoice Email Setup
 
-1. Create or log in to a Resend account.
-2. Add and verify your sending domain, or use a verified Resend test sender during development.
-3. Create an API key in Resend.
-4. Set these values locally and in Vercel:
-   - `RESEND_API_KEY`
-   - `RESEND_FROM_EMAIL`
-   - `APP_BASE_URL`
-5. In `/business-profile`, set the reply-to email and default invoice email templates.
+No email provider is required for the normal workflow. `/invoices/<id>/email` prepares an editable email, then opens the user's default email app with a `mailto:` link so the invoice is sent from that user's own account.
 
-The app sends invoice email from the verified `RESEND_FROM_EMAIL` sender and sets replies to the business profile reply-to email when available. The Resend API key is used only in server actions and is never sent to the browser.
+Set `APP_BASE_URL` in Vercel if you use public invoice links. Without it, the email body falls back to a clear invoice summary instead of a public link.
+
+Resend/API-key based server sending is not part of the active workflow. If server-side sending is reintroduced later, treat `RESEND_API_KEY` and `RESEND_FROM_EMAIL` as optional future-only environment variables.
 
 ## Backup Export
 
@@ -237,8 +229,10 @@ Use `/diagnostics?token=<BACKUP_EXPORT_TOKEN>` while logged in to open a private
 - Sent and paid invoices do not silently mutate if the business profile or client changes later.
 - Invoice preview at `/invoices/<id>` is printable and supports browser Print / Save as PDF.
 - Invoice preview uses an A4-style document layout for screen and print. App navigation, action buttons, and app backgrounds are hidden in print.
-- Invoice preview supports Copy Invoice Text, browser Print / Save as PDF, and a real email workflow at `/invoices/<id>/email`.
-- Emailing requires the invoice to be sent or paid, plus `RESEND_API_KEY`, `RESEND_FROM_EMAIL`, and `APP_BASE_URL` in production.
+- Invoice preview supports Copy Invoice Text, browser Print / Save as PDF, and a prepare-email workflow at `/invoices/<id>/email`.
+- Email preparation requires the invoice to be sent or paid. It does not require `RESEND_API_KEY` or `RESEND_FROM_EMAIL`.
+- The email composer opens the user's own email app with the recipient, subject, and body filled in. Copy Email Text is available as a fallback.
+- `APP_BASE_URL` is only needed when the prepared email includes an active public invoice link.
 - Sent and paid invoices can create a secure client invoice link at `/public/invoices/<token>`. Links can be revoked or regenerated from the invoice page.
 - Public invoice links are token-based, unlisted, and only work while enabled on sent or paid invoices. Void invoices automatically disable their public link.
 - Invoice list supports search plus filters for all, draft, sent, paid, and void invoices.
@@ -249,7 +243,7 @@ Use `/diagnostics?token=<BACKUP_EXPORT_TOKEN>` while logged in to open a private
 
 - `/audit-log` shows recent account-scoped activity for the logged-in user.
 - Audit metadata intentionally avoids passwords, auth tokens, full bank details, and secrets.
-- Invoice email audit events record delivery status, provider ID, recipient summary, and counts only. They do not store email body text, bank details, or secrets.
+- Invoice email audit events record when an email is prepared/opened, plus recipient summary and body/subject lengths only. The app cannot know whether the user sent the message from their mail app.
 - `/privacy` explains user isolation, stored data, backups, bank details, and the app's responsibility boundaries in plain English.
 
 ## Multi-User Data Migration Notes
@@ -284,7 +278,6 @@ If Prisma timings remain high while TCP/TLS is low, the cleanest options are:
 ## Production Safety
 
 - Keep `DATABASE_URL` and `DIRECT_URL` only in local `.env`, Vercel environment variables, and secure password storage.
-- Keep `RESEND_API_KEY` only in local `.env`, Vercel environment variables, and secure password storage.
 - Set `BACKUP_EXPORT_TOKEN` in Vercel before relying on `/backup`; production exports are blocked without it.
 - Set `APP_BASE_URL` to the canonical production URL so emailed invoice links point to the right deployment.
 - Each user-owned table is scoped by Supabase Auth user ID in Prisma queries and server actions.

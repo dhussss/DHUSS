@@ -1,30 +1,19 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { AlertTriangle, ArrowLeft, CheckCircle2, ExternalLink, Mail, Send } from "lucide-react";
-import { sendInvoiceEmailAction } from "@/app/actions";
+import { ArrowLeft, ExternalLink, Mail } from "lucide-react";
 import { requireUserId } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { defaultInvoiceEmailBody, invoiceDueDate, renderTemplate } from "@/lib/invoice-documents";
+import { buildPreparedInvoiceEmailBody, invoiceDueDate, renderTemplate } from "@/lib/invoice-documents";
 import type { InvoiceBusinessDetails, InvoiceClientDetails, InvoiceDocumentData } from "@/lib/invoice-documents";
 import { formatDateAU } from "@/lib/dates";
 import { formatMoney } from "@/lib/money";
-import { SubmitButton } from "@/components/SubmitButton";
 import { InvoiceStatusPill } from "@/components/StatusPill";
+import { EmailComposer } from "@/components/EmailComposer";
 
 export const dynamic = "force-dynamic";
 
-type SearchParams = Record<string, string | string[] | undefined>;
-
-export default async function InvoiceEmailPage({
-  params,
-  searchParams
-}: {
-  params: Promise<{ id: string }>;
-  searchParams?: Promise<SearchParams>;
-}) {
+export default async function InvoiceEmailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  const query = await searchParams;
-  const sent = query?.sent === "1";
   const ownerId = await requireUserId();
   const [invoice, profile] = await Promise.all([
     prisma.invoice.findFirst({
@@ -44,9 +33,7 @@ export default async function InvoiceEmailPage({
   const client = clientDetails(invoice);
   const dueDate = invoiceDueDate(invoice);
   const canSend = invoice.status === "SENT" || invoice.status === "PAID";
-  const providerReady = Boolean(process.env.RESEND_API_KEY && process.env.RESEND_FROM_EMAIL);
   const fullPublicUrl = invoice.publicTokenEnabled && invoice.publicToken ? absoluteAppUrl(`/public/invoices/${invoice.publicToken}`) : null;
-  const canCreatePublicUrl = Boolean(appBaseUrl());
   const templateValues = {
     invoiceNumber: invoice.invoiceNumber,
     businessName: business.name,
@@ -59,16 +46,13 @@ export default async function InvoiceEmailPage({
     dueDate: formatDateAU(dueDate)
   };
   const subjectTemplate = profile?.defaultInvoiceEmailSubjectTemplate || "Invoice {{invoiceNumber}} – {{businessName}}";
-  const bodyTemplate = profile?.defaultInvoiceEmailBody || business.defaultInvoiceEmailMessage || defaultInvoiceEmailBody(invoice, business, client);
   const subject = renderTemplate(subjectTemplate, templateValues);
-  const body = renderTemplate(bodyTemplate, templateValues);
+  const body = buildPreparedInvoiceEmailBody({ invoice, business, client, publicUrl: fullPublicUrl });
   const disabledReason = !canSend
     ? "Mark this invoice as sent before emailing it."
-    : !providerReady
-      ? "Email provider settings are missing."
-      : !client.email
-        ? "Add an email address to this client before sending."
-        : "";
+    : !client.email
+      ? "Add an email address to this client before preparing the email."
+      : "";
 
   return (
     <main className="page-shell">
@@ -82,7 +66,8 @@ export default async function InvoiceEmailPage({
       <header className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
         <div>
           <p className="section-title">Email invoice</p>
-          <h1 className="mt-2 text-3xl font-black tracking-normal">{invoice.invoiceNumber}</h1>
+          <h1 className="mt-2 text-3xl font-black tracking-normal">Prepare email</h1>
+          <p className="mt-1 text-xl font-black tracking-normal">{invoice.invoiceNumber}</p>
           <p className="mt-1 text-sm font-bold text-moss">
             {invoice.project.title} - {client.businessName}
           </p>
@@ -90,66 +75,8 @@ export default async function InvoiceEmailPage({
         <InvoiceStatusPill status={invoice.status} />
       </header>
 
-      {sent ? (
-        <section className="mt-5 rounded-lg border border-mint/30 bg-mint/10 p-4 text-sm font-bold text-moss">
-          <div className="flex items-center gap-2">
-            <CheckCircle2 size={18} aria-hidden="true" />
-            Invoice email sent.
-          </div>
-        </section>
-      ) : null}
-
-      {disabledReason ? (
-        <section className="mt-5 rounded-lg border border-gum/30 bg-gum/10 p-4 text-sm font-bold text-gum">
-          <div className="flex items-center gap-2">
-            <AlertTriangle size={18} aria-hidden="true" />
-            {disabledReason}
-          </div>
-        </section>
-      ) : null}
-
       <section className="mt-5 grid gap-4 lg:grid-cols-[minmax(0,1fr)_20rem] lg:items-start">
-        <form action={sendInvoiceEmailAction} className="card grid gap-4">
-          <input type="hidden" name="invoiceId" value={invoice.id} />
-          <div className="grid gap-3 sm:grid-cols-2">
-            <label>
-              To
-              <input name="to" type="email" defaultValue={client.email ?? ""} placeholder="client@example.com" required />
-            </label>
-            <label>
-              CC
-              <input name="cc" type="text" placeholder="optional@example.com" />
-            </label>
-          </div>
-          <label>
-            BCC
-            <input name="bcc" type="text" placeholder="optional@example.com" />
-          </label>
-          <label>
-            Subject
-            <input name="subject" defaultValue={subject} required />
-          </label>
-          <label>
-            Message
-            <textarea name="message" defaultValue={body} rows={9} required />
-          </label>
-
-          <label className="flex min-h-12 grid-cols-[auto_1fr] items-center gap-3 rounded-lg border border-line bg-paper px-3 py-2 text-sm font-bold text-ink">
-            <input
-              name="includePublicLink"
-              type="checkbox"
-              defaultChecked={canSend && canCreatePublicUrl}
-              disabled={!canSend || !canCreatePublicUrl}
-              className="h-5 min-h-0 w-5"
-            />
-            Include secure client invoice link
-          </label>
-
-          <SubmitButton className="tap-primary w-full" pendingLabel="Sending..." disabled={Boolean(disabledReason)}>
-            <Send size={20} aria-hidden="true" />
-            Send Invoice Email
-          </SubmitButton>
-        </form>
+        <EmailComposer invoiceId={invoice.id} initialTo={client.email ?? ""} initialSubject={subject} initialBody={body} disabledReason={disabledReason} />
 
         <aside className="grid gap-4">
           <section className="card">
@@ -159,8 +86,6 @@ export default async function InvoiceEmailPage({
               <SummaryLine label="Project" value={invoice.project.title} />
               <SummaryLine label="Due date" value={formatDateAU(dueDate)} />
               <SummaryLine label="Total" value={formatMoney(invoice.grandTotalCents)} strong />
-              <SummaryLine label="Sent count" value={String(invoice.emailSendCount)} />
-              {invoice.lastEmailedAt ? <SummaryLine label="Last emailed" value={formatDateAU(invoice.lastEmailedAt)} /> : null}
             </dl>
           </section>
 
@@ -173,7 +98,7 @@ export default async function InvoiceEmailPage({
               </Link>
             ) : (
               <p className="mt-4 rounded-lg border border-line bg-paper p-3 text-sm font-bold text-moss">
-                A link will be created when this email sends.
+                No active client link. The prepared email includes a clear invoice summary instead.
               </p>
             )}
           </section>
@@ -183,9 +108,9 @@ export default async function InvoiceEmailPage({
             <div className="mt-4 grid gap-2 text-sm font-bold text-moss">
               <p className="flex items-center gap-2 text-ink">
                 <Mail size={18} aria-hidden="true" />
-                {business.name}
+                Your email app
               </p>
-              {profile?.replyToEmail || profile?.email || business.email ? <p>Replies go to {profile?.replyToEmail || profile?.email || business.email}</p> : null}
+              <p>The message opens in the signed-in device’s default mail app and sends from that user’s own email account.</p>
             </div>
           </section>
         </aside>

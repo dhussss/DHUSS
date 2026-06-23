@@ -2,23 +2,13 @@
 
 import crypto from "node:crypto";
 import type { InvoiceMode, ProjectStatus } from "@prisma/client";
-import { Resend } from "resend";
 import { revalidatePath, revalidateTag } from "next/cache";
 import { redirect } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { requireUserId } from "@/lib/auth";
 import { CACHE_TAGS } from "@/lib/app-data";
-import { dollarsToCents, formatMoney } from "@/lib/money";
-import { addDays, endOfDay, formatDateAU, parseInputDate } from "@/lib/dates";
-import {
-  buildInvoiceEmailHtml,
-  buildInvoicePlainText,
-  defaultInvoiceEmailBody,
-  defaultInvoiceEmailSubject,
-  invoiceDueDate,
-  renderTemplate
-} from "@/lib/invoice-documents";
-import type { InvoiceBusinessDetails, InvoiceClientDetails, InvoiceDocumentData } from "@/lib/invoice-documents";
+import { dollarsToCents } from "@/lib/money";
+import { addDays, endOfDay, parseInputDate } from "@/lib/dates";
 import { buildInvoiceLineData, invoiceTotals, summaryText } from "@/lib/invoices";
 import { isQuarterHour, isQuarterHourClock, parseClockTime } from "@/lib/time";
 import { createClient } from "@/lib/supabase/server";
@@ -91,18 +81,6 @@ async function logAudit(
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
-function appBaseUrl() {
-  const configured = process.env.APP_BASE_URL?.trim();
-  if (configured) return configured.replace(/\/$/, "");
-  const vercelUrl = process.env.VERCEL_URL?.trim();
-  return vercelUrl ? `https://${vercelUrl.replace(/\/$/, "")}` : null;
-}
-
-function invoicePublicUrl(token: string) {
-  const baseUrl = appBaseUrl();
-  return baseUrl ? `${baseUrl}/public/invoices/${token}` : null;
-}
-
 function parseEmailList(value: string, label: string, required = false) {
   const emails = value
     .split(/[;,]/)
@@ -116,18 +94,6 @@ function parseEmailList(value: string, label: string, required = false) {
   }
 
   return emails;
-}
-
-function cleanEmailDisplayName(value: string) {
-  return value.replace(/[<>"\n\r]/g, "").trim() || "Invoices";
-}
-
-function senderAddress(businessName: string) {
-  const fromEmail = process.env.RESEND_FROM_EMAIL?.trim();
-  if (!fromEmail) throw new Error("RESEND_FROM_EMAIL is not configured.");
-  if (fromEmail.includes("<")) return fromEmail;
-  if (!EMAIL_RE.test(fromEmail)) throw new Error("RESEND_FROM_EMAIL must be a valid email address or sender string.");
-  return `${cleanEmailDisplayName(businessName)} <${fromEmail}>`;
 }
 
 async function generateUniqueInvoiceToken() {
@@ -618,29 +584,80 @@ export async function unarchiveProjectAction(formData: FormData) {
   redirect(`/projects/${projectId}`);
 }
 
+function projectDeleteBlockedMessage({
+  invoiceCount,
+  billedTimeCount,
+  billedExpenseCount
+}: {
+  invoiceCount: number;
+  billedTimeCount: number;
+  billedExpenseCount: number;
+}) {
+  const reasons = [
+    invoiceCount ? `${invoiceCount} invoice${invoiceCount === 1 ? "" : "s"}` : "",
+    billedTimeCount ? `${billedTimeCount} billed time entr${billedTimeCount === 1 ? "y" : "ies"}` : "",
+    billedExpenseCount ? `${billedExpenseCount} billed expense item${billedExpenseCount === 1 ? "" : "s"}` : ""
+  ].filter(Boolean);
+
+  return reasons.length
+    ? `This project has ${reasons.join(", ")}. Archive it instead of deleting it so the history stays intact.`
+    : "";
+}
+
+function projectDeleteErrorUrl(projectId: string, message: string) {
+  return `/projects/${projectId}/edit?deleteError=${encodeURIComponent(message)}`;
+}
+
 export async function deleteProjectAction(formData: FormData) {
   const ownerId = await requireUserId();
   const projectId = text(formData, "projectId");
   const project = await prisma.project.findFirst({ where: { id: projectId, ownerId }, select: { id: true } });
 
-  if (!project) throw new Error("Project not found.");
+  if (!project) redirect("/projects");
 
-  await prisma.$transaction(async (tx) => {
-    const [invoiceCount, billedTimeCount, billedExpenseCount] = await Promise.all([
-      tx.invoice.count({ where: { projectId, ownerId } }),
-      tx.timeEntry.count({ where: { projectId, ownerId, billingStatus: "BILLED" } }),
-      tx.expenseItem.count({ where: { projectId, ownerId, billingStatus: "BILLED" } })
-    ]);
+  let deleteResult:
+    | {
+        deleted: boolean;
+        blockedMessage: string;
+        invoiceCount: number;
+        billedTimeCount: number;
+        billedExpenseCount: number;
+      }
+    | null = null;
 
-    if (invoiceCount || billedTimeCount || billedExpenseCount) {
-      throw new Error("This project has invoice or billed history. Archive it instead of deleting it.");
-    }
+  try {
+    deleteResult = await prisma.$transaction(async (tx) => {
+      const [invoiceCount, billedTimeCount, billedExpenseCount] = await Promise.all([
+        tx.invoice.count({ where: { projectId, ownerId } }),
+        tx.timeEntry.count({ where: { projectId, ownerId, billingStatus: "BILLED" } }),
+        tx.expenseItem.count({ where: { projectId, ownerId, billingStatus: "BILLED" } })
+      ]);
+      const blockedMessage = projectDeleteBlockedMessage({ invoiceCount, billedTimeCount, billedExpenseCount });
 
-    await tx.timeEntry.deleteMany({ where: { projectId, ownerId } });
-    await tx.expenseItem.deleteMany({ where: { projectId, ownerId } });
-    await tx.rateHistory.deleteMany({ where: { projectId, ownerId } });
-    await tx.project.deleteMany({ where: { id: projectId, ownerId } });
-  });
+      if (blockedMessage) {
+        return { deleted: false, blockedMessage, invoiceCount, billedTimeCount, billedExpenseCount };
+      }
+
+      await tx.timeEntry.deleteMany({ where: { projectId, ownerId } });
+      await tx.expenseItem.deleteMany({ where: { projectId, ownerId } });
+      await tx.rateHistory.deleteMany({ where: { projectId, ownerId } });
+      await tx.project.deleteMany({ where: { id: projectId, ownerId } });
+
+      return { deleted: true, blockedMessage: "", invoiceCount, billedTimeCount, billedExpenseCount };
+    });
+  } catch (error) {
+    console.error("Project deletion failed", error);
+    redirect(projectDeleteErrorUrl(projectId, "This project could not be deleted safely. Archive it instead, or try again after checking its history."));
+  }
+
+  if (!deleteResult?.deleted) {
+    await logAudit(ownerId, "project.delete_blocked", "Project", projectId, {
+      invoiceCount: deleteResult?.invoiceCount ?? 0,
+      billedTimeCount: deleteResult?.billedTimeCount ?? 0,
+      billedExpenseCount: deleteResult?.billedExpenseCount ?? 0
+    });
+    redirect(projectDeleteErrorUrl(projectId, deleteResult?.blockedMessage || "This project cannot be deleted safely. Archive it instead."));
+  }
 
   await logAudit(ownerId, "project.deleted", "Project", projectId);
   revalidatePath("/");
@@ -718,122 +735,6 @@ async function nextInvoiceNumber(ownerId: string, prefix: string) {
 
 function invoiceModeFromForm(formData: FormData): InvoiceMode {
   return text(formData, "invoiceMode") === "SIMPLE" ? "SIMPLE" : "DETAILED";
-}
-
-function snapshotValue(frozen: boolean, frozenValue: string | null | undefined, liveValue: string | null | undefined) {
-  return frozen ? frozenValue ?? liveValue ?? null : liveValue ?? null;
-}
-
-function invoiceBusinessDetails(
-  invoice: {
-    status: "DRAFT" | "SENT" | "PAID" | "VOID";
-    businessNameSnapshot: string | null;
-    businessLegalNameSnapshot: string | null;
-    businessAbnSnapshot: string | null;
-    businessContactNameSnapshot: string | null;
-    businessEmailSnapshot: string | null;
-    businessPhoneSnapshot: string | null;
-    businessAddressSnapshot: string | null;
-    businessWebsiteSnapshot: string | null;
-    businessBankAccountNameSnapshot: string | null;
-    businessBsbSnapshot: string | null;
-    businessAccountNumberSnapshot: string | null;
-    businessGstRegisteredSnapshot: boolean;
-    businessGstRateSnapshot: unknown;
-    businessLogoPathSnapshot: string | null;
-    businessDefaultInvoiceNotesSnapshot: string | null;
-    businessDefaultInvoiceEmailMessageSnapshot: string | null;
-    businessSignatureFooterSnapshot: string | null;
-  },
-  profile: {
-    tradingName: string;
-    legalName: string | null;
-    abn: string | null;
-    contactName: string | null;
-    email: string | null;
-    phone: string | null;
-    address: string | null;
-    website: string | null;
-    bankAccountName: string | null;
-    bsb: string | null;
-    accountNumber: string | null;
-    gstRegistered: boolean;
-    gstRate: unknown;
-    logoPath: string | null;
-    defaultInvoiceNotes: string | null;
-    defaultInvoiceEmailMessage: string | null;
-    signatureFooter: string | null;
-  } | null
-): InvoiceBusinessDetails {
-  const frozen = invoice.status !== "DRAFT";
-
-  return {
-    name: snapshotValue(frozen, invoice.businessNameSnapshot, profile?.tradingName) ?? "Business profile not set",
-    legalName: snapshotValue(frozen, invoice.businessLegalNameSnapshot, profile?.legalName),
-    contactName: snapshotValue(frozen, invoice.businessContactNameSnapshot, profile?.contactName),
-    abn: snapshotValue(frozen, invoice.businessAbnSnapshot, profile?.abn),
-    email: snapshotValue(frozen, invoice.businessEmailSnapshot, profile?.email),
-    phone: snapshotValue(frozen, invoice.businessPhoneSnapshot, profile?.phone),
-    address: snapshotValue(frozen, invoice.businessAddressSnapshot, profile?.address),
-    website: snapshotValue(frozen, invoice.businessWebsiteSnapshot, profile?.website),
-    bankAccountName: snapshotValue(frozen, invoice.businessBankAccountNameSnapshot, profile?.bankAccountName),
-    bsb: snapshotValue(frozen, invoice.businessBsbSnapshot, profile?.bsb),
-    accountNumber: snapshotValue(frozen, invoice.businessAccountNumberSnapshot, profile?.accountNumber),
-    gstRegistered: (frozen ? invoice.businessGstRegisteredSnapshot : null) ?? profile?.gstRegistered ?? false,
-    gstRate: Number((frozen ? invoice.businessGstRateSnapshot : null) ?? profile?.gstRate ?? 0),
-    logoPath: snapshotValue(frozen, invoice.businessLogoPathSnapshot, profile?.logoPath),
-    defaultInvoiceNotes: snapshotValue(frozen, invoice.businessDefaultInvoiceNotesSnapshot, profile?.defaultInvoiceNotes),
-    defaultInvoiceEmailMessage: snapshotValue(frozen, invoice.businessDefaultInvoiceEmailMessageSnapshot, profile?.defaultInvoiceEmailMessage),
-    signatureFooter: snapshotValue(frozen, invoice.businessSignatureFooterSnapshot, profile?.signatureFooter)
-  };
-}
-
-function invoiceClientDetails(
-  invoice: {
-    status: "DRAFT" | "SENT" | "PAID" | "VOID";
-    clientBusinessNameSnapshot: string | null;
-    clientContactNameSnapshot: string | null;
-    clientEmailSnapshot: string | null;
-    clientPhoneSnapshot: string | null;
-    clientAddressSnapshot: string | null;
-    clientAbnSnapshot: string | null;
-    client: {
-      businessName: string;
-      contactName: string | null;
-      email: string | null;
-      phone: string | null;
-      address: string | null;
-      abn: string | null;
-    };
-  }
-): InvoiceClientDetails {
-  const frozen = invoice.status !== "DRAFT";
-
-  return {
-    businessName: snapshotValue(frozen, invoice.clientBusinessNameSnapshot, invoice.client.businessName) ?? invoice.client.businessName,
-    contactName: snapshotValue(frozen, invoice.clientContactNameSnapshot, invoice.client.contactName),
-    email: snapshotValue(frozen, invoice.clientEmailSnapshot, invoice.client.email),
-    phone: snapshotValue(frozen, invoice.clientPhoneSnapshot, invoice.client.phone),
-    address: snapshotValue(frozen, invoice.clientAddressSnapshot, invoice.client.address),
-    abn: snapshotValue(frozen, invoice.clientAbnSnapshot, invoice.client.abn)
-  };
-}
-
-function invoiceTemplateValues(invoice: InvoiceDocumentData, business: InvoiceBusinessDetails, client: InvoiceClientDetails) {
-  const formattedDueDate = formatDateAU(invoiceDueDate(invoice));
-  const formattedTotal = formatMoney(invoice.grandTotalCents);
-
-  return {
-    invoiceNumber: invoice.invoiceNumber,
-    businessName: business.name,
-    clientName: client.contactName || client.businessName,
-    clientBusinessName: client.businessName,
-    projectTitle: invoice.project.title,
-    projectName: invoice.project.title,
-    total: formattedTotal,
-    totalDue: formattedTotal,
-    dueDate: formattedDueDate
-  };
 }
 
 function criticalInvoiceProfileIssues(
@@ -1290,126 +1191,31 @@ export async function regenerateInvoicePublicLinkAction(formData: FormData) {
   redirect(`/invoices/${invoiceId}`);
 }
 
-export async function sendInvoiceEmailAction(formData: FormData) {
+export async function prepareInvoiceEmailAction(formData: FormData) {
   const ownerId = await requireUserId();
   const invoiceId = text(formData, "invoiceId");
-  const includePublicLink = text(formData, "includePublicLink") === "on";
-
-  const [invoice, profile] = await Promise.all([
-    prisma.invoice.findFirst({
-      where: { id: invoiceId, ownerId },
-      include: {
-        project: { select: { title: true } },
-        client: true,
-        lineItems: { orderBy: { sortOrder: "asc" } }
-      }
-    }),
-    prisma.businessProfile.findUnique({ where: { ownerId } })
-  ]);
+  const invoice = await prisma.invoice.findFirst({
+    where: { id: invoiceId, ownerId },
+    select: { id: true, invoiceNumber: true, status: true }
+  });
 
   if (!invoice) throw new Error("Invoice not found.");
   if (invoice.status === "DRAFT") throw new Error("Mark the invoice as sent before emailing it.");
   if (invoice.status === "VOID") throw new Error("Void invoices cannot be emailed.");
 
-  const apiKey = process.env.RESEND_API_KEY?.trim();
-  if (!apiKey) throw new Error("RESEND_API_KEY is not configured.");
-
-  const business = invoiceBusinessDetails(invoice, profile);
-  const client = invoiceClientDetails(invoice);
-  const defaultTo = client.email ?? invoice.client.email ?? "";
-  const to = parseEmailList(text(formData, "to") || defaultTo, "To", true);
-  const cc = parseEmailList(text(formData, "cc"), "CC");
-  const bcc = parseEmailList(text(formData, "bcc"), "BCC");
-  const replyTo = profile?.replyToEmail || profile?.email || business.email;
-  if (replyTo && !EMAIL_RE.test(replyTo)) throw new Error("Configured reply-to email is invalid.");
-
-  let publicToken = invoice.publicToken;
-  const hadPublicTokenBeforeSend = Boolean(invoice.publicToken);
-  const publicLinkEnabledBeforeSend = invoice.publicTokenEnabled;
-  let publicUrl: string | null = null;
-
-  if (includePublicLink) {
-    assertInvoiceCanBeShared(invoice.status);
-    if (!publicToken) publicToken = await generateUniqueInvoiceToken();
-    publicUrl = invoicePublicUrl(publicToken);
-    if (!publicUrl) throw new Error("APP_BASE_URL is required to include a public invoice link.");
-
-    await prisma.invoice.update({
-      where: { id: invoiceId },
-      data: { publicToken, publicTokenEnabled: true }
-    });
-  }
-
-  const templateValues = invoiceTemplateValues(invoice, business, client);
-  const subjectInput = text(formData, "subject") || defaultInvoiceEmailSubject(invoice, business);
-  const bodyInput = text(formData, "message") || profile?.defaultInvoiceEmailBody || business.defaultInvoiceEmailMessage || defaultInvoiceEmailBody(invoice, business, client);
-  const subject = renderTemplate(subjectInput, templateValues).trim();
-  const message = renderTemplate(bodyInput, templateValues).trim();
+  const to = parseEmailList(text(formData, "to"), "To", true);
+  const subject = text(formData, "subject");
+  const message = text(formData, "message");
   if (!subject) throw new Error("Email subject is required.");
   if (!message) throw new Error("Email message is required.");
 
-  const html = buildInvoiceEmailHtml({ invoice, business, client, message, publicUrl });
-  const plainText = [message, "", buildInvoicePlainText({ invoice, business, client, publicUrl })].join("\n");
-
-  await logAudit(ownerId, "invoice.email_attempted", "Invoice", invoiceId, {
+  await logAudit(ownerId, "invoice.email_prepared", "Invoice", invoiceId, {
     invoiceNumber: invoice.invoiceNumber,
     to: to.join(", "),
-    ccCount: cc.length,
-    bccCount: bcc.length,
-    includePublicLink
+    subjectLength: subject.length,
+    bodyLength: message.length,
+    hasPublicLink: message.includes("/public/invoices/")
   });
 
-  try {
-    const resend = new Resend(apiKey);
-    const { data, error } = await resend.emails.send({
-      from: senderAddress(business.name),
-      to,
-      cc: cc.length ? cc : undefined,
-      bcc: bcc.length ? bcc : undefined,
-      replyTo: replyTo || undefined,
-      subject,
-      html,
-      text: plainText
-    });
-
-    if (error) {
-      throw new Error(error.message || "Email provider rejected the message.");
-    }
-
-    await prisma.invoice.update({
-      where: { id: invoiceId },
-      data: {
-        lastEmailedAt: new Date(),
-        emailSendCount: { increment: 1 },
-        ...(publicToken && includePublicLink ? { publicToken, publicTokenEnabled: true } : {})
-      }
-    });
-
-    await logAudit(ownerId, "invoice.email_sent", "Invoice", invoiceId, {
-      invoiceNumber: invoice.invoiceNumber,
-      provider: "resend",
-      providerId: data?.id ?? null,
-      to: to.join(", "),
-      ccCount: cc.length,
-      bccCount: bcc.length,
-      includePublicLink
-    });
-  } catch (error) {
-    if (includePublicLink && publicToken && !publicLinkEnabledBeforeSend) {
-      await prisma.invoice.update({
-        where: { id: invoiceId },
-        data: { publicToken: hadPublicTokenBeforeSend ? publicToken : null, publicTokenEnabled: false }
-      });
-    }
-    await logAudit(ownerId, "invoice.email_failed", "Invoice", invoiceId, {
-      invoiceNumber: invoice.invoiceNumber,
-      reason: error instanceof Error ? error.message.slice(0, 180) : "Unknown error"
-    });
-    throw error;
-  }
-
-  revalidatePath(`/invoices/${invoiceId}`);
-  revalidatePath("/invoices");
-  if (publicToken) revalidatePath(`/public/invoices/${publicToken}`);
-  redirect(`/invoices/${invoiceId}/email?sent=1`);
+  return { ok: true };
 }

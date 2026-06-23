@@ -107,6 +107,55 @@ export function defaultInvoiceEmailBody(invoice: InvoiceDocumentData, business: 
   ].join("\n");
 }
 
+export function buildPreparedInvoiceEmailBody({
+  invoice,
+  business,
+  client,
+  publicUrl
+}: {
+  invoice: InvoiceDocumentData;
+  business: InvoiceBusinessDetails;
+  client: InvoiceClientDetails;
+  publicUrl?: string | null;
+}) {
+  const dueDate = invoiceDueDate(invoice);
+  const { labourSubtotalCents, expensesSubtotalCents, subtotalCents } = invoiceSubtotals(invoice);
+  const lines = [
+    `Hi ${client.contactName || client.businessName},`,
+    "",
+    `Please find invoice ${invoice.invoiceNumber} for ${invoice.project.title}.`,
+    "",
+    `Invoice number: ${invoice.invoiceNumber}`,
+    `Project: ${invoice.project.title}`,
+    `Amount due: ${formatMoney(invoice.grandTotalCents)}`,
+    `Due date: ${formatDateAU(dueDate)}`,
+    "",
+    "Payment details:",
+    business.bankAccountName ? `Account name: ${business.bankAccountName}` : "",
+    business.bsb ? `BSB: ${business.bsb}` : "",
+    business.accountNumber ? `Account: ${business.accountNumber}` : "",
+    `Payment reference: ${invoice.invoiceNumber}`,
+    ""
+  ];
+
+  if (publicUrl) {
+    lines.push(`View invoice: ${publicUrl}`, "");
+  } else {
+    lines.push(
+      "Invoice summary:",
+      `Labour: ${formatMoney(labourSubtotalCents)}`,
+      expensesSubtotalCents > 0 ? `Expenses/materials: ${formatMoney(expensesSubtotalCents)}` : "",
+      `Subtotal: ${formatMoney(subtotalCents)}`,
+      invoice.gstCents > 0 ? `GST: ${formatMoney(invoice.gstCents)}` : "",
+      `Total due: ${formatMoney(invoice.grandTotalCents)}`,
+      ""
+    );
+  }
+
+  lines.push("Thanks,", business.contactName || business.name);
+  return lines.filter(Boolean).join("\n");
+}
+
 export function buildInvoicePlainText({
   invoice,
   business,
