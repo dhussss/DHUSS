@@ -1,6 +1,6 @@
 import { Prisma } from "@prisma/client";
 import { unstable_cache } from "next/cache";
-import { previousWeekMondayToSunday } from "@/lib/dates";
+import { currentWeekMondayToSunday, dateInputValue, previousWeekMondayToSunday, todayInPerth } from "@/lib/dates";
 import { prisma } from "@/lib/prisma";
 
 export const CACHE_TAGS = {
@@ -15,19 +15,72 @@ const SHORT_REVALIDATE_SECONDS = 20;
 
 export type DashboardData = {
   projects: { id: string; title: string; client: { businessName: string } }[];
+  topActiveProjects: {
+    id: string;
+    title: string;
+    client: { businessName: string };
+    unbilledMinutes: number;
+    labourValueCents: number;
+    expenseValueCents: number;
+    unbilledValueCents: number;
+  }[];
+  invoiceSnapshots: {
+    overdue: { count: number; valueCents: number };
+    sent: { count: number; valueCents: number };
+    draft: { count: number; valueCents: number };
+    paidThisMonth: { count: number; valueCents: number };
+  };
+  recentActivity: {
+    id: string;
+    kind: "time" | "invoice" | "audit";
+    createdAt: string;
+    projectId: string | null;
+    projectTitle: string | null;
+    clientName: string | null;
+    durationMinutes: number | null;
+    invoiceId: string | null;
+    invoiceNumber: string | null;
+    invoiceStatus: string | null;
+    invoiceTotalCents: number | null;
+    auditAction: string | null;
+    entityType: string | null;
+    entityId: string | null;
+  }[];
   sentInvoices: {
     id: string;
     invoiceNumber: string;
     status: "SENT";
     invoiceDate: string;
+    dueDate: string | null;
     grandTotalCents: number;
     project: { title: string };
+    client: { businessName: string };
   }[];
   paidInvoices: { paymentDate: string; grandTotalCents: number }[];
+  currentWeekStart: string;
+  currentWeekEnd: string;
+  currentWeekDays: {
+    date: string;
+    dayName: string;
+    dayShort: string;
+    dateLabel: string;
+    isToday: boolean;
+    totalMinutes: number;
+    billableValueCents: number;
+    entryCount: number;
+    projects: string[];
+  }[];
+  totalCurrentWeekMinutes: number;
+  totalCurrentWeekBillableCents: number;
+  currentWeekEntryCount: number;
   unbilledEntryCount: number;
   unbilledItemCount: number;
   pendingPaymentCents: number;
   pendingInvoicesCents: number;
+  overdueInvoiceCount: number;
+  overdueInvoiceCents: number;
+  paidThisMonthCents: number;
+  paidThisQuarterCents: number;
   previousWeekEntries: {
     id: string;
     date: string;
@@ -39,13 +92,30 @@ export type DashboardData = {
 
 type DashboardRow = {
   projects: DashboardData["projects"];
+  topActiveProjects: DashboardData["topActiveProjects"];
+  invoiceSnapshots: DashboardData["invoiceSnapshots"];
+  recentActivity: DashboardData["recentActivity"];
   sentInvoices: DashboardData["sentInvoices"];
   paidInvoices: DashboardData["paidInvoices"];
   previousWeekEntries: DashboardData["previousWeekEntries"];
+  currentWeekEntries: {
+    id: string;
+    date: string;
+    durationMinutes: number;
+    hourlyRateCentsSnapshot: number;
+    project: { title: string };
+  }[];
+  currentWeekEntryCount: bigint | number | null;
+  totalCurrentWeekMinutes: bigint | number | null;
+  totalCurrentWeekBillableCents: bigint | number | null;
   unbilledEntryCount: bigint | number | null;
   unbilledItemCount: bigint | number | null;
   pendingPaymentCents: bigint | number | null;
   pendingInvoicesCents: bigint | number | null;
+  overdueInvoiceCount: bigint | number | null;
+  overdueInvoiceCents: bigint | number | null;
+  paidThisMonthCents: bigint | number | null;
+  paidThisQuarterCents: bigint | number | null;
 };
 
 function numberValue(value: bigint | number | null | undefined) {
@@ -53,10 +123,21 @@ function numberValue(value: bigint | number | null | undefined) {
 }
 
 export async function loadDashboardData(ownerId: string): Promise<DashboardData> {
+  const today = todayInPerth();
+  const currentWeek = currentWeekMondayToSunday(today);
   const previousWeek = previousWeekMondayToSunday();
+  const monthStart = new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), 1));
+  const quarterStart = new Date(Date.UTC(today.getUTCFullYear(), Math.floor(today.getUTCMonth() / 3) * 3, 1));
   const rows = await prisma.$queryRaw<DashboardRow[]>`
     WITH bounds AS (
-      SELECT ${previousWeek.start}::timestamp AS start_at, ${previousWeek.endInclusive}::timestamp AS end_at
+      SELECT
+        ${currentWeek.start}::timestamp AS current_start_at,
+        ${currentWeek.endInclusive}::timestamp AS current_end_at,
+        ${previousWeek.start}::timestamp AS previous_start_at,
+        ${previousWeek.endInclusive}::timestamp AS previous_end_at,
+        ${today}::timestamp AS today_at,
+        ${monthStart}::timestamp AS month_start_at,
+        ${quarterStart}::timestamp AS quarter_start_at
     ),
     active_projects AS (
       SELECT COALESCE(
@@ -83,10 +164,12 @@ export async function loadDashboardData(ownerId: string): Promise<DashboardData>
               'invoiceNumber', i."invoiceNumber",
               'status', i.status,
               'invoiceDate', i."invoiceDate",
+              'dueDate', i."dueDate",
               'grandTotalCents', i."grandTotalCents",
-              'project', jsonb_build_object('title', p.title)
+              'project', jsonb_build_object('title', p.title),
+              'client', jsonb_build_object('businessName', c."businessName")
             )
-            ORDER BY i."invoiceDate" DESC
+            ORDER BY COALESCE(i."dueDate", i."invoiceDate" + (i."paymentTermsDays" * INTERVAL '1 day')) ASC
           ),
           '[]'::jsonb
         ) AS data,
@@ -94,6 +177,7 @@ export async function loadDashboardData(ownerId: string): Promise<DashboardData>
         COALESCE(SUM(i."grandTotalCents"), 0) AS invoice_total
       FROM "Invoice" i
       JOIN "Project" p ON p.id = i."projectId"
+      JOIN "Client" c ON c.id = i."clientId"
       WHERE i.status = 'SENT' AND i."ownerId" = ${ownerId}
     ),
     paid_invoices AS (
@@ -109,6 +193,24 @@ export async function loadDashboardData(ownerId: string): Promise<DashboardData>
       ) AS data
       FROM "Invoice" i
       WHERE i.status = 'PAID' AND i."paymentDate" IS NOT NULL AND i."ownerId" = ${ownerId}
+    ),
+    paid_totals AS (
+      SELECT
+        COALESCE(SUM(i."grandTotalCents") FILTER (WHERE i."paymentDate" >= b.month_start_at), 0) AS paid_month,
+        COALESCE(SUM(i."grandTotalCents") FILTER (WHERE i."paymentDate" >= b.quarter_start_at), 0) AS paid_quarter
+      FROM "Invoice" i
+      CROSS JOIN bounds b
+      WHERE i.status = 'PAID' AND i."paymentDate" IS NOT NULL AND i."ownerId" = ${ownerId}
+    ),
+    overdue_invoices AS (
+      SELECT
+        COUNT(*) AS overdue_count,
+        COALESCE(SUM(i."grandTotalCents"), 0) AS overdue_total
+      FROM "Invoice" i
+      CROSS JOIN bounds b
+      WHERE i.status = 'SENT'
+        AND i."ownerId" = ${ownerId}
+        AND COALESCE(i."dueDate", i."invoiceDate" + (i."paymentTermsDays" * INTERVAL '1 day')) < b.today_at
     ),
     unbilled_time AS (
       SELECT
@@ -145,31 +247,314 @@ export async function loadDashboardData(ownerId: string): Promise<DashboardData>
       JOIN "Project" p ON p.id = t."projectId"
       JOIN "Client" c ON c.id = p."clientId"
       CROSS JOIN bounds b
-      WHERE t.date >= b.start_at AND t.date <= b.end_at AND t."ownerId" = ${ownerId}
+      WHERE t.date >= b.previous_start_at AND t.date <= b.previous_end_at AND t."ownerId" = ${ownerId}
+    ),
+    current_week_entries AS (
+      SELECT
+        COALESCE(
+          jsonb_agg(
+            jsonb_build_object(
+              'id', t.id,
+              'date', t.date,
+              'durationMinutes', t."durationMinutes",
+              'hourlyRateCentsSnapshot', t."hourlyRateCentsSnapshot",
+              'project', jsonb_build_object('title', p.title)
+            )
+            ORDER BY t.date ASC, t."createdAt" ASC
+          ),
+          '[]'::jsonb
+        ) AS data,
+        COUNT(*) AS entry_count,
+        COALESCE(SUM(t."durationMinutes"), 0) AS total_minutes,
+        COALESCE(SUM(ROUND((t."durationMinutes"::numeric / 60) * t."hourlyRateCentsSnapshot")), 0) AS billable_value
+      FROM "TimeEntry" t
+      JOIN "Project" p ON p.id = t."projectId"
+      CROSS JOIN bounds b
+      WHERE t.date >= b.current_start_at AND t.date <= b.current_end_at AND t."ownerId" = ${ownerId}
+    ),
+    top_project_rows AS (
+      SELECT
+        p.id,
+        p.title,
+        c."businessName",
+        COALESCE(time_totals.minutes, 0) AS unbilled_minutes,
+        COALESCE(time_totals.value_cents, 0) AS labour_value_cents,
+        COALESCE(item_totals.value_cents, 0) AS expense_value_cents,
+        (COALESCE(time_totals.value_cents, 0) + COALESCE(item_totals.value_cents, 0)) AS unbilled_value_cents
+      FROM "Project" p
+      JOIN "Client" c ON c.id = p."clientId"
+      LEFT JOIN (
+        SELECT
+          "projectId",
+          COALESCE(SUM("durationMinutes"), 0) AS minutes,
+          COALESCE(SUM(ROUND(("durationMinutes"::numeric / 60) * "hourlyRateCentsSnapshot")), 0) AS value_cents
+        FROM "TimeEntry"
+        WHERE "billingStatus" = 'UNBILLED' AND "ownerId" = ${ownerId}
+        GROUP BY "projectId"
+      ) time_totals ON time_totals."projectId" = p.id
+      LEFT JOIN (
+        SELECT "projectId", COALESCE(SUM("totalCostCents"), 0) AS value_cents
+        FROM "ExpenseItem"
+        WHERE "billingStatus" = 'UNBILLED' AND "ownerId" = ${ownerId}
+        GROUP BY "projectId"
+      ) item_totals ON item_totals."projectId" = p.id
+      WHERE p.status = 'ACTIVE' AND p."ownerId" = ${ownerId}
+      ORDER BY unbilled_value_cents DESC, p."updatedAt" DESC
+      LIMIT 5
+    ),
+    top_active_projects AS (
+      SELECT COALESCE(
+        jsonb_agg(
+          jsonb_build_object(
+            'id', id,
+            'title', title,
+            'client', jsonb_build_object('businessName', "businessName"),
+            'unbilledMinutes', unbilled_minutes,
+            'labourValueCents', labour_value_cents,
+            'expenseValueCents', expense_value_cents,
+            'unbilledValueCents', unbilled_value_cents
+          )
+          ORDER BY unbilled_value_cents DESC, title ASC
+        ),
+        '[]'::jsonb
+      ) AS data
+      FROM top_project_rows
+    ),
+    invoice_snapshots AS (
+      SELECT jsonb_build_object(
+        'overdue', jsonb_build_object(
+          'count', COUNT(*) FILTER (
+            WHERE i.status = 'SENT'
+              AND COALESCE(i."dueDate", i."invoiceDate" + (i."paymentTermsDays" * INTERVAL '1 day')) < b.today_at
+          ),
+          'valueCents', COALESCE(SUM(i."grandTotalCents") FILTER (
+            WHERE i.status = 'SENT'
+              AND COALESCE(i."dueDate", i."invoiceDate" + (i."paymentTermsDays" * INTERVAL '1 day')) < b.today_at
+          ), 0)
+        ),
+        'sent', jsonb_build_object(
+          'count', COUNT(*) FILTER (WHERE i.status = 'SENT'),
+          'valueCents', COALESCE(SUM(i."grandTotalCents") FILTER (WHERE i.status = 'SENT'), 0)
+        ),
+        'draft', jsonb_build_object(
+          'count', COUNT(*) FILTER (WHERE i.status = 'DRAFT'),
+          'valueCents', COALESCE(SUM(i."grandTotalCents") FILTER (WHERE i.status = 'DRAFT'), 0)
+        ),
+        'paidThisMonth', jsonb_build_object(
+          'count', COUNT(*) FILTER (WHERE i.status = 'PAID' AND i."paymentDate" >= b.month_start_at),
+          'valueCents', COALESCE(SUM(i."grandTotalCents") FILTER (WHERE i.status = 'PAID' AND i."paymentDate" >= b.month_start_at), 0)
+        )
+      ) AS data
+      FROM "Invoice" i
+      CROSS JOIN bounds b
+      WHERE i."ownerId" = ${ownerId}
+    ),
+    recent_activity_rows AS (
+      SELECT *
+      FROM (
+        SELECT
+          'time'::text AS kind,
+          t.id,
+          t."createdAt",
+          t."projectId",
+          p.title AS "projectTitle",
+          c."businessName" AS "clientName",
+          t."durationMinutes",
+          NULL::text AS "invoiceId",
+          NULL::text AS "invoiceNumber",
+          NULL::text AS "invoiceStatus",
+          NULL::integer AS "invoiceTotalCents",
+          NULL::text AS "auditAction",
+          NULL::text AS "entityType",
+          NULL::text AS "entityId"
+        FROM "TimeEntry" t
+        JOIN "Project" p ON p.id = t."projectId"
+        JOIN "Client" c ON c.id = p."clientId"
+        WHERE t."ownerId" = ${ownerId}
+
+        UNION ALL
+
+        SELECT
+          'invoice'::text AS kind,
+          i.id,
+          i."updatedAt" AS "createdAt",
+          i."projectId",
+          p.title AS "projectTitle",
+          c."businessName" AS "clientName",
+          NULL::integer AS "durationMinutes",
+          i.id AS "invoiceId",
+          i."invoiceNumber",
+          i.status::text AS "invoiceStatus",
+          i."grandTotalCents" AS "invoiceTotalCents",
+          NULL::text AS "auditAction",
+          NULL::text AS "entityType",
+          NULL::text AS "entityId"
+        FROM "Invoice" i
+        JOIN "Project" p ON p.id = i."projectId"
+        JOIN "Client" c ON c.id = i."clientId"
+        WHERE i."ownerId" = ${ownerId}
+
+        UNION ALL
+
+        SELECT
+          'audit'::text AS kind,
+          a.id,
+          a."createdAt",
+          NULL::text AS "projectId",
+          NULL::text AS "projectTitle",
+          NULL::text AS "clientName",
+          NULL::integer AS "durationMinutes",
+          NULL::text AS "invoiceId",
+          NULL::text AS "invoiceNumber",
+          NULL::text AS "invoiceStatus",
+          NULL::integer AS "invoiceTotalCents",
+          a.action AS "auditAction",
+          a."entityType",
+          a."entityId"
+        FROM "AuditLog" a
+        WHERE a."ownerId" = ${ownerId}
+      ) activity
+      ORDER BY "createdAt" DESC
+      LIMIT 8
+    ),
+    recent_activity AS (
+      SELECT COALESCE(
+        jsonb_agg(
+          jsonb_build_object(
+            'id', id,
+            'kind', kind,
+            'createdAt', "createdAt",
+            'projectId', "projectId",
+            'projectTitle', "projectTitle",
+            'clientName', "clientName",
+            'durationMinutes', "durationMinutes",
+            'invoiceId', "invoiceId",
+            'invoiceNumber', "invoiceNumber",
+            'invoiceStatus', "invoiceStatus",
+            'invoiceTotalCents', "invoiceTotalCents",
+            'auditAction', "auditAction",
+            'entityType', "entityType",
+            'entityId', "entityId"
+          )
+          ORDER BY "createdAt" DESC
+        ),
+        '[]'::jsonb
+      ) AS data
+      FROM recent_activity_rows
     )
     SELECT
       active_projects.data AS "projects",
+      top_active_projects.data AS "topActiveProjects",
+      invoice_snapshots.data AS "invoiceSnapshots",
+      recent_activity.data AS "recentActivity",
       sent_invoices.data AS "sentInvoices",
       paid_invoices.data AS "paidInvoices",
       previous_week_entries.data AS "previousWeekEntries",
+      current_week_entries.data AS "currentWeekEntries",
+      current_week_entries.entry_count AS "currentWeekEntryCount",
+      current_week_entries.total_minutes AS "totalCurrentWeekMinutes",
+      current_week_entries.billable_value AS "totalCurrentWeekBillableCents",
       unbilled_time.entry_count AS "unbilledEntryCount",
       unbilled_items.item_count AS "unbilledItemCount",
       sent_invoices.invoice_total AS "pendingPaymentCents",
-      (unbilled_time.entry_total + unbilled_items.item_total) AS "pendingInvoicesCents"
-    FROM active_projects, sent_invoices, paid_invoices, unbilled_time, unbilled_items, previous_week_entries
+      (unbilled_time.entry_total + unbilled_items.item_total) AS "pendingInvoicesCents",
+      overdue_invoices.overdue_count AS "overdueInvoiceCount",
+      overdue_invoices.overdue_total AS "overdueInvoiceCents",
+      paid_totals.paid_month AS "paidThisMonthCents",
+      paid_totals.paid_quarter AS "paidThisQuarterCents"
+    FROM active_projects, top_active_projects, invoice_snapshots, recent_activity, sent_invoices, paid_invoices, paid_totals, overdue_invoices, unbilled_time, unbilled_items, previous_week_entries, current_week_entries
   `;
 
   const row = rows[0];
+  const currentWeekEntries = row?.currentWeekEntries ?? [];
+  const entriesByDay = new Map<string, NonNullable<DashboardRow["currentWeekEntries"]>>();
+  for (const entry of currentWeekEntries) {
+    const key = dateInputValue(entry.date);
+    const entries = entriesByDay.get(key) ?? [];
+    entries.push(entry);
+    entriesByDay.set(key, entries);
+  }
+  const todayKey = dateInputValue(today);
+  const currentWeekDays = currentWeek.days.map((day) => {
+    const key = dateInputValue(day);
+    const dayEntries = entriesByDay.get(key) ?? [];
+    const projectNames = Array.from(new Set(dayEntries.map((entry) => entry.project.title)));
+    return {
+      date: key,
+      dayName: weekdayLabel(day, "long"),
+      dayShort: weekdayLabel(day, "short"),
+      dateLabel: `${day.getUTCDate()}/${day.getUTCMonth() + 1}`,
+      isToday: key === todayKey,
+      totalMinutes: dayEntries.reduce((sum, entry) => sum + Number(entry.durationMinutes ?? 0), 0),
+      billableValueCents: dayEntries.reduce(
+        (sum, entry) => sum + Math.round((Number(entry.durationMinutes ?? 0) * Number(entry.hourlyRateCentsSnapshot ?? 0)) / 60),
+        0
+      ),
+      entryCount: dayEntries.length,
+      projects: projectNames
+    };
+  });
+  const invoiceSnapshots = row?.invoiceSnapshots ?? {
+    overdue: { count: 0, valueCents: 0 },
+    sent: { count: 0, valueCents: 0 },
+    draft: { count: 0, valueCents: 0 },
+    paidThisMonth: { count: 0, valueCents: 0 }
+  };
+
   return {
     projects: row?.projects ?? [],
+    topActiveProjects: (row?.topActiveProjects ?? []).map((project) => ({
+      ...project,
+      unbilledMinutes: numberValue(project.unbilledMinutes),
+      labourValueCents: numberValue(project.labourValueCents),
+      expenseValueCents: numberValue(project.expenseValueCents),
+      unbilledValueCents: numberValue(project.unbilledValueCents)
+    })),
+    invoiceSnapshots: {
+      overdue: {
+        count: numberValue(invoiceSnapshots.overdue.count),
+        valueCents: numberValue(invoiceSnapshots.overdue.valueCents)
+      },
+      sent: {
+        count: numberValue(invoiceSnapshots.sent.count),
+        valueCents: numberValue(invoiceSnapshots.sent.valueCents)
+      },
+      draft: {
+        count: numberValue(invoiceSnapshots.draft.count),
+        valueCents: numberValue(invoiceSnapshots.draft.valueCents)
+      },
+      paidThisMonth: {
+        count: numberValue(invoiceSnapshots.paidThisMonth.count),
+        valueCents: numberValue(invoiceSnapshots.paidThisMonth.valueCents)
+      }
+    },
+    recentActivity: (row?.recentActivity ?? []).map((activity) => ({
+      ...activity,
+      durationMinutes: activity.durationMinutes === null ? null : numberValue(activity.durationMinutes),
+      invoiceTotalCents: activity.invoiceTotalCents === null ? null : numberValue(activity.invoiceTotalCents)
+    })),
     sentInvoices: row?.sentInvoices ?? [],
     paidInvoices: row?.paidInvoices ?? [],
+    currentWeekStart: dateInputValue(currentWeek.start),
+    currentWeekEnd: dateInputValue(currentWeek.end),
+    currentWeekDays,
+    totalCurrentWeekMinutes: numberValue(row?.totalCurrentWeekMinutes),
+    totalCurrentWeekBillableCents: numberValue(row?.totalCurrentWeekBillableCents),
+    currentWeekEntryCount: numberValue(row?.currentWeekEntryCount),
     previousWeekEntries: row?.previousWeekEntries ?? [],
     unbilledEntryCount: numberValue(row?.unbilledEntryCount),
     unbilledItemCount: numberValue(row?.unbilledItemCount),
     pendingPaymentCents: numberValue(row?.pendingPaymentCents),
-    pendingInvoicesCents: numberValue(row?.pendingInvoicesCents)
+    pendingInvoicesCents: numberValue(row?.pendingInvoicesCents),
+    overdueInvoiceCount: numberValue(row?.overdueInvoiceCount),
+    overdueInvoiceCents: numberValue(row?.overdueInvoiceCents),
+    paidThisMonthCents: numberValue(row?.paidThisMonthCents),
+    paidThisQuarterCents: numberValue(row?.paidThisQuarterCents)
   };
+}
+
+function weekdayLabel(date: Date, weekday: "short" | "long") {
+  return new Intl.DateTimeFormat("en-AU", { weekday, timeZone: "UTC" }).format(date);
 }
 
 export const getDashboardData = unstable_cache(loadDashboardData, ["dashboard-data"], {

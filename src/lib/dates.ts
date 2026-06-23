@@ -85,6 +85,18 @@ export function previousWeekMondayToSunday(date: Date = todayInPerth()) {
   };
 }
 
+export function currentWeekMondayToSunday(date: Date = todayInPerth()) {
+  const start = startOfWeekMonday(date);
+  const end = addDays(start, 6);
+
+  return {
+    start,
+    end,
+    endInclusive: endOfDay(end),
+    days: Array.from({ length: 7 }, (_, index) => addDays(start, index))
+  };
+}
+
 export function endOfDay(date: Date): Date {
   return new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate(), 23, 59, 59, 999));
 }
