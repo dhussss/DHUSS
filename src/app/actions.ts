@@ -159,7 +159,8 @@ export async function updateBusinessProfileAction(formData: FormData) {
 
   const gstRegistered = text(formData, "gstRegistered") === "on";
   const { invoicePrefix, gstRate, themeAccent, themeMode } = validateBusinessProfileInput(formData, gstRegistered);
-  const defaultInvoiceEmailBody = text(formData, "defaultInvoiceEmailBody") || null;
+  const defaultInvoiceEmailBody = text(formData, "defaultInvoiceEmailBody") || text(formData, "defaultInvoiceBody") || null;
+  const defaultInvoiceBody = text(formData, "defaultInvoiceBody") || defaultInvoiceEmailBody;
 
   const existing = await prisma.businessProfile.findUnique({ where: { ownerId } });
   let logoPath = existing?.logoPath ?? null;
@@ -205,6 +206,10 @@ export async function updateBusinessProfileAction(formData: FormData) {
       defaultInvoiceEmailMessage: text(formData, "defaultInvoiceEmailMessage") || defaultInvoiceEmailBody,
       defaultInvoiceEmailSubjectTemplate: text(formData, "defaultInvoiceEmailSubjectTemplate") || null,
       defaultInvoiceEmailBody,
+      defaultInvoiceGreeting: text(formData, "defaultInvoiceGreeting") || null,
+      defaultInvoiceBody: defaultInvoiceBody || null,
+      defaultInvoiceSignOff: text(formData, "defaultInvoiceSignOff") || null,
+      defaultInvoiceFooter: text(formData, "defaultInvoiceFooter") || null,
       replyToEmail: text(formData, "replyToEmail") || null,
       themeAccent,
       themeMode,
@@ -233,6 +238,10 @@ export async function updateBusinessProfileAction(formData: FormData) {
       defaultInvoiceEmailMessage: text(formData, "defaultInvoiceEmailMessage") || defaultInvoiceEmailBody,
       defaultInvoiceEmailSubjectTemplate: text(formData, "defaultInvoiceEmailSubjectTemplate") || null,
       defaultInvoiceEmailBody,
+      defaultInvoiceGreeting: text(formData, "defaultInvoiceGreeting") || null,
+      defaultInvoiceBody: defaultInvoiceBody || null,
+      defaultInvoiceSignOff: text(formData, "defaultInvoiceSignOff") || null,
+      defaultInvoiceFooter: text(formData, "defaultInvoiceFooter") || null,
       replyToEmail: text(formData, "replyToEmail") || null,
       themeAccent,
       themeMode,

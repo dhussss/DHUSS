@@ -273,6 +273,10 @@ model BusinessProfile {
   defaultInvoiceEmailMessage String?
   defaultInvoiceEmailSubjectTemplate String?
   defaultInvoiceEmailBody    String?
+  defaultInvoiceGreeting     String?
+  defaultInvoiceBody         String?
+  defaultInvoiceSignOff      String?
+  defaultInvoiceFooter       String?
   replyToEmail               String?
   themeAccent                String   @default("emerald")
   themeSecondary             String?

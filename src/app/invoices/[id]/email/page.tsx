@@ -43,11 +43,21 @@ export default async function InvoiceEmailPage({ params }: { params: Promise<{ i
     projectName: invoice.project.title,
     total: formatMoney(invoice.grandTotalCents),
     totalDue: formatMoney(invoice.grandTotalCents),
-    dueDate: formatDateAU(dueDate)
+    amountDue: formatMoney(invoice.grandTotalCents),
+    dueDate: formatEmailDate(dueDate)
   };
-  const subjectTemplate = profile?.defaultInvoiceEmailSubjectTemplate || "Invoice {{invoiceNumber}} – {{businessName}}";
+  const subjectTemplate = profile?.defaultInvoiceEmailSubjectTemplate || "Invoice {{invoiceNumber}} from {{businessName}}";
   const subject = renderTemplate(subjectTemplate, templateValues);
-  const body = buildPreparedInvoiceEmailBody({ invoice, business, client, publicUrl: fullPublicUrl });
+  const body = buildPreparedInvoiceEmailBody({
+    invoice,
+    business,
+    client,
+    publicUrl: fullPublicUrl,
+    greeting: renderTemplate(profile?.defaultInvoiceGreeting || "Hi {{clientName}},\n\nI hope you're well.", templateValues),
+    intro: renderTemplate(profile?.defaultInvoiceBody || "Please find invoice {{invoiceNumber}} for {{projectName}}.", templateValues),
+    signOff: renderTemplate(profile?.defaultInvoiceSignOff || "Kind regards,", templateValues),
+    footer: renderTemplate(profile?.defaultInvoiceFooter || "{{businessName}}", templateValues)
+  });
   const disabledReason = !canSend
     ? "Mark this invoice as sent before emailing it."
     : !client.email
@@ -81,11 +91,19 @@ export default async function InvoiceEmailPage({ params }: { params: Promise<{ i
         <aside className="grid gap-4">
           <section className="card">
             <p className="section-title">Invoice summary</p>
+            <div className="mt-3 rounded-lg border border-mint/25 bg-mint/10 p-4">
+              <p className="text-xs font-black uppercase tracking-[0.16em] text-moss">Amount due</p>
+              <p className="mt-1 text-3xl font-black tracking-normal text-ink">{formatMoney(invoice.grandTotalCents)}</p>
+              <div className="mt-3">
+                <InvoiceStatusPill status={invoice.status} />
+              </div>
+            </div>
             <dl className="mt-4 grid gap-3 text-sm font-bold">
+              <SummaryLine label="Invoice" value={invoice.invoiceNumber} />
               <SummaryLine label="Client" value={client.businessName} />
               <SummaryLine label="Project" value={invoice.project.title} />
               <SummaryLine label="Due date" value={formatDateAU(dueDate)} />
-              <SummaryLine label="Total" value={formatMoney(invoice.grandTotalCents)} strong />
+              <SummaryLine label="Status" value={statusLabel(invoice.status)} />
             </dl>
           </section>
 
@@ -128,6 +146,14 @@ function SummaryLine({ label, value, strong = false }: { label: string; value: s
   );
 }
 
+function statusLabel(status: string) {
+  return status
+    .toLowerCase()
+    .split("_")
+    .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+    .join(" ");
+}
+
 function appBaseUrl() {
   const configured = process.env.APP_BASE_URL?.replace(/\/$/, "");
   if (configured) return configured;
@@ -138,6 +164,16 @@ function appBaseUrl() {
 function absoluteAppUrl(path: string) {
   const baseUrl = appBaseUrl();
   return baseUrl ? `${baseUrl}${path}` : path;
+}
+
+function formatEmailDate(date: Date | string | number) {
+  const value = date instanceof Date ? date : new Date(date);
+  return new Intl.DateTimeFormat("en-AU", {
+    day: "numeric",
+    month: "long",
+    year: "numeric",
+    timeZone: "UTC"
+  }).format(value);
 }
 
 function snapshot(frozen: boolean, frozenValue: string | null | undefined, liveValue: string | null | undefined) {

@@ -185,6 +185,8 @@ No email provider is required for the normal workflow. `/invoices/<id>/email` pr
 
 Set `APP_BASE_URL` in Vercel if you use public invoice links. Without it, the email body falls back to a clear invoice summary instead of a public link.
 
+The default invoice email template can be customised in `/business-profile` with merge tags: `{{clientName}}`, `{{invoiceNumber}}`, `{{projectName}}`, `{{amountDue}}`, `{{dueDate}}`, and `{{businessName}}`.
+
 Resend/API-key based server sending is not part of the active workflow. If server-side sending is reintroduced later, treat `RESEND_API_KEY` and `RESEND_FROM_EMAIL` as optional future-only environment variables.
 
 ## Backup Export
@@ -213,7 +215,7 @@ Use `/diagnostics?token=<BACKUP_EXPORT_TOKEN>` while logged in to open a private
 - `/login` signs users in with Supabase Auth.
 - Dashboard, clients, projects, invoices, hours export, backup, diagnostics, and server actions require a logged-in user.
 - `/business-profile` lets each user save their own trading name, legal details, ABN/ACN, contact details, GST defaults, bank details, invoice notes, email message, logo, and footer.
-- `/business-profile` also stores default invoice email subject/body templates, reply-to email, and the app theme preset.
+- `/business-profile` also stores default invoice email subject, greeting, body, sign-off, footer, reply-to email, and the app theme preset.
 - Logo files are uploaded directly from the browser to the private `business-logos` Storage bucket under the user's own folder. The server action stores only the Storage path, which avoids Vercel's 1 MB Server Action body limit.
 - Logo validation allows PNG, JPG, WEBP, and SVG files up to 1 MB. 500 KB or smaller is recommended for fast invoice previews.
 - Invoice detail pages show the user's logo when available.

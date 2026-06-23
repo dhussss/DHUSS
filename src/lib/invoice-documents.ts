@@ -111,49 +111,97 @@ export function buildPreparedInvoiceEmailBody({
   invoice,
   business,
   client,
-  publicUrl
+  publicUrl,
+  greeting,
+  intro,
+  signOff,
+  footer
 }: {
   invoice: InvoiceDocumentData;
   business: InvoiceBusinessDetails;
   client: InvoiceClientDetails;
   publicUrl?: string | null;
+  greeting?: string | null;
+  intro?: string | null;
+  signOff?: string | null;
+  footer?: string | null;
 }) {
   const dueDate = invoiceDueDate(invoice);
   const { labourSubtotalCents, expensesSubtotalCents, subtotalCents } = invoiceSubtotals(invoice);
+  const opening = greeting?.trim() || `Hi ${client.contactName || client.businessName},\n\nI hope you're well.`;
+  const introText = intro?.trim() || `Please find invoice ${invoice.invoiceNumber} for ${invoice.project.title}.`;
   const lines = [
-    `Hi ${client.contactName || client.businessName},`,
+    ...opening.split("\n"),
     "",
-    `Please find invoice ${invoice.invoiceNumber} for ${invoice.project.title}.`,
+    ...introText.split("\n"),
     "",
-    `Invoice number: ${invoice.invoiceNumber}`,
-    `Project: ${invoice.project.title}`,
-    `Amount due: ${formatMoney(invoice.grandTotalCents)}`,
-    `Due date: ${formatDateAU(dueDate)}`,
+    "Invoice Details",
     "",
-    "Payment details:",
-    business.bankAccountName ? `Account name: ${business.bankAccountName}` : "",
-    business.bsb ? `BSB: ${business.bsb}` : "",
-    business.accountNumber ? `Account: ${business.accountNumber}` : "",
-    `Payment reference: ${invoice.invoiceNumber}`,
+    "Invoice Number:",
+    invoice.invoiceNumber,
+    "",
+    "Project:",
+    invoice.project.title,
+    "",
+    "Amount Due:",
+    formatMoney(invoice.grandTotalCents),
+    "",
+    "Due Date:",
+    formatEmailDate(dueDate),
+    "",
+    "Payment Reference:",
+    invoice.invoiceNumber,
+    "",
+    "Payment Details",
     ""
   ];
 
+  if (business.bankAccountName) lines.push("Account Name:", business.bankAccountName, "");
+  if (business.bsb) lines.push("BSB:", business.bsb, "");
+  if (business.accountNumber) lines.push("Account Number:", business.accountNumber, "");
+
   if (publicUrl) {
-    lines.push(`View invoice: ${publicUrl}`, "");
+    lines.push("View Invoice Online:", publicUrl, "");
   } else {
     lines.push(
-      "Invoice summary:",
-      `Labour: ${formatMoney(labourSubtotalCents)}`,
-      expensesSubtotalCents > 0 ? `Expenses/materials: ${formatMoney(expensesSubtotalCents)}` : "",
-      `Subtotal: ${formatMoney(subtotalCents)}`,
-      invoice.gstCents > 0 ? `GST: ${formatMoney(invoice.gstCents)}` : "",
-      `Total due: ${formatMoney(invoice.grandTotalCents)}`,
+      "Invoice Summary",
+      "",
+      "Labour:",
+      formatMoney(labourSubtotalCents),
+      "",
+      ...(expensesSubtotalCents > 0 ? ["Expenses / Materials:", formatMoney(expensesSubtotalCents), ""] : []),
+      "Subtotal:",
+      formatMoney(subtotalCents),
+      "",
+      ...(invoice.gstCents > 0 ? ["GST:", formatMoney(invoice.gstCents), ""] : []),
+      "Total Due:",
+      formatMoney(invoice.grandTotalCents),
       ""
     );
   }
 
-  lines.push("Thanks,", business.contactName || business.name);
-  return lines.filter(Boolean).join("\n");
+  lines.push(
+    "If you have any questions regarding this invoice, please feel free to contact us.",
+    "",
+    ...(signOff?.trim() || "Kind regards,").split("\n"),
+    "",
+    business.contactName || business.name
+  );
+
+  const footerText = footer?.trim();
+  lines.push(...(footerText || business.name).split("\n"));
+
+  return lines.join("\n").replace(/\n{3,}/g, "\n\n").trim();
+}
+
+function formatEmailDate(date: Date | string | number) {
+  const value = date instanceof Date ? date : new Date(date);
+  return new Intl.DateTimeFormat("en-AU", {
+    day: "numeric",
+    month: "long",
+    year: "numeric",
+    timeZone: "UTC"
+  }).format(value);
 }
 
 export function buildInvoicePlainText({

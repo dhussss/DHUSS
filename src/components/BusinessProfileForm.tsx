@@ -29,6 +29,10 @@ type BusinessProfileFormValue = {
   defaultInvoiceEmailMessage: string;
   defaultInvoiceEmailSubjectTemplate: string;
   defaultInvoiceEmailBody: string;
+  defaultInvoiceGreeting: string;
+  defaultInvoiceBody: string;
+  defaultInvoiceSignOff: string;
+  defaultInvoiceFooter: string;
   replyToEmail: string;
   themeAccent: string;
   themeMode: string;
@@ -248,20 +252,36 @@ export function BusinessProfileForm({
             Default subject template
             <input
               name="defaultInvoiceEmailSubjectTemplate"
-              defaultValue={profile.defaultInvoiceEmailSubjectTemplate || "Invoice {{invoiceNumber}} – {{businessName}}"}
+              defaultValue={profile.defaultInvoiceEmailSubjectTemplate || "Invoice {{invoiceNumber}} from {{businessName}}"}
             />
           </label>
           <label>
-            Default email body
+            Default invoice greeting
             <textarea
-              name="defaultInvoiceEmailBody"
-              defaultValue={
-                profile.defaultInvoiceEmailBody ||
-                profile.defaultInvoiceEmailMessage ||
-                "Hi {{clientName}},\n\nPlease find invoice {{invoiceNumber}} for {{projectName}}.\n\nTotal due: {{totalDue}}\nDue date: {{dueDate}}\n\nThanks,\n{{businessName}}"
-              }
+              name="defaultInvoiceGreeting"
+              rows={2}
+              defaultValue={profile.defaultInvoiceGreeting || "Hi {{clientName}},\n\nI hope you're well."}
             />
           </label>
+          <label>
+            Default invoice body
+            <textarea
+              name="defaultInvoiceBody"
+              rows={3}
+              defaultValue={profile.defaultInvoiceBody || profile.defaultInvoiceEmailBody || profile.defaultInvoiceEmailMessage || "Please find invoice {{invoiceNumber}} for {{projectName}}."}
+            />
+          </label>
+          <label>
+            Default invoice sign-off
+            <textarea name="defaultInvoiceSignOff" rows={2} defaultValue={profile.defaultInvoiceSignOff || "Kind regards,"} />
+          </label>
+          <label>
+            Default invoice footer
+            <textarea name="defaultInvoiceFooter" rows={2} defaultValue={profile.defaultInvoiceFooter || "{{businessName}}"} />
+          </label>
+          <p className="rounded-lg border border-line bg-paper p-3 text-xs font-bold text-moss">
+            Merge tags: {"{{clientName}}"}, {"{{invoiceNumber}}"}, {"{{projectName}}"}, {"{{amountDue}}"}, {"{{dueDate}}"}, {"{{businessName}}"}
+          </p>
         </div>
       </section>
 
