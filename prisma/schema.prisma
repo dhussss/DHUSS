@@ -177,15 +177,20 @@ model Invoice {
   businessNameSnapshot String?
   businessLegalNameSnapshot String?
   businessAbnSnapshot String?
+  businessContactNameSnapshot String?
   businessEmailSnapshot String?
   businessPhoneSnapshot String?
   businessAddressSnapshot String?
+  businessWebsiteSnapshot String?
   businessBankAccountNameSnapshot String?
   businessBsbSnapshot String?
   businessAccountNumberSnapshot String?
   businessGstRegisteredSnapshot Boolean @default(false)
   businessGstRateSnapshot Decimal @default(0)
   businessLogoPathSnapshot String?
+  businessDefaultInvoiceNotesSnapshot String?
+  businessDefaultInvoiceEmailMessageSnapshot String?
+  businessSignatureFooterSnapshot String?
   clientBusinessNameSnapshot String?
   clientContactNameSnapshot String?
   clientEmailSnapshot String?

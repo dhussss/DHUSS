@@ -104,6 +104,98 @@ label {
   .bottom-safe {
     padding-bottom: env(safe-area-inset-bottom);
   }
+
+  .invoice-workspace {
+    @apply max-w-none bg-transparent xl:px-8;
+  }
+
+  .invoice-sheet {
+    width: min(100%, 210mm);
+    min-height: 297mm;
+    @apply mx-auto flex flex-col rounded-lg border border-line bg-white p-5 shadow-soft sm:p-8;
+  }
+
+  .invoice-header {
+    @apply grid gap-6 border-b-2 border-ink pb-6 sm:grid-cols-[1fr_auto] sm:items-start;
+  }
+
+  .invoice-address-grid {
+    @apply mt-7 grid gap-4 sm:grid-cols-2;
+  }
+
+  .invoice-info-block {
+    @apply rounded-lg border border-line bg-paper/50 p-4;
+  }
+
+  .invoice-meta-grid {
+    @apply mt-6 grid gap-3 rounded-lg border border-line bg-white p-4 sm:grid-cols-3;
+  }
+
+  .invoice-lines-section {
+    @apply mt-7;
+  }
+
+  .invoice-table-wrap {
+    @apply overflow-hidden rounded-lg border border-line;
+  }
+
+  .invoice-table {
+    table-layout: fixed;
+    @apply w-full border-collapse text-left text-sm;
+  }
+
+  .invoice-table thead {
+    @apply bg-ink text-xs uppercase text-white;
+  }
+
+  .invoice-table th,
+  .invoice-table td {
+    @apply p-3 align-top;
+  }
+
+  .invoice-table th:nth-child(1),
+  .invoice-table td:nth-child(1) {
+    width: 44%;
+  }
+
+  .invoice-table th:nth-child(2),
+  .invoice-table td:nth-child(2) {
+    width: 36%;
+  }
+
+  .invoice-table th:nth-child(3),
+  .invoice-table td:nth-child(3) {
+    width: 20%;
+    white-space: nowrap;
+  }
+
+  .invoice-table tbody tr {
+    @apply border-t border-line;
+  }
+
+  .invoice-table tbody tr:first-child {
+    @apply border-t-0;
+  }
+
+  .invoice-section-row td {
+    @apply bg-paper py-2 text-xs font-black uppercase tracking-[0.14em] text-moss;
+  }
+
+  .invoice-totals-section {
+    @apply mt-6 grid gap-5 sm:grid-cols-[1fr_18rem];
+  }
+
+  .invoice-note-box {
+    @apply rounded-lg border border-line bg-white p-4;
+  }
+
+  .invoice-total-card {
+    @apply grid h-fit gap-3 rounded-lg border border-ink bg-paper p-4;
+  }
+
+  .invoice-footer {
+    @apply mt-auto grid gap-4 border-t-2 border-ink pt-6 sm:grid-cols-[1fr_1fr] sm:items-start;
+  }
 }
 
 @media print {
@@ -137,9 +229,39 @@ label {
   }
 
   .invoice-print {
+    width: auto !important;
+    min-height: calc(297mm - 24mm);
     border: 0 !important;
     box-shadow: none !important;
     padding: 0 !important;
+    border-radius: 0 !important;
+  }
+
+  .invoice-header,
+  .invoice-address-grid,
+  .invoice-meta-grid,
+  .invoice-lines-section,
+  .invoice-totals-section,
+  .invoice-footer,
+  .invoice-info-block,
+  .invoice-note-box,
+  .invoice-total-card,
+  .invoice-table tr {
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+
+  .invoice-table {
+    font-size: 9.5pt;
+  }
+
+  .invoice-table thead {
+    display: table-header-group;
+  }
+
+  .invoice-table th,
+  .invoice-table td {
+    padding: 7pt;
   }
 
   .card {

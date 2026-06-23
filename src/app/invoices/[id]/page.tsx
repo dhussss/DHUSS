@@ -1,6 +1,7 @@
 import Link from "next/link";
+import type { ReactNode } from "react";
 import { notFound } from "next/navigation";
-import { ArrowLeft, Banknote, RotateCcw, Send, Trash2, XCircle } from "lucide-react";
+import { AlertTriangle, ArrowLeft, Banknote, RotateCcw, Send, Trash2, XCircle } from "lucide-react";
 import {
   deleteInvoiceAction,
   markInvoicePaidAction,
@@ -38,28 +39,33 @@ export default async function InvoiceDetailPage({ params }: { params: Promise<{ 
 
   if (!invoice) notFound();
 
-  const isSnapshotInvoice = invoice.status !== "DRAFT";
+  const frozen = invoice.status !== "DRAFT";
   const business = {
-    name: (isSnapshotInvoice ? invoice.businessNameSnapshot : null) ?? profile?.tradingName ?? "Business profile not set",
-    legalName: (isSnapshotInvoice ? invoice.businessLegalNameSnapshot : null) ?? profile?.legalName ?? null,
-    abn: (isSnapshotInvoice ? invoice.businessAbnSnapshot : null) ?? profile?.abn ?? null,
-    email: (isSnapshotInvoice ? invoice.businessEmailSnapshot : null) ?? profile?.email ?? null,
-    phone: (isSnapshotInvoice ? invoice.businessPhoneSnapshot : null) ?? profile?.phone ?? null,
-    address: (isSnapshotInvoice ? invoice.businessAddressSnapshot : null) ?? profile?.address ?? null,
-    bankAccountName: (isSnapshotInvoice ? invoice.businessBankAccountNameSnapshot : null) ?? profile?.bankAccountName ?? null,
-    bsb: (isSnapshotInvoice ? invoice.businessBsbSnapshot : null) ?? profile?.bsb ?? null,
-    accountNumber: (isSnapshotInvoice ? invoice.businessAccountNumberSnapshot : null) ?? profile?.accountNumber ?? null,
-    gstRegistered: (isSnapshotInvoice ? invoice.businessGstRegisteredSnapshot : null) ?? profile?.gstRegistered ?? false,
-    gstRate: Number((isSnapshotInvoice ? invoice.businessGstRateSnapshot : null) ?? profile?.gstRate ?? 0),
-    logoPath: (isSnapshotInvoice ? invoice.businessLogoPathSnapshot : null) ?? profile?.logoPath ?? null
+    name: snapshot(frozen, invoice.businessNameSnapshot, profile?.tradingName) ?? "Business profile not set",
+    legalName: snapshot(frozen, invoice.businessLegalNameSnapshot, profile?.legalName),
+    contactName: snapshot(frozen, invoice.businessContactNameSnapshot, profile?.contactName),
+    abn: snapshot(frozen, invoice.businessAbnSnapshot, profile?.abn),
+    email: snapshot(frozen, invoice.businessEmailSnapshot, profile?.email),
+    phone: snapshot(frozen, invoice.businessPhoneSnapshot, profile?.phone),
+    address: snapshot(frozen, invoice.businessAddressSnapshot, profile?.address),
+    website: snapshot(frozen, invoice.businessWebsiteSnapshot, profile?.website),
+    bankAccountName: snapshot(frozen, invoice.businessBankAccountNameSnapshot, profile?.bankAccountName),
+    bsb: snapshot(frozen, invoice.businessBsbSnapshot, profile?.bsb),
+    accountNumber: snapshot(frozen, invoice.businessAccountNumberSnapshot, profile?.accountNumber),
+    gstRegistered: (frozen ? invoice.businessGstRegisteredSnapshot : null) ?? profile?.gstRegistered ?? false,
+    gstRate: Number((frozen ? invoice.businessGstRateSnapshot : null) ?? profile?.gstRate ?? 0),
+    logoPath: snapshot(frozen, invoice.businessLogoPathSnapshot, profile?.logoPath),
+    defaultInvoiceNotes: snapshot(frozen, invoice.businessDefaultInvoiceNotesSnapshot, profile?.defaultInvoiceNotes),
+    defaultInvoiceEmailMessage: snapshot(frozen, invoice.businessDefaultInvoiceEmailMessageSnapshot, profile?.defaultInvoiceEmailMessage),
+    signatureFooter: snapshot(frozen, invoice.businessSignatureFooterSnapshot, profile?.signatureFooter)
   };
   const client = {
-    businessName: (isSnapshotInvoice ? invoice.clientBusinessNameSnapshot : null) ?? invoice.client.businessName,
-    contactName: (isSnapshotInvoice ? invoice.clientContactNameSnapshot : null) ?? invoice.client.contactName,
-    email: (isSnapshotInvoice ? invoice.clientEmailSnapshot : null) ?? invoice.client.email,
-    phone: (isSnapshotInvoice ? invoice.clientPhoneSnapshot : null) ?? invoice.client.phone,
-    address: (isSnapshotInvoice ? invoice.clientAddressSnapshot : null) ?? invoice.client.address,
-    abn: (isSnapshotInvoice ? invoice.clientAbnSnapshot : null) ?? invoice.client.abn
+    businessName: snapshot(frozen, invoice.clientBusinessNameSnapshot, invoice.client.businessName) ?? invoice.client.businessName,
+    contactName: snapshot(frozen, invoice.clientContactNameSnapshot, invoice.client.contactName),
+    email: snapshot(frozen, invoice.clientEmailSnapshot, invoice.client.email),
+    phone: snapshot(frozen, invoice.clientPhoneSnapshot, invoice.client.phone),
+    address: snapshot(frozen, invoice.clientAddressSnapshot, invoice.client.address),
+    abn: snapshot(frozen, invoice.clientAbnSnapshot, invoice.client.abn)
   };
 
   let logoUrl: string | null = null;
@@ -77,6 +83,11 @@ export default async function InvoiceDetailPage({ params }: { params: Promise<{ 
   const labourLines = invoice.lineItems.filter((line) => line.type === "LABOUR");
   const expenseLines = invoice.lineItems.filter((line) => line.type === "EXPENSE");
   const invoiceTitle = business.gstRegistered ? "Tax Invoice" : "Invoice";
+  const finaliseWarnings = invoice.status === "DRAFT" ? invoiceWarnings(profile, client) : [];
+  const confirmationMessage = finaliseWarnings.length
+    ? `This invoice has warnings: ${finaliseWarnings.join(" ")} Continue anyway?`
+    : "";
+
   const invoiceText = buildInvoiceText({
     invoice,
     invoiceTitle,
@@ -88,107 +99,107 @@ export default async function InvoiceDetailPage({ params }: { params: Promise<{ 
   });
   const emailText = buildEmailText({
     invoiceNumber: invoice.invoiceNumber,
-    businessName: business.name,
-    clientName: client.contactName || client.businessName,
+    business,
+    client,
+    projectTitle: invoice.project.title,
     total: formatMoney(invoice.grandTotalCents),
-    dueDate,
-    bankAccountName: business.bankAccountName,
-    bsb: business.bsb,
-    accountNumber: business.accountNumber
+    dueDate
   });
 
   return (
-    <main className="page-shell print-shell">
-      <div className="no-print">
-        <Link href="/invoices" className="mb-4 inline-flex items-center gap-2 text-sm font-bold text-mint">
+    <main className="page-shell invoice-workspace">
+      <div className="no-print mb-5">
+        <Link href="/invoices" className="inline-flex items-center gap-2 text-sm font-bold text-mint">
           <ArrowLeft size={18} aria-hidden="true" />
           Invoices
         </Link>
       </div>
 
-      <div className="grid gap-5 lg:grid-cols-[1fr_18rem]">
-        <article className="invoice-print rounded-lg border border-line bg-white p-5 shadow-soft sm:p-8">
-          <header className="flex flex-col gap-6 border-b border-line pb-6 sm:flex-row sm:items-start sm:justify-between">
-            <div className="flex items-start gap-4">
+      <div className="grid gap-5 xl:grid-cols-[minmax(0,210mm)_20rem] xl:items-start xl:justify-center">
+        <article className="invoice-sheet invoice-print">
+          <header className="invoice-header">
+            <div className="flex min-w-0 items-start gap-4">
               {logoUrl ? (
                 // eslint-disable-next-line @next/next/no-img-element
-                <img src={logoUrl} alt={`${business.name} logo`} className="h-20 w-20 rounded-lg border border-line bg-white object-contain" />
-              ) : null}
-              <div>
-                <p className="section-title">{invoiceTitle}</p>
-                <h1 className="mt-2 text-3xl font-black tracking-normal">{invoice.invoiceNumber}</h1>
-                <div className="mt-3">
-                  <p className="text-lg font-black">{business.name}</p>
-                  {business.legalName ? <p className="text-sm font-bold text-moss">{business.legalName}</p> : null}
-                  {business.abn ? <p className="text-sm font-bold text-moss">ABN {business.abn}</p> : null}
+                <img src={logoUrl} alt={`${business.name} logo`} className="h-20 w-20 rounded-md border border-line bg-white object-contain print:h-16 print:w-16" />
+              ) : (
+                <div className="grid h-20 w-20 shrink-0 place-items-center rounded-md border border-line bg-paper text-xl font-black text-moss print:h-16 print:w-16">
+                  {business.name.slice(0, 1).toUpperCase()}
                 </div>
+              )}
+              <div className="min-w-0">
+                <p className="text-xs font-black uppercase tracking-[0.18em] text-mint">{invoiceTitle}</p>
+                <h1 className="mt-2 text-2xl font-black tracking-normal text-ink sm:text-3xl">{business.name}</h1>
+                {business.legalName ? <p className="mt-1 text-sm font-bold text-moss">{business.legalName}</p> : null}
+                {business.abn ? <p className="mt-1 text-sm font-bold text-moss">ABN {business.abn}</p> : null}
               </div>
             </div>
+
             <div className="grid gap-2 text-left sm:text-right">
-              <InvoiceStatusPill status={invoice.status} />
-              <p className="text-3xl font-black">{formatMoney(invoice.grandTotalCents)}</p>
-              <p className="text-sm font-bold text-moss">Due {formatDateAU(dueDate)}</p>
+              <div className="no-print sm:justify-self-end">
+                <InvoiceStatusPill status={invoice.status} />
+              </div>
+              <p className="text-xs font-bold uppercase text-moss">Invoice number</p>
+              <p className="text-3xl font-black tracking-normal text-ink">{invoice.invoiceNumber}</p>
+              <p className="text-sm font-bold text-moss">Issued {formatDateAU(invoice.invoiceDate)}</p>
             </div>
           </header>
 
-          <section className="mt-6 grid gap-5 sm:grid-cols-2">
-            <div>
-              <p className="text-xs font-bold uppercase text-moss">From</p>
-              <div className="mt-2 grid gap-1 text-sm font-bold">
-                {business.address ? <p className="whitespace-pre-line">{business.address}</p> : null}
-                {business.email ? <p>{business.email}</p> : null}
-                {business.phone ? <p>{business.phone}</p> : null}
-              </div>
-            </div>
-            <div>
-              <p className="text-xs font-bold uppercase text-moss">Bill to</p>
-              <div className="mt-2 grid gap-1 text-sm font-bold">
-                <p className="text-base font-black">{client.businessName}</p>
-                {client.contactName ? <p>{client.contactName}</p> : null}
-                {client.abn ? <p>ABN {client.abn}</p> : null}
-                {client.address ? <p className="whitespace-pre-line">{client.address}</p> : null}
-                {client.email ? <p>{client.email}</p> : null}
-                {client.phone ? <p>{client.phone}</p> : null}
-              </div>
-            </div>
+          <section className="invoice-address-grid">
+            <InfoBlock title="From">
+              <strong>{business.name}</strong>
+              {business.contactName ? <span>{business.contactName}</span> : null}
+              {business.address ? <span className="whitespace-pre-line">{business.address}</span> : null}
+              {business.email ? <span>{business.email}</span> : null}
+              {business.phone ? <span>{business.phone}</span> : null}
+              {business.website ? <span>{business.website}</span> : null}
+            </InfoBlock>
+
+            <InfoBlock title="Bill To">
+              <strong>{client.businessName}</strong>
+              {client.contactName ? <span>{client.contactName}</span> : null}
+              {client.abn ? <span>ABN {client.abn}</span> : null}
+              {client.address ? <span className="whitespace-pre-line">{client.address}</span> : null}
+              {client.email ? <span>{client.email}</span> : null}
+              {client.phone ? <span>{client.phone}</span> : null}
+            </InfoBlock>
           </section>
 
-          <section className="mt-6 grid gap-3 rounded-lg border border-line bg-paper/60 p-4 sm:grid-cols-4">
+          <section className="invoice-meta-grid">
             <Detail label="Issue date" value={formatDateAU(invoice.invoiceDate)} />
             <Detail label="Due date" value={formatDateAU(dueDate)} />
             <Detail label="Project" value={invoice.project.title} />
-            <Detail label="Work range" value={`${formatDateAU(invoice.dateRangeStart)} - ${formatDateAU(invoice.dateRangeEnd)}`} />
+            <Detail label="Work period" value={`${formatDateAU(invoice.dateRangeStart)} - ${formatDateAU(invoice.dateRangeEnd)}`} />
+            <Detail label="Terms" value={`${invoice.paymentTermsDays} days`} />
+            <Detail label="Reference" value={invoice.invoiceNumber} />
           </section>
 
-          <section className="mt-7">
-            <div className="mb-3 flex items-center justify-between gap-3">
-              <h2 className="text-xl font-black tracking-normal">Line items</h2>
+          <section className="invoice-lines-section">
+            <div className="mb-3 flex items-end justify-between gap-3">
+              <div>
+                <p className="text-xs font-black uppercase tracking-[0.18em] text-moss">Line items</p>
+                <h2 className="mt-1 text-xl font-black tracking-normal text-ink">{invoice.mode === "SIMPLE" ? "Simple invoice summary" : "Detailed work summary"}</h2>
+              </div>
               <span className="status-pill border-line bg-paper text-moss">{invoice.mode.toLowerCase()}</span>
             </div>
 
-            <div className="overflow-hidden rounded-lg border border-line">
-              <table className="w-full border-collapse text-left text-sm">
-                <thead className="bg-paper text-xs uppercase text-moss">
+            <div className="invoice-table-wrap">
+              <table className="invoice-table">
+                <thead>
                   <tr>
-                    <th className="p-3">Description</th>
-                    <th className="hidden p-3 sm:table-cell">Qty/Hours</th>
-                    <th className="hidden p-3 sm:table-cell">Rate</th>
-                    <th className="p-3 text-right">Total</th>
+                    <th>Description</th>
+                    <th>Details</th>
+                    <th className="text-right">Amount</th>
                   </tr>
                 </thead>
                 <tbody>
                   {invoice.mode === "SIMPLE" && labourSubtotalCents > 0 ? (
-                    <tr className="border-t border-line">
-                      <td className="p-3">
-                        <p className="font-bold">Labour for {invoice.project.title}</p>
-                        <p className="text-xs font-bold text-moss">
-                          {formatDateAU(invoice.dateRangeStart)} - {formatDateAU(invoice.dateRangeEnd)}
-                        </p>
-                      </td>
-                      <td className="hidden p-3 font-bold text-moss sm:table-cell">{formatHours(totalDurationMinutes)}h</td>
-                      <td className="hidden p-3 font-bold text-moss sm:table-cell">Included</td>
-                      <td className="p-3 text-right font-black">{formatMoney(labourSubtotalCents)}</td>
-                    </tr>
+                    <InvoiceRow
+                      description={`Labour for ${invoice.project.title}`}
+                      detail={`${formatDateAU(invoice.dateRangeStart)} - ${formatDateAU(invoice.dateRangeEnd)}`}
+                      mutedDetail="Daily hours and hourly rates hidden for simple invoice mode."
+                      amount={formatMoney(labourSubtotalCents)}
+                    />
                   ) : null}
 
                   {invoice.mode === "DETAILED"
@@ -196,22 +207,26 @@ export default async function InvoiceDetailPage({ params }: { params: Promise<{ 
                         <InvoiceRow
                           key={line.id}
                           description={line.description}
-                          detail={`${line.date ? formatDateAU(line.date) : "No date"}${line.notes ? ` - ${line.notes}` : ""}`}
-                          quantity={`${formatHours(line.hoursMinutes ?? 0)}h`}
-                          rate={`${formatMoney(line.unitAmountCents)}/h`}
-                          total={formatMoney(line.totalAmountCents)}
+                          detail={`${line.date ? formatDateAU(line.date) : "No date"} - ${formatHours(line.hoursMinutes ?? 0)}h at ${formatMoney(line.unitAmountCents)}/h`}
+                          mutedDetail={line.notes}
+                          amount={formatMoney(line.totalAmountCents)}
                         />
                       ))
                     : null}
+
+                  {expenseLines.length ? (
+                    <tr className="invoice-section-row">
+                      <td colSpan={3}>Expenses and materials</td>
+                    </tr>
+                  ) : null}
 
                   {expenseLines.map((line) => (
                     <InvoiceRow
                       key={line.id}
                       description={line.description}
-                      detail={`${line.date ? formatDateAU(line.date) : "No date"}${line.notes ? ` - ${line.notes}` : ""}`}
-                      quantity={`Qty ${Number(line.quantity ?? 0)}`}
-                      rate={formatMoney(line.unitAmountCents)}
-                      total={formatMoney(line.totalAmountCents)}
+                      detail={`${line.date ? formatDateAU(line.date) : "No date"} - Qty ${Number(line.quantity ?? 0)} at ${formatMoney(line.unitAmountCents)}`}
+                      mutedDetail={line.notes}
+                      amount={formatMoney(line.totalAmountCents)}
                     />
                   ))}
                 </tbody>
@@ -219,38 +234,58 @@ export default async function InvoiceDetailPage({ params }: { params: Promise<{ 
             </div>
           </section>
 
-          <section className="mt-6 grid gap-5 sm:grid-cols-[1fr_18rem]">
-            <div className="grid gap-4">
-              {invoice.summary ? (
-                <div>
-                  <p className="text-xs font-bold uppercase text-moss">Notes</p>
-                  <p className="mt-2 text-sm font-bold text-moss">{invoice.summary}</p>
-                </div>
-              ) : null}
-              <div>
-                <p className="text-xs font-bold uppercase text-moss">Payment details</p>
-                <div className="mt-2 grid gap-1 text-sm font-bold">
-                  {business.bankAccountName ? <p>Account name: {business.bankAccountName}</p> : null}
-                  {business.bsb ? <p>BSB: {business.bsb}</p> : null}
-                  {business.accountNumber ? <p>Account: {business.accountNumber}</p> : null}
-                  <p>Payment terms: {invoice.paymentTermsDays} days</p>
-                </div>
-              </div>
+          <section className="invoice-totals-section">
+            <div className="invoice-note-box">
+              <p className="text-xs font-black uppercase tracking-[0.18em] text-moss">Notes</p>
+              <p className="mt-2 text-sm font-bold text-ink">
+                {business.defaultInvoiceNotes || "Thank you for your business. Please use the invoice number as the payment reference."}
+              </p>
+              {business.signatureFooter ? <p className="mt-3 text-sm font-bold text-moss">{business.signatureFooter}</p> : null}
             </div>
 
-            <dl className="grid h-fit gap-3 rounded-lg border border-line bg-paper/70 p-4">
-              <TotalLine label="Labour" value={formatMoney(labourSubtotalCents)} />
-              <TotalLine label="Expenses" value={formatMoney(expensesSubtotalCents)} />
+            <dl className="invoice-total-card">
+              <TotalLine label="Labour subtotal" value={formatMoney(labourSubtotalCents)} />
+              <TotalLine label="Expenses subtotal" value={formatMoney(expensesSubtotalCents)} />
               <TotalLine label="Subtotal" value={formatMoney(subtotalCents)} />
               {business.gstRegistered ? <TotalLine label={`GST (${business.gstRate}%)`} value={formatMoney(invoice.gstCents)} /> : null}
-              <div className="border-t border-line pt-3">
-                <TotalLine label="Total payable" value={formatMoney(invoice.grandTotalCents)} strong />
+              <div className="mt-2 border-t border-line pt-3">
+                <TotalLine label="Total amount due" value={formatMoney(invoice.grandTotalCents)} strong />
               </div>
             </dl>
           </section>
+
+          <footer className="invoice-footer">
+            <div>
+              <p className="text-xs font-black uppercase tracking-[0.18em] text-moss">Payment details</p>
+              <div className="mt-3 grid gap-1 text-sm font-bold text-ink">
+                {business.bankAccountName ? <p>Account name: {business.bankAccountName}</p> : null}
+                {business.bsb ? <p>BSB: {business.bsb}</p> : null}
+                {business.accountNumber ? <p>Account: {business.accountNumber}</p> : null}
+                <p>Payment reference: {invoice.invoiceNumber}</p>
+              </div>
+            </div>
+            <div className="rounded-md bg-white/75 p-4 text-sm font-bold text-ink">
+              <p>Payment is due by {formatDateAU(dueDate)}.</p>
+              <p className="mt-1 text-moss">Thank you for choosing {business.name}.</p>
+            </div>
+          </footer>
         </article>
 
         <aside className="no-print grid h-fit gap-3">
+          {finaliseWarnings.length ? (
+            <section className="rounded-lg border border-gum/30 bg-gum/10 p-4 text-sm font-bold text-gum">
+              <div className="mb-2 flex items-center gap-2">
+                <AlertTriangle size={18} aria-hidden="true" />
+                Review before sending
+              </div>
+              <ul className="grid gap-1">
+                {finaliseWarnings.map((warning) => (
+                  <li key={warning}>{warning}</li>
+                ))}
+              </ul>
+            </section>
+          ) : null}
+
           <section className="card">
             <p className="section-title">Actions</p>
             <div className="mt-4">
@@ -261,17 +296,45 @@ export default async function InvoiceDetailPage({ params }: { params: Promise<{ 
           <section className="grid gap-2">
             <form action={markInvoiceSentAction}>
               <input type="hidden" name="invoiceId" value={invoice.id} />
-              <SubmitButton className="tap-primary w-full" pendingLabel="Marking sent..." disabled={invoice.status !== "DRAFT"}>
-                <Send size={20} aria-hidden="true" />
-                Mark Sent
-              </SubmitButton>
+              {finaliseWarnings.length ? <input type="hidden" name="confirmIncomplete" value="on" /> : null}
+              {finaliseWarnings.length ? (
+                <ConfirmSubmitButton
+                  className="tap-primary w-full"
+                  message={confirmationMessage}
+                  pendingLabel="Marking sent..."
+                  disabled={invoice.status !== "DRAFT"}
+                  showDefaultIcon={false}
+                >
+                  <Send size={20} aria-hidden="true" />
+                  Mark Sent
+                </ConfirmSubmitButton>
+              ) : (
+                <SubmitButton className="tap-primary w-full" pendingLabel="Marking sent..." disabled={invoice.status !== "DRAFT"}>
+                  <Send size={20} aria-hidden="true" />
+                  Mark Sent
+                </SubmitButton>
+              )}
             </form>
             <form action={markInvoicePaidAction}>
               <input type="hidden" name="invoiceId" value={invoice.id} />
-              <SubmitButton className="tap-primary w-full bg-mint hover:bg-ink" pendingLabel="Marking paid..." disabled={invoice.status === "PAID" || invoice.status === "VOID"}>
-                <Banknote size={20} aria-hidden="true" />
-                Mark Paid
-              </SubmitButton>
+              {finaliseWarnings.length ? <input type="hidden" name="confirmIncomplete" value="on" /> : null}
+              {finaliseWarnings.length ? (
+                <ConfirmSubmitButton
+                  className="tap-primary w-full bg-mint hover:bg-ink"
+                  message={confirmationMessage}
+                  pendingLabel="Marking paid..."
+                  disabled={invoice.status === "PAID" || invoice.status === "VOID"}
+                  showDefaultIcon={false}
+                >
+                  <Banknote size={20} aria-hidden="true" />
+                  Mark Paid
+                </ConfirmSubmitButton>
+              ) : (
+                <SubmitButton className="tap-primary w-full bg-mint hover:bg-ink" pendingLabel="Marking paid..." disabled={invoice.status === "PAID" || invoice.status === "VOID"}>
+                  <Banknote size={20} aria-hidden="true" />
+                  Mark Paid
+                </SubmitButton>
+              )}
             </form>
             {invoice.status === "VOID" ? (
               <form action={unvoidInvoiceAction}>
@@ -297,6 +360,7 @@ export default async function InvoiceDetailPage({ params }: { params: Promise<{ 
                 className="tap-danger w-full"
                 message={`Delete ${invoice.invoiceNumber} permanently? This cannot be undone and linked time/items will return to unbilled.`}
                 pendingLabel="Deleting..."
+                showDefaultIcon={false}
               >
                 <Trash2 size={20} aria-hidden="true" />
                 Delete Invoice
@@ -309,11 +373,45 @@ export default async function InvoiceDetailPage({ params }: { params: Promise<{ 
   );
 }
 
+function snapshot(frozen: boolean, frozenValue: string | null | undefined, liveValue: string | null | undefined) {
+  return frozen ? frozenValue ?? liveValue ?? null : liveValue ?? null;
+}
+
+function invoiceWarnings(
+  profile: {
+    tradingName: string;
+    abn: string | null;
+    gstRegistered: boolean;
+    bankAccountName: string | null;
+    bsb: string | null;
+    accountNumber: string | null;
+  } | null,
+  client: { email: string | null }
+) {
+  if (!profile) return ["Business profile is missing."];
+
+  return [
+    !profile.abn ? "Business ABN is missing." : "",
+    profile.gstRegistered && !profile.abn ? "GST is enabled but ABN is missing." : "",
+    !profile.bankAccountName || !profile.bsb || !profile.accountNumber ? "Bank payment details are incomplete." : "",
+    !client.email ? "Client email is missing." : ""
+  ].filter(Boolean);
+}
+
+function InfoBlock({ title, children }: { title: string; children: ReactNode }) {
+  return (
+    <div className="invoice-info-block">
+      <p className="text-xs font-black uppercase tracking-[0.18em] text-moss">{title}</p>
+      <div className="mt-3 grid gap-1 text-sm font-bold text-ink">{children}</div>
+    </div>
+  );
+}
+
 function Detail({ label, value }: { label: string; value: string }) {
   return (
     <div>
-      <p className="text-xs font-bold uppercase text-moss">{label}</p>
-      <p className="mt-1 font-black">{value}</p>
+      <p className="text-[0.68rem] font-black uppercase tracking-[0.14em] text-moss">{label}</p>
+      <p className="mt-1 text-sm font-black text-ink">{value}</p>
     </div>
   );
 }
@@ -321,96 +419,33 @@ function Detail({ label, value }: { label: string; value: string }) {
 function InvoiceRow({
   description,
   detail,
-  quantity,
-  rate,
-  total
+  mutedDetail,
+  amount
 }: {
   description: string;
   detail: string;
-  quantity: string;
-  rate: string;
-  total: string;
+  mutedDetail?: string | null;
+  amount: string;
 }) {
   return (
-    <tr className="border-t border-line">
-      <td className="p-3">
-        <p className="font-bold">{description}</p>
-        <p className="text-xs font-bold text-moss">{detail}</p>
+    <tr>
+      <td>
+        <p className="font-black text-ink">{description}</p>
+        {mutedDetail ? <p className="mt-1 text-xs font-bold text-moss">{mutedDetail}</p> : null}
       </td>
-      <td className="hidden p-3 font-bold text-moss sm:table-cell">{quantity}</td>
-      <td className="hidden p-3 font-bold text-moss sm:table-cell">{rate}</td>
-      <td className="p-3 text-right font-black">{total}</td>
+      <td className="font-bold text-moss">{detail}</td>
+      <td className="text-right font-black text-ink">{amount}</td>
     </tr>
   );
 }
 
 function TotalLine({ label, value, strong = false }: { label: string; value: string; strong?: boolean }) {
   return (
-    <div className="flex items-center justify-between gap-3">
-      <dt className="font-bold text-moss">{label}</dt>
-      <dd className={strong ? "text-xl font-black" : "font-black"}>{value}</dd>
+    <div className="flex items-center justify-between gap-4">
+      <dt className={strong ? "font-black text-ink" : "font-bold text-moss"}>{label}</dt>
+      <dd className={strong ? "text-2xl font-black text-ink" : "font-black text-ink"}>{value}</dd>
     </div>
   );
-}
-
-function buildInvoiceText({
-  invoice,
-  invoiceTitle,
-  business,
-  client,
-  dueDate,
-  subtotalCents,
-  totalDurationMinutes
-}: {
-  invoice: InvoiceTextSource;
-  invoiceTitle: string;
-  business: Record<string, string | number | boolean | null>;
-  client: Record<string, string | null>;
-  dueDate: Date;
-  subtotalCents: number;
-  totalDurationMinutes: number;
-}) {
-  const lines = [
-    `${invoiceTitle} ${invoice.invoiceNumber}`,
-    `From: ${business.name}`,
-    business.abn ? `ABN: ${business.abn}` : "",
-    `Client: ${client.businessName}`,
-    `Project: ${invoice.project.title}`,
-    `Date range: ${formatDateAU(invoice.dateRangeStart)} - ${formatDateAU(invoice.dateRangeEnd)}`,
-    `Issue date: ${formatDateAU(invoice.invoiceDate)}`,
-    `Due date: ${formatDateAU(dueDate)}`,
-    "",
-    "Line items"
-  ];
-
-  if (invoice.mode === "SIMPLE") {
-    if (invoice.labourTotalCents > 0) {
-      lines.push(`- Labour for ${invoice.project.title}: ${formatHours(totalDurationMinutes)} hrs - ${formatMoney(invoice.labourTotalCents)}`);
-    }
-  } else {
-    for (const line of invoice.lineItems.filter((item) => item.type === "LABOUR")) {
-      lines.push(`- ${line.description}: ${formatHours(line.hoursMinutes ?? 0)} hrs at ${formatMoney(line.unitAmountCents)}/h - ${formatMoney(line.totalAmountCents)}`);
-      if (line.notes) lines.push(`  ${line.notes}`);
-    }
-  }
-
-  for (const line of invoice.lineItems.filter((item) => item.type === "EXPENSE")) {
-    lines.push(`- ${line.description}: Qty ${Number(line.quantity ?? 0)} at ${formatMoney(line.unitAmountCents)} - ${formatMoney(line.totalAmountCents)}`);
-    if (line.notes) lines.push(`  ${line.notes}`);
-  }
-
-  lines.push("", `Subtotal: ${formatMoney(subtotalCents)}`);
-  if (invoice.gstCents > 0) lines.push(`GST: ${formatMoney(invoice.gstCents)}`);
-  lines.push(`Total due: ${formatMoney(invoice.grandTotalCents)}`, "");
-
-  if (business.bankAccountName || business.bsb || business.accountNumber) {
-    lines.push("Payment details");
-    if (business.bankAccountName) lines.push(`Account name: ${business.bankAccountName}`);
-    if (business.bsb) lines.push(`BSB: ${business.bsb}`);
-    if (business.accountNumber) lines.push(`Account: ${business.accountNumber}`);
-  }
-
-  return lines.filter(Boolean).join("\n");
 }
 
 type InvoiceTextSource = {
@@ -426,6 +461,7 @@ type InvoiceTextSource = {
   lineItems: {
     type: "LABOUR" | "EXPENSE";
     description: string;
+    date: Date | null;
     hoursMinutes: number | null;
     unitAmountCents: number;
     totalAmountCents: number;
@@ -434,40 +470,131 @@ type InvoiceTextSource = {
   }[];
 };
 
-function buildEmailText({
-  invoiceNumber,
-  businessName,
-  clientName,
-  total,
-  dueDate,
-  bankAccountName,
-  bsb,
-  accountNumber
-}: {
-  invoiceNumber: string;
-  businessName: string;
-  clientName: string;
-  total: string;
-  dueDate: Date;
+type ExportBusiness = {
+  name: string;
+  contactName: string | null;
+  abn: string | null;
   bankAccountName: string | null;
   bsb: string | null;
   accountNumber: string | null;
+  defaultInvoiceEmailMessage: string | null;
+};
+
+type ExportClient = {
+  businessName: string;
+  contactName: string | null;
+};
+
+function buildInvoiceText({
+  invoice,
+  invoiceTitle,
+  business,
+  client,
+  dueDate,
+  subtotalCents,
+  totalDurationMinutes
+}: {
+  invoice: InvoiceTextSource;
+  invoiceTitle: string;
+  business: ExportBusiness;
+  client: ExportClient;
+  dueDate: Date;
+  subtotalCents: number;
+  totalDurationMinutes: number;
 }) {
+  const lines = [
+    `${invoiceTitle} ${invoice.invoiceNumber}`,
+    `Business: ${business.name}`,
+    business.abn ? `ABN: ${business.abn}` : "",
+    `Client: ${client.businessName}`,
+    `Project: ${invoice.project.title}`,
+    `Date range: ${formatDateAU(invoice.dateRangeStart)} - ${formatDateAU(invoice.dateRangeEnd)}`,
+    `Issue date: ${formatDateAU(invoice.invoiceDate)}`,
+    `Due date: ${formatDateAU(dueDate)}`,
+    "",
+    "Line items"
+  ];
+
+  if (invoice.mode === "SIMPLE") {
+    if (invoice.labourTotalCents > 0) {
+      lines.push(`- Labour for ${invoice.project.title}: ${formatMoney(invoice.labourTotalCents)}`);
+      lines.push(`  ${formatDateAU(invoice.dateRangeStart)} - ${formatDateAU(invoice.dateRangeEnd)}`);
+    }
+  } else {
+    for (const line of invoice.lineItems.filter((item) => item.type === "LABOUR")) {
+      lines.push(
+        `- ${line.date ? formatDateAU(line.date) : line.description}: ${formatHours(line.hoursMinutes ?? 0)} hrs at ${formatMoney(line.unitAmountCents)}/h - ${formatMoney(line.totalAmountCents)}`
+      );
+      if (line.notes) lines.push(`  ${line.notes}`);
+    }
+  }
+
+  for (const line of invoice.lineItems.filter((item) => item.type === "EXPENSE")) {
+    lines.push(`- ${line.description}: Qty ${Number(line.quantity ?? 0)} at ${formatMoney(line.unitAmountCents)} - ${formatMoney(line.totalAmountCents)}`);
+    if (line.notes) lines.push(`  ${line.notes}`);
+  }
+
+  lines.push("", `Labour: ${formatMoney(invoice.labourTotalCents)}`);
+  const expenseTotal = subtotalCents - invoice.labourTotalCents;
+  if (expenseTotal > 0) lines.push(`Expenses/materials: ${formatMoney(expenseTotal)}`);
+  lines.push(`Subtotal: ${formatMoney(subtotalCents)}`);
+  if (invoice.gstCents > 0) lines.push(`GST: ${formatMoney(invoice.gstCents)}`);
+  lines.push(`Total due: ${formatMoney(invoice.grandTotalCents)}`, `Payment reference: ${invoice.invoiceNumber}`, "");
+
+  if (business.bankAccountName || business.bsb || business.accountNumber) {
+    lines.push("Payment details");
+    if (business.bankAccountName) lines.push(`Account name: ${business.bankAccountName}`);
+    if (business.bsb) lines.push(`BSB: ${business.bsb}`);
+    if (business.accountNumber) lines.push(`Account: ${business.accountNumber}`);
+  }
+
+  if (invoice.mode === "SIMPLE" && totalDurationMinutes > 0) {
+    lines.push("", "Simple invoice mode hides daily/hourly labour detail.");
+  }
+
+  return lines.filter(Boolean).join("\n");
+}
+
+function buildEmailText({
+  invoiceNumber,
+  business,
+  client,
+  projectTitle,
+  total,
+  dueDate
+}: {
+  invoiceNumber: string;
+  business: ExportBusiness;
+  client: ExportClient;
+  projectTitle: string;
+  total: string;
+  dueDate: Date;
+}) {
+  const greetingName = client.contactName || client.businessName;
+  const customMessage = business.defaultInvoiceEmailMessage?.trim();
+
   return [
-    `Subject: Invoice ${invoiceNumber} - ${businessName}`,
+    `Subject: Invoice ${invoiceNumber} - ${business.name}`,
     "",
-    `Hi ${clientName},`,
+    `Hi ${greetingName},`,
     "",
-    `Please find invoice ${invoiceNumber} for ${total}, due ${formatDateAU(dueDate)}.`,
-    "The invoice is attached or included below for your records.",
+    customMessage || `Please find invoice ${invoiceNumber} for work completed on ${projectTitle}.`,
+    "",
+    `Invoice number: ${invoiceNumber}`,
+    `Project: ${projectTitle}`,
+    `Total amount due: ${total}`,
+    `Due date: ${formatDateAU(dueDate)}`,
     "",
     "Payment details:",
-    bankAccountName ? `Account name: ${bankAccountName}` : "",
-    bsb ? `BSB: ${bsb}` : "",
-    accountNumber ? `Account: ${accountNumber}` : "",
+    business.bankAccountName ? `Account name: ${business.bankAccountName}` : "",
+    business.bsb ? `BSB: ${business.bsb}` : "",
+    business.accountNumber ? `Account: ${business.accountNumber}` : "",
+    `Payment reference: ${invoiceNumber}`,
+    "",
+    "The invoice is attached or included below for your records.",
     "",
     "Thanks,",
-    businessName
+    business.contactName || business.name
   ]
     .filter(Boolean)
     .join("\n");

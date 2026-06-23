@@ -208,8 +208,11 @@ Use `/diagnostics?token=<BACKUP_EXPORT_TOKEN>` while logged in to open a private
 - Marking a draft invoice sent or paid finalises it, marks linked entries/items billed, calculates GST from the current business profile, and stores business/client snapshots on the invoice.
 - Sent and paid invoices do not silently mutate if the business profile or client changes later.
 - Invoice preview at `/invoices/<id>` is printable and supports browser Print / Save as PDF.
+- Invoice preview uses an A4-style document layout for screen and print. App navigation, action buttons, and app backgrounds are hidden in print.
 - Invoice preview supports Copy Invoice Text and Copy Email Text. Real email sending is intentionally not implemented yet.
-- Invoice list supports filters for all, draft, sent, paid, and void invoices.
+- Invoice list supports search plus filters for all, draft, sent, paid, and void invoices.
+- Sent invoices past their due date show an overdue indicator.
+- Future finalised invoices snapshot business contact, website, default notes, email copy text, and footer/signature wording so older sent/paid invoices do not drift when the business profile changes.
 
 ## Audit Log And Privacy
 
@@ -292,6 +295,7 @@ This applies:
 
 ```text
 20260624000000_invoice_profile_audit_hardening
+20260625000000_invoice_document_snapshot_polish
 ```
 
 ## Data Model Notes

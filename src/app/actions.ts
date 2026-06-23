@@ -633,6 +633,25 @@ function invoiceModeFromForm(formData: FormData): InvoiceMode {
   return text(formData, "invoiceMode") === "SIMPLE" ? "SIMPLE" : "DETAILED";
 }
 
+function criticalInvoiceProfileIssues(
+  profile: {
+    tradingName: string;
+    abn: string | null;
+    gstRegistered: boolean;
+    bankAccountName: string | null;
+    bsb: string | null;
+    accountNumber: string | null;
+  } | null
+) {
+  if (!profile) return ["Business profile is missing."];
+
+  return [
+    !profile.tradingName ? "Business trading name is missing." : "",
+    profile.gstRegistered && !profile.abn ? "GST is enabled but ABN is missing." : "",
+    !profile.bankAccountName || !profile.bsb || !profile.accountNumber ? "Bank payment details are incomplete." : ""
+  ].filter(Boolean);
+}
+
 export async function createInvoiceDraftAction(formData: FormData) {
   const ownerId = await requireUserId();
   const projectId = text(formData, "projectId");
@@ -646,7 +665,7 @@ export async function createInvoiceDraftAction(formData: FormData) {
 
   const [project, profile] = await Promise.all([
     prisma.project.findFirst({
-    where: { id: projectId, ownerId },
+      where: { id: projectId, ownerId },
       select: { id: true, clientId: true, client: true }
     }),
     prisma.businessProfile.findUnique({ where: { ownerId } })
@@ -732,7 +751,7 @@ export async function createInvoiceDraftAction(formData: FormData) {
   redirect(`/invoices/${invoice.id}`);
 }
 
-async function finaliseInvoice(ownerId: string, invoiceId: string, status: "SENT" | "PAID") {
+async function finaliseInvoice(ownerId: string, invoiceId: string, status: "SENT" | "PAID", confirmedIncomplete: boolean) {
   const invoice = await prisma.invoice.findUnique({
     where: { id: invoiceId },
     include: {
@@ -791,6 +810,11 @@ async function finaliseInvoice(ownerId: string, invoiceId: string, status: "SENT
   }
 
   const profile = await prisma.businessProfile.findUnique({ where: { ownerId } });
+  const profileIssues = criticalInvoiceProfileIssues(profile);
+  if (profileIssues.length && !confirmedIncomplete) {
+    throw new Error(`Invoice is missing important business details: ${profileIssues.join(" ")}`);
+  }
+
   const client = invoice.project.client;
   const labourSubtotalCents = invoice.lineItems
     .filter((line) => line.type === "LABOUR")
@@ -832,15 +856,20 @@ async function finaliseInvoice(ownerId: string, invoiceId: string, status: "SENT
         businessNameSnapshot: profile?.tradingName ?? null,
         businessLegalNameSnapshot: profile?.legalName ?? null,
         businessAbnSnapshot: profile?.abn ?? null,
+        businessContactNameSnapshot: profile?.contactName ?? null,
         businessEmailSnapshot: profile?.email ?? null,
         businessPhoneSnapshot: profile?.phone ?? null,
         businessAddressSnapshot: profile?.address ?? null,
+        businessWebsiteSnapshot: profile?.website ?? null,
         businessBankAccountNameSnapshot: profile?.bankAccountName ?? null,
         businessBsbSnapshot: profile?.bsb ?? null,
         businessAccountNumberSnapshot: profile?.accountNumber ?? null,
         businessGstRegisteredSnapshot: profile?.gstRegistered ?? false,
         businessGstRateSnapshot: profile?.gstRate ?? 0,
         businessLogoPathSnapshot: profile?.logoPath ?? null,
+        businessDefaultInvoiceNotesSnapshot: profile?.defaultInvoiceNotes ?? null,
+        businessDefaultInvoiceEmailMessageSnapshot: profile?.defaultInvoiceEmailMessage ?? null,
+        businessSignatureFooterSnapshot: profile?.signatureFooter ?? null,
         clientBusinessNameSnapshot: client.businessName,
         clientContactNameSnapshot: client.contactName,
         clientEmailSnapshot: client.email,
@@ -861,7 +890,7 @@ async function finaliseInvoice(ownerId: string, invoiceId: string, status: "SENT
 export async function markInvoiceSentAction(formData: FormData) {
   const ownerId = await requireUserId();
   const invoiceId = text(formData, "invoiceId");
-  await finaliseInvoice(ownerId, invoiceId, "SENT");
+  await finaliseInvoice(ownerId, invoiceId, "SENT", text(formData, "confirmIncomplete") === "on");
   revalidatePath("/invoices");
   revalidateAppData();
   redirect(`/invoices/${invoiceId}`);
@@ -870,7 +899,7 @@ export async function markInvoiceSentAction(formData: FormData) {
 export async function markInvoicePaidAction(formData: FormData) {
   const ownerId = await requireUserId();
   const invoiceId = text(formData, "invoiceId");
-  await finaliseInvoice(ownerId, invoiceId, "PAID");
+  await finaliseInvoice(ownerId, invoiceId, "PAID", text(formData, "confirmIncomplete") === "on");
   revalidatePath("/");
   revalidatePath("/invoices");
   revalidateAppData();

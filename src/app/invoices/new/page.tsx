@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { AlertTriangle, ArrowLeft, Eye, FilePlus } from "lucide-react";
+import { AlertTriangle, ArrowLeft, CalendarDays, Eye, FilePlus, FolderKanban, ListChecks, Rows3, WalletCards } from "lucide-react";
 import { createInvoiceDraftAction } from "@/app/actions";
 import { requireUserId } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
@@ -12,6 +12,13 @@ import { SubmitButton } from "@/components/SubmitButton";
 export const dynamic = "force-dynamic";
 
 type SearchParams = Record<string, string | string[] | undefined>;
+const invoiceSteps = [
+  { step: "1", label: "Project", icon: FolderKanban },
+  { step: "2", label: "Date range", icon: CalendarDays },
+  { step: "3", label: "Mode", icon: Rows3 },
+  { step: "4", label: "Review", icon: ListChecks },
+  { step: "5", label: "Draft", icon: FilePlus }
+];
 
 function paramValue(params: SearchParams | undefined, key: string) {
   const value = params?.[key];
@@ -30,7 +37,7 @@ export default async function NewInvoicePage({
     select: {
       id: true,
       title: true,
-      client: { select: { businessName: true } },
+      client: { select: { businessName: true, email: true } },
       timeEntries: { where: { billingStatus: "UNBILLED" }, select: { durationMinutes: true } },
       expenseItems: { where: { billingStatus: "UNBILLED" }, select: { id: true } }
     },
@@ -100,6 +107,7 @@ export default async function NewInvoicePage({
     !profile ? "Create your business profile before sending this invoice." : "",
     profile && !profile.abn ? "Your business profile has no ABN." : "",
     profile && (!profile.bankAccountName || !profile.bsb || !profile.accountNumber) ? "Bank payment details are incomplete." : "",
+    selectedProject && !selectedProject.client.email ? "Client email is missing." : "",
     profile?.gstRegistered && !profile.abn ? "GST is enabled but the business profile has no ABN." : "",
     entries.length === 0 && expenses.length === 0 ? "No billable entries or expenses were found for this range." : ""
   ].filter(Boolean);
@@ -113,7 +121,22 @@ export default async function NewInvoicePage({
       <header>
         <p className="section-title">New invoice</p>
         <h1 className="mt-2 text-3xl font-black tracking-normal">Create invoice draft</h1>
+        <p className="mt-2 max-w-2xl text-sm font-bold text-moss">
+          Build a draft from unbilled work, review what will be included, then finalise it from the invoice preview.
+        </p>
       </header>
+
+      <section className="mt-6 grid gap-2 sm:grid-cols-5">
+        {invoiceSteps.map(({ step, label, icon: Icon }) => (
+          <div key={label} className="rounded-lg border border-line bg-white p-3">
+            <div className="flex items-center gap-2">
+              <span className="grid size-7 place-items-center rounded-full bg-mint text-xs font-black text-white">{step}</span>
+              <Icon size={16} aria-hidden="true" className="text-moss" />
+            </div>
+            <p className="mt-2 text-sm font-black">{label}</p>
+          </div>
+        ))}
+      </section>
 
       <form className="mt-6 grid gap-4 rounded-lg border border-line bg-white p-4" method="get">
         <label>
@@ -140,18 +163,18 @@ export default async function NewInvoicePage({
         <fieldset className="grid gap-2">
           <legend className="text-sm font-bold text-moss">Invoice mode</legend>
           <div className="grid gap-3 sm:grid-cols-2">
-            <label className="flex min-h-12 cursor-pointer grid-cols-none flex-row items-center gap-3 rounded-lg border border-line bg-white px-3">
+            <label className={`flex min-h-12 cursor-pointer grid-cols-none flex-row items-center gap-3 rounded-lg border px-3 ${invoiceMode === "SIMPLE" ? "border-mint bg-mint/10" : "border-line bg-white"}`}>
               <input className="size-5 min-h-0 w-auto" type="radio" name="invoiceMode" value="SIMPLE" defaultChecked={invoiceMode === "SIMPLE"} />
               <span>
                 <span className="block font-black">Simple</span>
-                <span className="text-xs font-bold text-moss">One labour line plus expenses.</span>
+                <span className="text-xs font-bold text-moss">One labour line. Daily hours and hourly rates stay hidden. Expenses still show.</span>
               </span>
             </label>
-            <label className="flex min-h-12 cursor-pointer grid-cols-none flex-row items-center gap-3 rounded-lg border border-line bg-white px-3">
+            <label className={`flex min-h-12 cursor-pointer grid-cols-none flex-row items-center gap-3 rounded-lg border px-3 ${invoiceMode === "DETAILED" ? "border-mint bg-mint/10" : "border-line bg-white"}`}>
               <input className="size-5 min-h-0 w-auto" type="radio" name="invoiceMode" value="DETAILED" defaultChecked={invoiceMode === "DETAILED"} />
               <span>
                 <span className="block font-black">Detailed</span>
-                <span className="text-xs font-bold text-moss">Shows each day, hours, rate, and notes.</span>
+                <span className="text-xs font-bold text-moss">Shows each day, hours, rate, amount, and notes. Expenses still show.</span>
               </span>
             </label>
           </div>
@@ -232,7 +255,13 @@ export default async function NewInvoicePage({
             </div>
 
             <aside className="card h-fit">
-              <p className="section-title">Totals</p>
+              <div className="flex items-center gap-2">
+                <WalletCards size={18} aria-hidden="true" className="text-mint" />
+                <p className="section-title">Estimated totals</p>
+              </div>
+              <p className="mt-2 text-sm font-bold text-moss">
+                Source entries stay unbilled until this draft is marked sent or paid.
+              </p>
               <dl className="mt-4 grid gap-3">
                 <div className="flex items-center justify-between gap-3">
                   <dt className="font-bold text-moss">Total hours</dt>

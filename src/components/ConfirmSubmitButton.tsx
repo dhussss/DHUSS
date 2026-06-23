@@ -9,13 +9,15 @@ export function ConfirmSubmitButton({
   className,
   disabled,
   pendingLabel = "Working...",
-  children
+  children,
+  showDefaultIcon = true
 }: {
   message: string;
   className: string;
   disabled?: boolean;
   pendingLabel?: string;
   children: ReactNode;
+  showDefaultIcon?: boolean;
 }) {
   const { pending } = useFormStatus();
 
@@ -31,7 +33,7 @@ export function ConfirmSubmitButton({
         }
       }}
     >
-      <Trash2 size={20} aria-hidden="true" />
+      {showDefaultIcon ? <Trash2 size={20} aria-hidden="true" /> : null}
       {pending ? pendingLabel : children}
     </button>
   );

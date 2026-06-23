@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import type { ReactNode } from "react";
 import { Clipboard, Mail, Printer } from "lucide-react";
 
 export function InvoiceExportActions({
@@ -37,5 +38,39 @@ export function InvoiceExportActions({
         Copy Email Text
       </button>
     </div>
+  );
+}
+
+export function CopyTextButton({
+  value,
+  label,
+  copiedLabel,
+  className = "tap-secondary w-full",
+  children
+}: {
+  value: string;
+  label: string;
+  copiedLabel?: string;
+  className?: string;
+  children: ReactNode;
+}) {
+  const [message, setMessage] = useState("");
+
+  async function copy() {
+    try {
+      await navigator.clipboard.writeText(value);
+      setMessage(copiedLabel ?? `${label} copied.`);
+    } catch {
+      setMessage("Copy failed.");
+    }
+  }
+
+  return (
+    <span className="grid gap-1">
+      <button className={className} type="button" onClick={copy}>
+        {children}
+      </button>
+      {message ? <span className="text-xs font-bold text-moss">{message}</span> : null}
+    </span>
   );
 }

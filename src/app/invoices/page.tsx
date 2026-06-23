@@ -1,13 +1,15 @@
 import Link from "next/link";
-import { Banknote, Eye, Plus } from "lucide-react";
+import { Banknote, Eye, Mail, Plus, Search } from "lucide-react";
 import { markInvoicePaidAction } from "@/app/actions";
 import { requireUserId } from "@/lib/auth";
 import { getInvoicesPageData } from "@/lib/app-data";
-import { formatDateAU } from "@/lib/dates";
+import { formatDateAU, todayInPerth } from "@/lib/dates";
 import { formatMoney } from "@/lib/money";
 import { formatHours } from "@/lib/time";
+import { prisma } from "@/lib/prisma";
 import { InvoiceStatusPill } from "@/components/StatusPill";
 import { SubmitButton } from "@/components/SubmitButton";
+import { CopyTextButton } from "@/components/InvoiceExportActions";
 
 export const dynamic = "force-dynamic";
 
@@ -27,8 +29,16 @@ export default async function InvoicesPage({
 }) {
   const params = await searchParams;
   const status = statusParam(params);
+  const q = typeof params?.q === "string" ? params.q.trim() : "";
   const ownerId = await requireUserId();
-  const invoices = await getInvoicesPageData(ownerId, status);
+  const [invoices, profile] = await Promise.all([
+    getInvoicesPageData(ownerId, status, q),
+    prisma.businessProfile.findUnique({
+      where: { ownerId },
+      select: { tradingName: true, contactName: true, bankAccountName: true, bsb: true, accountNumber: true }
+    })
+  ]);
+  const today = todayInPerth();
 
   return (
     <main className="page-shell">
@@ -47,7 +57,7 @@ export default async function InvoicesPage({
         {filters.map((filter) => (
           <Link
             key={filter}
-            href={filter === "ALL" ? "/invoices" : `/invoices?status=${filter.toLowerCase()}`}
+            href={filter === "ALL" ? `/invoices${q ? `?q=${encodeURIComponent(q)}` : ""}` : `/invoices?status=${filter.toLowerCase()}${q ? `&q=${encodeURIComponent(q)}` : ""}`}
             className={`status-pill shrink-0 ${filter === status ? "border-mint bg-mint text-white" : "border-line bg-white text-moss"}`}
           >
             {filter.toLowerCase()}
@@ -55,12 +65,43 @@ export default async function InvoicesPage({
         ))}
       </nav>
 
+      <form className="mt-4 flex flex-col gap-2 rounded-lg border border-line bg-white p-3 sm:flex-row" action="/invoices">
+        {status !== "ALL" ? <input type="hidden" name="status" value={status.toLowerCase()} /> : null}
+        <label className="flex-1">
+          Search invoices
+          <input name="q" defaultValue={q} placeholder="Invoice number, client, or project" />
+        </label>
+        <button className="tap-secondary self-end" type="submit">
+          <Search size={18} aria-hidden="true" />
+          Search
+        </button>
+      </form>
+
       <section className="mt-6 grid gap-3">
-        {invoices.map((invoice) => (
-          <article key={invoice.id} className="card transition hover:border-mint">
+        {invoices.map((invoice) => {
+          const dueDate = invoice.dueDate;
+          const overdue = invoice.status === "SENT" && dueDate && dueDate < today;
+          const emailText = buildListEmailText({
+            invoiceNumber: invoice.invoiceNumber,
+            businessName: profile?.tradingName ?? "your business",
+            senderName: profile?.contactName ?? profile?.tradingName ?? "your business",
+            clientName: invoice.client.contactName || invoice.client.businessName,
+            projectTitle: invoice.project.title,
+            total: formatMoney(invoice.grandTotalCents),
+            dueDate,
+            bankAccountName: profile?.bankAccountName ?? null,
+            bsb: profile?.bsb ?? null,
+            accountNumber: profile?.accountNumber ?? null
+          });
+
+          return (
+          <article key={invoice.id} className={`card transition hover:border-mint ${overdue ? "border-gum/50 bg-gum/5" : ""}`}>
             <div className="flex items-start justify-between gap-3">
               <div>
-                <h2 className="text-xl font-black tracking-normal">{invoice.invoiceNumber}</h2>
+                <div className="flex flex-wrap items-center gap-2">
+                  <h2 className="text-xl font-black tracking-normal">{invoice.invoiceNumber}</h2>
+                  {overdue ? <span className="status-pill border-gum bg-gum/10 text-gum">overdue</span> : null}
+                </div>
                 <p className="mt-1 text-sm font-bold text-moss">
                   {invoice.project.title} - {invoice.client.businessName}
                 </p>
@@ -81,7 +122,7 @@ export default async function InvoicesPage({
               </div>
               <div>
                 <p className="text-xs font-bold uppercase text-moss">Due date</p>
-                <p className="mt-1 text-sm font-bold">{invoice.dueDate ? formatDateAU(invoice.dueDate) : "Not set"}</p>
+                <p className={`mt-1 text-sm font-bold ${overdue ? "text-gum" : ""}`}>{dueDate ? formatDateAU(dueDate) : "Not set"}</p>
               </div>
               <div>
                 <p className="text-xs font-bold uppercase text-moss">Total</p>
@@ -100,6 +141,10 @@ export default async function InvoicesPage({
                 <Eye size={18} aria-hidden="true" />
                 View
               </Link>
+              <CopyTextButton value={emailText} label="Email text" copiedLabel="Email copied." className="tap-secondary w-full">
+                <Mail size={18} aria-hidden="true" />
+                Copy Email
+              </CopyTextButton>
               <form action={markInvoicePaidAction} className="flex-1">
                 <input type="hidden" name="invoiceId" value={invoice.id} />
                 <SubmitButton className="tap-primary w-full bg-mint hover:bg-ink" pendingLabel="Marking paid..." disabled={invoice.status === "PAID" || invoice.status === "VOID"}>
@@ -109,7 +154,8 @@ export default async function InvoicesPage({
               </form>
             </div>
           </article>
-        ))}
+          );
+        })}
         {invoices.length === 0 ? (
           <p className="rounded-lg border border-line bg-white p-4 text-sm font-bold text-moss">
             No {status === "ALL" ? "" : status.toLowerCase()} invoices yet.
@@ -118,4 +164,51 @@ export default async function InvoicesPage({
       </section>
     </main>
   );
+}
+
+function buildListEmailText({
+  invoiceNumber,
+  businessName,
+  senderName,
+  clientName,
+  projectTitle,
+  total,
+  dueDate,
+  bankAccountName,
+  bsb,
+  accountNumber
+}: {
+  invoiceNumber: string;
+  businessName: string;
+  senderName: string;
+  clientName: string;
+  projectTitle: string;
+  total: string;
+  dueDate: Date | null;
+  bankAccountName: string | null;
+  bsb: string | null;
+  accountNumber: string | null;
+}) {
+  return [
+    `Subject: Invoice ${invoiceNumber} - ${businessName}`,
+    "",
+    `Hi ${clientName},`,
+    "",
+    `Please find invoice ${invoiceNumber} for ${projectTitle}.`,
+    `Total amount due: ${total}`,
+    dueDate ? `Due date: ${formatDateAU(dueDate)}` : "",
+    "",
+    "Payment details:",
+    bankAccountName ? `Account name: ${bankAccountName}` : "",
+    bsb ? `BSB: ${bsb}` : "",
+    accountNumber ? `Account: ${accountNumber}` : "",
+    `Payment reference: ${invoiceNumber}`,
+    "",
+    "The invoice is attached or included below for your records.",
+    "",
+    "Thanks,",
+    senderName
+  ]
+    .filter(Boolean)
+    .join("\n");
 }
