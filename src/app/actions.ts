@@ -96,6 +96,10 @@ function parseEmailList(value: string, label: string, required = false) {
   return emails;
 }
 
+function validateOptionalEmail(value: string) {
+  if (value && !EMAIL_RE.test(value)) throw new Error("Enter a valid email address.");
+}
+
 async function generateUniqueInvoiceToken() {
   for (let attempt = 0; attempt < 5; attempt += 1) {
     const token = crypto.randomBytes(32).toString("base64url");
@@ -533,6 +537,61 @@ export async function createProjectAction(formData: FormData) {
   revalidatePath("/projects");
   revalidateAppData();
   redirect(`/projects/${project.id}`);
+}
+
+export async function updateClientAction(formData: FormData) {
+  const ownerId = await requireUserId();
+  const clientId = text(formData, "clientId");
+  const businessName = text(formData, "businessName");
+  const contactName = text(formData, "contactName") || null;
+  const email = text(formData, "email") || null;
+  const phone = text(formData, "phone") || null;
+  const abn = text(formData, "abn") || null;
+  const address = text(formData, "address") || null;
+  const notes = text(formData, "notes") || null;
+
+  if (!businessName) throw new Error("Business name is required.");
+  validateOptionalEmail(email ?? "");
+
+  const existing = await prisma.client.findFirst({
+    where: { id: clientId, ownerId },
+    select: {
+      id: true,
+      businessName: true,
+      contactName: true,
+      email: true,
+      phone: true,
+      abn: true,
+      address: true,
+      notes: true
+    }
+  });
+
+  if (!existing) throw new Error("Client not found.");
+
+  const nextValues = { businessName, contactName, email, phone, abn, address, notes };
+  const changedFields = Object.entries(nextValues)
+    .filter(([key, value]) => existing[key as keyof typeof nextValues] !== value)
+    .map(([key]) => key);
+
+  await prisma.client.update({
+    where: { id: existing.id },
+    data: nextValues
+  });
+
+  await logAudit(ownerId, "client.updated", "Client", existing.id, {
+    changedFieldCount: changedFields.length,
+    changedFields: changedFields.join(",") || null
+  });
+
+  revalidatePath("/");
+  revalidatePath("/clients");
+  revalidatePath(`/clients/${existing.id}/edit`);
+  revalidatePath("/projects");
+  revalidatePath("/invoices");
+  revalidatePath("/hours-export");
+  revalidateAppData();
+  redirect("/clients?saved=client-updated");
 }
 
 export async function updateProjectAction(formData: FormData) {

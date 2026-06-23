@@ -2,10 +2,12 @@ import Link from "next/link";
 import {
   BadgeInfo,
   Building2,
+  CheckCircle2,
   FileText,
   FolderKanban,
   Mail,
   MapPin,
+  PencilLine,
   Phone,
   Search,
   StickyNote,
@@ -32,6 +34,7 @@ export default async function ClientsPage({
   const params = await searchParams;
   const ownerId = await requireUserId();
   const q = typeof params?.q === "string" ? params.q.trim() : "";
+  const saved = params?.saved === "client-updated";
 
   const clients = await getClientsPageData(ownerId, q);
 
@@ -55,6 +58,13 @@ export default async function ClientsPage({
         />
       </form>
 
+      {saved ? (
+        <div className="mt-4 flex items-center gap-2 rounded-lg border border-mint/30 bg-mint/10 p-3 text-sm font-bold text-moss">
+          <CheckCircle2 size={18} aria-hidden="true" />
+          Client updated.
+        </div>
+      ) : null}
+
       <section className="mt-5 grid gap-3">
         {clients.length ? (
           clients.map((client) => {
@@ -65,16 +75,22 @@ export default async function ClientsPage({
                     <h2 className="text-2xl font-black tracking-normal">{client.businessName}</h2>
                     <p className="mt-1 text-sm font-bold text-moss">Added {formatDateAU(client.createdAt)}</p>
                   </div>
-                  <form action={deleteClientAction} className="md:min-w-52">
-                    <input type="hidden" name="clientId" value={client.id} />
-                    <ConfirmSubmitButton
-                      className="tap-danger w-full"
-                      message={`Remove ${client.businessName}? This only works when the client has no invoices or billed history. Projects with real history should be archived instead.`}
-                      pendingLabel="Checking..."
-                    >
-                      Remove Client
-                    </ConfirmSubmitButton>
-                  </form>
+                  <div className="grid gap-2 md:min-w-52">
+                    <Link href={`/clients/${client.id}/edit`} className="tap-secondary w-full">
+                      <PencilLine size={18} aria-hidden="true" />
+                      Edit Client
+                    </Link>
+                    <form action={deleteClientAction}>
+                      <input type="hidden" name="clientId" value={client.id} />
+                      <ConfirmSubmitButton
+                        className="tap-danger w-full"
+                        message={`Remove ${client.businessName}? This only works when the client has no invoices or billed history. Projects with real history should be archived instead.`}
+                        pendingLabel="Checking..."
+                      >
+                        Remove Client
+                      </ConfirmSubmitButton>
+                    </form>
+                  </div>
                 </div>
 
                 <dl className="mt-5 grid gap-x-5 md:grid-cols-2">
