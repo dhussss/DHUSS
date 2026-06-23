@@ -14,7 +14,7 @@ const items = [
 
 export function BottomNav() {
   const pathname = usePathname();
-  if (pathname === "/login" || pathname === "/signup") return null;
+  if (pathname === "/login" || pathname === "/signup" || pathname.startsWith("/public/")) return null;
 
   return (
     <nav className="bottom-safe fixed inset-x-0 bottom-0 z-40 border-t border-line bg-white/95 px-2 pt-2 shadow-[0_-12px_30px_rgba(23,33,28,0.08)] backdrop-blur md:left-1/2 md:max-w-2xl md:-translate-x-1/2 md:rounded-t-lg md:border-x">

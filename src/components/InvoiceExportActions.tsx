@@ -2,15 +2,9 @@
 
 import { useState } from "react";
 import type { ReactNode } from "react";
-import { Clipboard, Mail, Printer } from "lucide-react";
+import { Clipboard, Printer } from "lucide-react";
 
-export function InvoiceExportActions({
-  invoiceText,
-  emailText
-}: {
-  invoiceText: string;
-  emailText: string;
-}) {
+export function InvoiceExportActions({ invoiceText }: { invoiceText: string }) {
   const [message, setMessage] = useState("");
 
   async function copy(label: string, value: string) {
@@ -32,10 +26,6 @@ export function InvoiceExportActions({
       <button className="tap-secondary w-full" type="button" onClick={() => copy("Invoice text", invoiceText)}>
         <Clipboard size={20} aria-hidden="true" />
         Copy Invoice Text
-      </button>
-      <button className="tap-secondary w-full" type="button" onClick={() => copy("Email text", emailText)}>
-        <Mail size={20} aria-hidden="true" />
-        Copy Email Text
       </button>
     </div>
   );

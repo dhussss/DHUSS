@@ -56,6 +56,11 @@ export default async function BusinessProfilePage({
             paymentTermsDays: profile?.paymentTermsDays ?? 14,
             defaultInvoiceNotes: profile?.defaultInvoiceNotes ?? "",
             defaultInvoiceEmailMessage: profile?.defaultInvoiceEmailMessage ?? "",
+            defaultInvoiceEmailSubjectTemplate: profile?.defaultInvoiceEmailSubjectTemplate ?? "",
+            defaultInvoiceEmailBody: profile?.defaultInvoiceEmailBody ?? "",
+            replyToEmail: profile?.replyToEmail ?? "",
+            themeAccent: profile?.themeAccent ?? "emerald",
+            themeMode: profile?.themeMode ?? "system",
             signatureFooter: profile?.signatureFooter ?? ""
           }}
         />

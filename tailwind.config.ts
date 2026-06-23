@@ -13,8 +13,8 @@ const config: Config = {
         paper: "#fbfaf6",
         line: "#e5e0d6",
         gum: "#f06f5d",
-        mint: "#0f9f8f",
-        moss: "#54745b",
+        mint: "rgb(var(--color-accent-rgb) / <alpha-value>)",
+        moss: "rgb(var(--color-secondary-rgb) / <alpha-value>)",
         yolk: "#e7a82f"
       },
       boxShadow: {

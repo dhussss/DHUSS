@@ -6,10 +6,8 @@ import { getInvoicesPageData } from "@/lib/app-data";
 import { formatDateAU, todayInPerth } from "@/lib/dates";
 import { formatMoney } from "@/lib/money";
 import { formatHours } from "@/lib/time";
-import { prisma } from "@/lib/prisma";
 import { InvoiceStatusPill } from "@/components/StatusPill";
 import { SubmitButton } from "@/components/SubmitButton";
-import { CopyTextButton } from "@/components/InvoiceExportActions";
 
 export const dynamic = "force-dynamic";
 
@@ -31,13 +29,7 @@ export default async function InvoicesPage({
   const status = statusParam(params);
   const q = typeof params?.q === "string" ? params.q.trim() : "";
   const ownerId = await requireUserId();
-  const [invoices, profile] = await Promise.all([
-    getInvoicesPageData(ownerId, status, q),
-    prisma.businessProfile.findUnique({
-      where: { ownerId },
-      select: { tradingName: true, contactName: true, bankAccountName: true, bsb: true, accountNumber: true }
-    })
-  ]);
+  const invoices = await getInvoicesPageData(ownerId, status, q);
   const today = todayInPerth();
 
   return (
@@ -81,18 +73,6 @@ export default async function InvoicesPage({
         {invoices.map((invoice) => {
           const dueDate = invoice.dueDate;
           const overdue = invoice.status === "SENT" && dueDate && dueDate < today;
-          const emailText = buildListEmailText({
-            invoiceNumber: invoice.invoiceNumber,
-            businessName: profile?.tradingName ?? "your business",
-            senderName: profile?.contactName ?? profile?.tradingName ?? "your business",
-            clientName: invoice.client.contactName || invoice.client.businessName,
-            projectTitle: invoice.project.title,
-            total: formatMoney(invoice.grandTotalCents),
-            dueDate,
-            bankAccountName: profile?.bankAccountName ?? null,
-            bsb: profile?.bsb ?? null,
-            accountNumber: profile?.accountNumber ?? null
-          });
 
           return (
           <article key={invoice.id} className={`card transition hover:border-mint ${overdue ? "border-gum/50 bg-gum/5" : ""}`}>
@@ -141,10 +121,10 @@ export default async function InvoicesPage({
                 <Eye size={18} aria-hidden="true" />
                 View
               </Link>
-              <CopyTextButton value={emailText} label="Email text" copiedLabel="Email copied." className="tap-secondary w-full">
+              <Link href={`/invoices/${invoice.id}/email`} className="tap-secondary flex-1">
                 <Mail size={18} aria-hidden="true" />
-                Copy Email
-              </CopyTextButton>
+                Email
+              </Link>
               <form action={markInvoicePaidAction} className="flex-1">
                 <input type="hidden" name="invoiceId" value={invoice.id} />
                 <SubmitButton className="tap-primary w-full bg-mint hover:bg-ink" pendingLabel="Marking paid..." disabled={invoice.status === "PAID" || invoice.status === "VOID"}>
@@ -164,51 +144,4 @@ export default async function InvoicesPage({
       </section>
     </main>
   );
-}
-
-function buildListEmailText({
-  invoiceNumber,
-  businessName,
-  senderName,
-  clientName,
-  projectTitle,
-  total,
-  dueDate,
-  bankAccountName,
-  bsb,
-  accountNumber
-}: {
-  invoiceNumber: string;
-  businessName: string;
-  senderName: string;
-  clientName: string;
-  projectTitle: string;
-  total: string;
-  dueDate: Date | null;
-  bankAccountName: string | null;
-  bsb: string | null;
-  accountNumber: string | null;
-}) {
-  return [
-    `Subject: Invoice ${invoiceNumber} - ${businessName}`,
-    "",
-    `Hi ${clientName},`,
-    "",
-    `Please find invoice ${invoiceNumber} for ${projectTitle}.`,
-    `Total amount due: ${total}`,
-    dueDate ? `Due date: ${formatDateAU(dueDate)}` : "",
-    "",
-    "Payment details:",
-    bankAccountName ? `Account name: ${bankAccountName}` : "",
-    bsb ? `BSB: ${bsb}` : "",
-    accountNumber ? `Account: ${accountNumber}` : "",
-    `Payment reference: ${invoiceNumber}`,
-    "",
-    "The invoice is attached or included below for your records.",
-    "",
-    "Thanks,",
-    senderName
-  ]
-    .filter(Boolean)
-    .join("\n");
 }

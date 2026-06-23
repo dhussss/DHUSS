@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from "next";
 import "./globals.css";
 import { BottomNav } from "@/components/BottomNav";
 import { ServiceWorkerRegister } from "@/components/ServiceWorkerRegister";
+import { ThemeVars } from "@/components/ThemeVars";
 
 export const runtime = "nodejs";
 export const preferredRegion = "syd1";
@@ -32,6 +33,7 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
   return (
     <html lang="en-AU">
       <body>
+        <ThemeVars />
         <ServiceWorkerRegister />
         {children}
         <BottomNav />

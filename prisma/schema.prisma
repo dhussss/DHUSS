@@ -173,6 +173,10 @@ model Invoice {
   itemTotalCents   Int             @default(0)
   grandTotalCents  Int             @default(0)
   paymentDate    DateTime?
+  publicToken    String?           @unique
+  publicTokenEnabled Boolean       @default(false)
+  lastEmailedAt  DateTime?
+  emailSendCount Int               @default(0)
   summary        String?
   businessNameSnapshot String?
   businessLegalNameSnapshot String?
@@ -216,6 +220,7 @@ model Invoice {
   @@index([ownerId, status])
   @@index([ownerId, invoiceDate])
   @@index([ownerId, dueDate])
+  @@index([ownerId, publicTokenEnabled])
   @@unique([ownerId, invoiceNumber])
 }
 
@@ -266,6 +271,12 @@ model BusinessProfile {
   paymentTermsDays           Int      @default(14)
   defaultInvoiceNotes        String?
   defaultInvoiceEmailMessage String?
+  defaultInvoiceEmailSubjectTemplate String?
+  defaultInvoiceEmailBody    String?
+  replyToEmail               String?
+  themeAccent                String   @default("emerald")
+  themeSecondary             String?
+  themeMode                  String   @default("system")
   logoPath                   String?
   signatureFooter            String?
   createdAt                  DateTime @default(now())

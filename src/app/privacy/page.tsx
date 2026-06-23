@@ -39,6 +39,13 @@ export default function PrivacyPage() {
         </article>
 
         <article className="card">
+          <h2 className="text-xl font-black tracking-normal">Invoice email and client links</h2>
+          <p className="mt-2 text-sm font-bold text-moss">
+            Invoice emails are sent through the configured email provider. Public invoice links use long random tokens and can be revoked or regenerated from the invoice page.
+          </p>
+        </article>
+
+        <article className="card">
           <h2 className="text-xl font-black tracking-normal">Responsibility</h2>
           <p className="mt-2 text-sm font-bold text-moss">
             Users should verify invoice details before sending. This app is not accounting, legal, or tax advice.

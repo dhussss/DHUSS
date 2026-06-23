@@ -8,6 +8,7 @@ Mobile-first PWA for a sole trader/subcontractor to track clients, projects, log
 - Tailwind CSS
 - Prisma ORM
 - Supabase Postgres
+- Resend for invoice email delivery
 - PWA manifest and service worker for Add to Home Screen
 
 ## Architecture Notes
@@ -33,6 +34,13 @@ DIRECT_URL="postgresql://postgres.<PROJECT-REF>:<PASSWORD>@<REGION>.pooler.supab
 # Required in production to download database backups from /backup.
 BACKUP_EXPORT_TOKEN="change-this-long-random-token"
 
+# Public app URL used for secure client invoice links.
+APP_BASE_URL="https://<your-vercel-domain>"
+
+# Email delivery. The sender must be verified in Resend.
+RESEND_API_KEY="re_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+RESEND_FROM_EMAIL="invoices@yourdomain.com"
+
 # Supabase Auth and Storage. Legacy anon keys can be used here if your project
 # has not moved to publishable keys yet.
 NEXT_PUBLIC_SUPABASE_URL="https://<PROJECT-REF>.supabase.co"
@@ -45,6 +53,9 @@ For this Supabase project, copy the current Supabase Prisma connection strings a
 DATABASE_URL="postgresql://postgres.<PROJECT-REF>:<PASSWORD>@aws-1-ap-southeast-2.pooler.supabase.com:6543/postgres?pgbouncer=true&connection_limit=1"
 DIRECT_URL="postgresql://postgres.<PROJECT-REF>:<PASSWORD>@aws-1-ap-southeast-2.pooler.supabase.com:5432/postgres"
 BACKUP_EXPORT_TOKEN="change-this-long-random-token"
+APP_BASE_URL="https://<your-vercel-domain>"
+RESEND_API_KEY="re_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+RESEND_FROM_EMAIL="invoices@yourdomain.com"
 NEXT_PUBLIC_SUPABASE_URL="https://<PROJECT-REF>.supabase.co"
 NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY="<SUPABASE-PUBLISHABLE-KEY>"
 ```
@@ -152,6 +163,9 @@ pnpm run build
 DATABASE_URL="postgresql://postgres.<PROJECT-REF>:<PASSWORD>@aws-1-ap-southeast-2.pooler.supabase.com:6543/postgres?pgbouncer=true&connection_limit=1"
 DIRECT_URL="postgresql://postgres.<PROJECT-REF>:<PASSWORD>@aws-1-ap-southeast-2.pooler.supabase.com:5432/postgres"
 BACKUP_EXPORT_TOKEN="change-this-long-random-token"
+APP_BASE_URL="https://<your-vercel-domain>"
+RESEND_API_KEY="re_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+RESEND_FROM_EMAIL="invoices@yourdomain.com"
 NEXT_PUBLIC_SUPABASE_URL="https://<PROJECT-REF>.supabase.co"
 NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY="<SUPABASE-PUBLISHABLE-KEY>"
 ```
@@ -167,6 +181,19 @@ pnpm run db:migrate
 6. Confirm Vercel deployments run near Supabase. This app sets `regions: ["syd1"]` in `vercel.json`. After deployment, open `/diagnostics?token=<BACKUP_EXPORT_TOKEN>` and check `x-vercel-id`. The first segment should be `syd1`.
 
 The diagnostics page helps choose the next fix: if TCP/TLS connect is fast but Prisma `SELECT 1` is high, Prisma engine/pooler overhead is the main problem; if both TCP/TLS and Prisma are high, network or Supabase pooler latency is the main problem; if `SELECT 1` is low but dashboard is high, query work is the main problem.
+
+## Resend Email Setup
+
+1. Create or log in to a Resend account.
+2. Add and verify your sending domain, or use a verified Resend test sender during development.
+3. Create an API key in Resend.
+4. Set these values locally and in Vercel:
+   - `RESEND_API_KEY`
+   - `RESEND_FROM_EMAIL`
+   - `APP_BASE_URL`
+5. In `/business-profile`, set the reply-to email and default invoice email templates.
+
+The app sends invoice email from the verified `RESEND_FROM_EMAIL` sender and sets replies to the business profile reply-to email when available. The Resend API key is used only in server actions and is never sent to the browser.
 
 ## Backup Export
 
@@ -194,6 +221,7 @@ Use `/diagnostics?token=<BACKUP_EXPORT_TOKEN>` while logged in to open a private
 - `/login` signs users in with Supabase Auth.
 - Dashboard, clients, projects, invoices, hours export, backup, diagnostics, and server actions require a logged-in user.
 - `/business-profile` lets each user save their own trading name, legal details, ABN/ACN, contact details, GST defaults, bank details, invoice notes, email message, logo, and footer.
+- `/business-profile` also stores default invoice email subject/body templates, reply-to email, and the app theme preset.
 - Logo files are uploaded directly from the browser to the private `business-logos` Storage bucket under the user's own folder. The server action stores only the Storage path, which avoids Vercel's 1 MB Server Action body limit.
 - Logo validation allows PNG, JPG, WEBP, and SVG files up to 1 MB. 500 KB or smaller is recommended for fast invoice previews.
 - Invoice detail pages show the user's logo when available.
@@ -209,15 +237,19 @@ Use `/diagnostics?token=<BACKUP_EXPORT_TOKEN>` while logged in to open a private
 - Sent and paid invoices do not silently mutate if the business profile or client changes later.
 - Invoice preview at `/invoices/<id>` is printable and supports browser Print / Save as PDF.
 - Invoice preview uses an A4-style document layout for screen and print. App navigation, action buttons, and app backgrounds are hidden in print.
-- Invoice preview supports Copy Invoice Text and Copy Email Text. Real email sending is intentionally not implemented yet.
+- Invoice preview supports Copy Invoice Text, browser Print / Save as PDF, and a real email workflow at `/invoices/<id>/email`.
+- Emailing requires the invoice to be sent or paid, plus `RESEND_API_KEY`, `RESEND_FROM_EMAIL`, and `APP_BASE_URL` in production.
+- Sent and paid invoices can create a secure client invoice link at `/public/invoices/<token>`. Links can be revoked or regenerated from the invoice page.
+- Public invoice links are token-based, unlisted, and only work while enabled on sent or paid invoices. Void invoices automatically disable their public link.
 - Invoice list supports search plus filters for all, draft, sent, paid, and void invoices.
 - Sent invoices past their due date show an overdue indicator.
-- Future finalised invoices snapshot business contact, website, default notes, email copy text, and footer/signature wording so older sent/paid invoices do not drift when the business profile changes.
+- Future finalised invoices snapshot business contact, website, default notes, email message wording, and footer/signature wording so older sent/paid invoices do not drift when the business profile changes.
 
 ## Audit Log And Privacy
 
 - `/audit-log` shows recent account-scoped activity for the logged-in user.
 - Audit metadata intentionally avoids passwords, auth tokens, full bank details, and secrets.
+- Invoice email audit events record delivery status, provider ID, recipient summary, and counts only. They do not store email body text, bank details, or secrets.
 - `/privacy` explains user isolation, stored data, backups, bank details, and the app's responsibility boundaries in plain English.
 
 ## Multi-User Data Migration Notes
@@ -252,7 +284,9 @@ If Prisma timings remain high while TCP/TLS is low, the cleanest options are:
 ## Production Safety
 
 - Keep `DATABASE_URL` and `DIRECT_URL` only in local `.env`, Vercel environment variables, and secure password storage.
+- Keep `RESEND_API_KEY` only in local `.env`, Vercel environment variables, and secure password storage.
 - Set `BACKUP_EXPORT_TOKEN` in Vercel before relying on `/backup`; production exports are blocked without it.
+- Set `APP_BASE_URL` to the canonical production URL so emailed invoice links point to the right deployment.
 - Each user-owned table is scoped by Supabase Auth user ID in Prisma queries and server actions.
 - Prisma uses the database pooler directly, so isolation is enforced in application code. Consider adding database RLS later for defence in depth.
 - Use archive/unarchive for real projects with history.
@@ -260,6 +294,7 @@ If Prisma timings remain high while TCP/TLS is low, the cleanest options are:
 - Billed time entries cannot be edited or deleted. Void/delete invoice flows release linked entries/items back to unbilled before changing invoice state.
 - Supabase Postgres indexes are included for the common dashboard, invoice, project, and hours export filters.
 - Browser print-to-PDF is the current stable PDF export method. Server-side PDF generation is not implemented yet.
+- Public invoice links are bearer links. Anyone with the active token can view that invoice, so revoke or regenerate links if they are shared with the wrong person.
 
 ## Troubleshooting
 

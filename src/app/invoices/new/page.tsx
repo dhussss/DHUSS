@@ -167,7 +167,7 @@ export default async function NewInvoicePage({
               <input className="size-5 min-h-0 w-auto" type="radio" name="invoiceMode" value="SIMPLE" defaultChecked={invoiceMode === "SIMPLE"} />
               <span>
                 <span className="block font-black">Simple</span>
-                <span className="text-xs font-bold text-moss">One labour line. Daily hours and hourly rates stay hidden. Expenses still show.</span>
+                <span className="text-xs font-bold text-moss">One client-facing labour total. Expenses still show.</span>
               </span>
             </label>
             <label className={`flex min-h-12 cursor-pointer grid-cols-none flex-row items-center gap-3 rounded-lg border px-3 ${invoiceMode === "DETAILED" ? "border-mint bg-mint/10" : "border-line bg-white"}`}>

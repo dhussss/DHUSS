@@ -1,13 +1,24 @@
 "use server";
 
+import crypto from "node:crypto";
 import type { InvoiceMode, ProjectStatus } from "@prisma/client";
+import { Resend } from "resend";
 import { revalidatePath, revalidateTag } from "next/cache";
 import { redirect } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { requireUserId } from "@/lib/auth";
 import { CACHE_TAGS } from "@/lib/app-data";
-import { dollarsToCents } from "@/lib/money";
-import { addDays, endOfDay, parseInputDate } from "@/lib/dates";
+import { dollarsToCents, formatMoney } from "@/lib/money";
+import { addDays, endOfDay, formatDateAU, parseInputDate } from "@/lib/dates";
+import {
+  buildInvoiceEmailHtml,
+  buildInvoicePlainText,
+  defaultInvoiceEmailBody,
+  defaultInvoiceEmailSubject,
+  invoiceDueDate,
+  renderTemplate
+} from "@/lib/invoice-documents";
+import type { InvoiceBusinessDetails, InvoiceClientDetails, InvoiceDocumentData } from "@/lib/invoice-documents";
 import { buildInvoiceLineData, invoiceTotals, summaryText } from "@/lib/invoices";
 import { isQuarterHour, isQuarterHourClock, parseClockTime } from "@/lib/time";
 import { createClient } from "@/lib/supabase/server";
@@ -78,6 +89,57 @@ async function logAudit(
   });
 }
 
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+function appBaseUrl() {
+  const configured = process.env.APP_BASE_URL?.trim();
+  if (configured) return configured.replace(/\/$/, "");
+  const vercelUrl = process.env.VERCEL_URL?.trim();
+  return vercelUrl ? `https://${vercelUrl.replace(/\/$/, "")}` : null;
+}
+
+function invoicePublicUrl(token: string) {
+  const baseUrl = appBaseUrl();
+  return baseUrl ? `${baseUrl}/public/invoices/${token}` : null;
+}
+
+function parseEmailList(value: string, label: string, required = false) {
+  const emails = value
+    .split(/[;,]/)
+    .map((email) => email.trim())
+    .filter(Boolean);
+
+  if (required && emails.length === 0) throw new Error(`${label} email is required.`);
+
+  for (const email of emails) {
+    if (!EMAIL_RE.test(email)) throw new Error(`${label} contains an invalid email address.`);
+  }
+
+  return emails;
+}
+
+function cleanEmailDisplayName(value: string) {
+  return value.replace(/[<>"\n\r]/g, "").trim() || "Invoices";
+}
+
+function senderAddress(businessName: string) {
+  const fromEmail = process.env.RESEND_FROM_EMAIL?.trim();
+  if (!fromEmail) throw new Error("RESEND_FROM_EMAIL is not configured.");
+  if (fromEmail.includes("<")) return fromEmail;
+  if (!EMAIL_RE.test(fromEmail)) throw new Error("RESEND_FROM_EMAIL must be a valid email address or sender string.");
+  return `${cleanEmailDisplayName(businessName)} <${fromEmail}>`;
+}
+
+async function generateUniqueInvoiceToken() {
+  for (let attempt = 0; attempt < 5; attempt += 1) {
+    const token = crypto.randomBytes(32).toString("base64url");
+    const existing = await prisma.invoice.findUnique({ where: { publicToken: token }, select: { id: true } });
+    if (!existing) return token;
+  }
+
+  throw new Error("Could not generate a public invoice link. Please try again.");
+}
+
 function digitsOnly(value: string) {
   return value.replace(/\D/g, "");
 }
@@ -96,6 +158,11 @@ function validateBusinessProfileInput(formData: FormData, gstRegistered: boolean
   const email = text(formData, "email");
   if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) throw new Error("Enter a valid email address.");
 
+  const replyToEmail = text(formData, "replyToEmail");
+  if (replyToEmail && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(replyToEmail)) {
+    throw new Error("Enter a valid reply-to email address.");
+  }
+
   const bsb = digitsOnly(text(formData, "bsb"));
   if (bsb && bsb.length !== 6) throw new Error("BSB must be 6 digits.");
 
@@ -107,7 +174,16 @@ function validateBusinessProfileInput(formData: FormData, gstRegistered: boolean
   const gstRate = gstRegistered ? optionalDecimal(formData, "gstRate", 10) : 0;
   if (gstRate > 100) throw new Error("GST rate must be between 0 and 100.");
 
-  return { invoicePrefix, gstRate };
+  const themeAccent = text(formData, "themeAccent") || "emerald";
+  if (!["emerald", "blue", "slate", "amber", "purple"].includes(themeAccent)) {
+    throw new Error("Choose one of the available colour themes.");
+  }
+  const themeMode = text(formData, "themeMode") || "system";
+  if (!["system", "light", "dark"].includes(themeMode)) {
+    throw new Error("Choose a valid display mode.");
+  }
+
+  return { invoicePrefix, gstRate, themeAccent, themeMode };
 }
 
 export async function updateBusinessProfileAction(formData: FormData) {
@@ -116,7 +192,8 @@ export async function updateBusinessProfileAction(formData: FormData) {
   if (!tradingName) throw new Error("Trading/business name is required.");
 
   const gstRegistered = text(formData, "gstRegistered") === "on";
-  const { invoicePrefix, gstRate } = validateBusinessProfileInput(formData, gstRegistered);
+  const { invoicePrefix, gstRate, themeAccent, themeMode } = validateBusinessProfileInput(formData, gstRegistered);
+  const defaultInvoiceEmailBody = text(formData, "defaultInvoiceEmailBody") || null;
 
   const existing = await prisma.businessProfile.findUnique({ where: { ownerId } });
   let logoPath = existing?.logoPath ?? null;
@@ -159,7 +236,12 @@ export async function updateBusinessProfileAction(formData: FormData) {
       accountNumber: text(formData, "accountNumber") || null,
       paymentTermsDays: optionalInt(formData, "paymentTermsDays", 14),
       defaultInvoiceNotes: text(formData, "defaultInvoiceNotes") || null,
-      defaultInvoiceEmailMessage: text(formData, "defaultInvoiceEmailMessage") || null,
+      defaultInvoiceEmailMessage: text(formData, "defaultInvoiceEmailMessage") || defaultInvoiceEmailBody,
+      defaultInvoiceEmailSubjectTemplate: text(formData, "defaultInvoiceEmailSubjectTemplate") || null,
+      defaultInvoiceEmailBody,
+      replyToEmail: text(formData, "replyToEmail") || null,
+      themeAccent,
+      themeMode,
       logoPath,
       signatureFooter: text(formData, "signatureFooter") || null
     },
@@ -182,7 +264,12 @@ export async function updateBusinessProfileAction(formData: FormData) {
       accountNumber: text(formData, "accountNumber") || null,
       paymentTermsDays: optionalInt(formData, "paymentTermsDays", 14),
       defaultInvoiceNotes: text(formData, "defaultInvoiceNotes") || null,
-      defaultInvoiceEmailMessage: text(formData, "defaultInvoiceEmailMessage") || null,
+      defaultInvoiceEmailMessage: text(formData, "defaultInvoiceEmailMessage") || defaultInvoiceEmailBody,
+      defaultInvoiceEmailSubjectTemplate: text(formData, "defaultInvoiceEmailSubjectTemplate") || null,
+      defaultInvoiceEmailBody,
+      replyToEmail: text(formData, "replyToEmail") || null,
+      themeAccent,
+      themeMode,
       logoPath,
       signatureFooter: text(formData, "signatureFooter") || null
     }
@@ -633,6 +720,122 @@ function invoiceModeFromForm(formData: FormData): InvoiceMode {
   return text(formData, "invoiceMode") === "SIMPLE" ? "SIMPLE" : "DETAILED";
 }
 
+function snapshotValue(frozen: boolean, frozenValue: string | null | undefined, liveValue: string | null | undefined) {
+  return frozen ? frozenValue ?? liveValue ?? null : liveValue ?? null;
+}
+
+function invoiceBusinessDetails(
+  invoice: {
+    status: "DRAFT" | "SENT" | "PAID" | "VOID";
+    businessNameSnapshot: string | null;
+    businessLegalNameSnapshot: string | null;
+    businessAbnSnapshot: string | null;
+    businessContactNameSnapshot: string | null;
+    businessEmailSnapshot: string | null;
+    businessPhoneSnapshot: string | null;
+    businessAddressSnapshot: string | null;
+    businessWebsiteSnapshot: string | null;
+    businessBankAccountNameSnapshot: string | null;
+    businessBsbSnapshot: string | null;
+    businessAccountNumberSnapshot: string | null;
+    businessGstRegisteredSnapshot: boolean;
+    businessGstRateSnapshot: unknown;
+    businessLogoPathSnapshot: string | null;
+    businessDefaultInvoiceNotesSnapshot: string | null;
+    businessDefaultInvoiceEmailMessageSnapshot: string | null;
+    businessSignatureFooterSnapshot: string | null;
+  },
+  profile: {
+    tradingName: string;
+    legalName: string | null;
+    abn: string | null;
+    contactName: string | null;
+    email: string | null;
+    phone: string | null;
+    address: string | null;
+    website: string | null;
+    bankAccountName: string | null;
+    bsb: string | null;
+    accountNumber: string | null;
+    gstRegistered: boolean;
+    gstRate: unknown;
+    logoPath: string | null;
+    defaultInvoiceNotes: string | null;
+    defaultInvoiceEmailMessage: string | null;
+    signatureFooter: string | null;
+  } | null
+): InvoiceBusinessDetails {
+  const frozen = invoice.status !== "DRAFT";
+
+  return {
+    name: snapshotValue(frozen, invoice.businessNameSnapshot, profile?.tradingName) ?? "Business profile not set",
+    legalName: snapshotValue(frozen, invoice.businessLegalNameSnapshot, profile?.legalName),
+    contactName: snapshotValue(frozen, invoice.businessContactNameSnapshot, profile?.contactName),
+    abn: snapshotValue(frozen, invoice.businessAbnSnapshot, profile?.abn),
+    email: snapshotValue(frozen, invoice.businessEmailSnapshot, profile?.email),
+    phone: snapshotValue(frozen, invoice.businessPhoneSnapshot, profile?.phone),
+    address: snapshotValue(frozen, invoice.businessAddressSnapshot, profile?.address),
+    website: snapshotValue(frozen, invoice.businessWebsiteSnapshot, profile?.website),
+    bankAccountName: snapshotValue(frozen, invoice.businessBankAccountNameSnapshot, profile?.bankAccountName),
+    bsb: snapshotValue(frozen, invoice.businessBsbSnapshot, profile?.bsb),
+    accountNumber: snapshotValue(frozen, invoice.businessAccountNumberSnapshot, profile?.accountNumber),
+    gstRegistered: (frozen ? invoice.businessGstRegisteredSnapshot : null) ?? profile?.gstRegistered ?? false,
+    gstRate: Number((frozen ? invoice.businessGstRateSnapshot : null) ?? profile?.gstRate ?? 0),
+    logoPath: snapshotValue(frozen, invoice.businessLogoPathSnapshot, profile?.logoPath),
+    defaultInvoiceNotes: snapshotValue(frozen, invoice.businessDefaultInvoiceNotesSnapshot, profile?.defaultInvoiceNotes),
+    defaultInvoiceEmailMessage: snapshotValue(frozen, invoice.businessDefaultInvoiceEmailMessageSnapshot, profile?.defaultInvoiceEmailMessage),
+    signatureFooter: snapshotValue(frozen, invoice.businessSignatureFooterSnapshot, profile?.signatureFooter)
+  };
+}
+
+function invoiceClientDetails(
+  invoice: {
+    status: "DRAFT" | "SENT" | "PAID" | "VOID";
+    clientBusinessNameSnapshot: string | null;
+    clientContactNameSnapshot: string | null;
+    clientEmailSnapshot: string | null;
+    clientPhoneSnapshot: string | null;
+    clientAddressSnapshot: string | null;
+    clientAbnSnapshot: string | null;
+    client: {
+      businessName: string;
+      contactName: string | null;
+      email: string | null;
+      phone: string | null;
+      address: string | null;
+      abn: string | null;
+    };
+  }
+): InvoiceClientDetails {
+  const frozen = invoice.status !== "DRAFT";
+
+  return {
+    businessName: snapshotValue(frozen, invoice.clientBusinessNameSnapshot, invoice.client.businessName) ?? invoice.client.businessName,
+    contactName: snapshotValue(frozen, invoice.clientContactNameSnapshot, invoice.client.contactName),
+    email: snapshotValue(frozen, invoice.clientEmailSnapshot, invoice.client.email),
+    phone: snapshotValue(frozen, invoice.clientPhoneSnapshot, invoice.client.phone),
+    address: snapshotValue(frozen, invoice.clientAddressSnapshot, invoice.client.address),
+    abn: snapshotValue(frozen, invoice.clientAbnSnapshot, invoice.client.abn)
+  };
+}
+
+function invoiceTemplateValues(invoice: InvoiceDocumentData, business: InvoiceBusinessDetails, client: InvoiceClientDetails) {
+  const formattedDueDate = formatDateAU(invoiceDueDate(invoice));
+  const formattedTotal = formatMoney(invoice.grandTotalCents);
+
+  return {
+    invoiceNumber: invoice.invoiceNumber,
+    businessName: business.name,
+    clientName: client.contactName || client.businessName,
+    clientBusinessName: client.businessName,
+    projectTitle: invoice.project.title,
+    projectName: invoice.project.title,
+    total: formattedTotal,
+    totalDue: formattedTotal,
+    dueDate: formattedDueDate
+  };
+}
+
 function criticalInvoiceProfileIssues(
   profile: {
     tradingName: string;
@@ -935,7 +1138,7 @@ export async function voidInvoiceAction(formData: FormData) {
     }),
     prisma.invoice.update({
       where: { id: invoiceId },
-      data: { status: "VOID", paymentDate: null }
+      data: { status: "VOID", paymentDate: null, publicTokenEnabled: false }
     })
   ]);
 
@@ -943,6 +1146,7 @@ export async function voidInvoiceAction(formData: FormData) {
   revalidatePath("/");
   revalidatePath("/projects");
   revalidatePath("/invoices");
+  if (invoice.publicToken) revalidatePath(`/public/invoices/${invoice.publicToken}`);
   revalidateAppData();
   redirect(`/invoices/${invoiceId}`);
 }
@@ -1001,6 +1205,211 @@ export async function deleteInvoiceAction(formData: FormData) {
   revalidatePath("/");
   revalidatePath("/projects");
   revalidatePath("/invoices");
+  if (invoice.publicToken) revalidatePath(`/public/invoices/${invoice.publicToken}`);
   revalidateAppData();
   redirect("/invoices");
+}
+
+function assertInvoiceCanBeShared(status: "DRAFT" | "SENT" | "PAID" | "VOID") {
+  if (status === "DRAFT") throw new Error("Mark the invoice as sent before creating a client link.");
+  if (status === "VOID") throw new Error("Void invoices cannot be shared.");
+}
+
+async function loadOwnedInvoiceForSharing(ownerId: string, invoiceId: string) {
+  const invoice = await prisma.invoice.findFirst({
+    where: { id: invoiceId, ownerId },
+    select: {
+      id: true,
+      invoiceNumber: true,
+      status: true,
+      publicToken: true,
+      publicTokenEnabled: true
+    }
+  });
+  if (!invoice) throw new Error("Invoice not found.");
+  return invoice;
+}
+
+export async function enableInvoicePublicLinkAction(formData: FormData) {
+  const ownerId = await requireUserId();
+  const invoiceId = text(formData, "invoiceId");
+  const invoice = await loadOwnedInvoiceForSharing(ownerId, invoiceId);
+  assertInvoiceCanBeShared(invoice.status);
+
+  const token = invoice.publicToken ?? (await generateUniqueInvoiceToken());
+  await prisma.invoice.update({
+    where: { id: invoiceId },
+    data: { publicToken: token, publicTokenEnabled: true }
+  });
+
+  await logAudit(ownerId, "invoice.public_link_enabled", "Invoice", invoiceId, {
+    invoiceNumber: invoice.invoiceNumber,
+    regenerated: !invoice.publicToken
+  });
+  revalidatePath(`/invoices/${invoiceId}`);
+  revalidatePath(`/public/invoices/${token}`);
+  redirect(`/invoices/${invoiceId}`);
+}
+
+export async function revokeInvoicePublicLinkAction(formData: FormData) {
+  const ownerId = await requireUserId();
+  const invoiceId = text(formData, "invoiceId");
+  const invoice = await loadOwnedInvoiceForSharing(ownerId, invoiceId);
+
+  await prisma.invoice.update({
+    where: { id: invoiceId },
+    data: { publicTokenEnabled: false }
+  });
+
+  await logAudit(ownerId, "invoice.public_link_revoked", "Invoice", invoiceId, {
+    invoiceNumber: invoice.invoiceNumber
+  });
+  revalidatePath(`/invoices/${invoiceId}`);
+  if (invoice.publicToken) revalidatePath(`/public/invoices/${invoice.publicToken}`);
+  redirect(`/invoices/${invoiceId}`);
+}
+
+export async function regenerateInvoicePublicLinkAction(formData: FormData) {
+  const ownerId = await requireUserId();
+  const invoiceId = text(formData, "invoiceId");
+  const invoice = await loadOwnedInvoiceForSharing(ownerId, invoiceId);
+  assertInvoiceCanBeShared(invoice.status);
+
+  const token = await generateUniqueInvoiceToken();
+  await prisma.invoice.update({
+    where: { id: invoiceId },
+    data: { publicToken: token, publicTokenEnabled: true }
+  });
+
+  await logAudit(ownerId, "invoice.public_link_regenerated", "Invoice", invoiceId, {
+    invoiceNumber: invoice.invoiceNumber
+  });
+  revalidatePath(`/invoices/${invoiceId}`);
+  if (invoice.publicToken) revalidatePath(`/public/invoices/${invoice.publicToken}`);
+  revalidatePath(`/public/invoices/${token}`);
+  redirect(`/invoices/${invoiceId}`);
+}
+
+export async function sendInvoiceEmailAction(formData: FormData) {
+  const ownerId = await requireUserId();
+  const invoiceId = text(formData, "invoiceId");
+  const includePublicLink = text(formData, "includePublicLink") === "on";
+
+  const [invoice, profile] = await Promise.all([
+    prisma.invoice.findFirst({
+      where: { id: invoiceId, ownerId },
+      include: {
+        project: { select: { title: true } },
+        client: true,
+        lineItems: { orderBy: { sortOrder: "asc" } }
+      }
+    }),
+    prisma.businessProfile.findUnique({ where: { ownerId } })
+  ]);
+
+  if (!invoice) throw new Error("Invoice not found.");
+  if (invoice.status === "DRAFT") throw new Error("Mark the invoice as sent before emailing it.");
+  if (invoice.status === "VOID") throw new Error("Void invoices cannot be emailed.");
+
+  const apiKey = process.env.RESEND_API_KEY?.trim();
+  if (!apiKey) throw new Error("RESEND_API_KEY is not configured.");
+
+  const business = invoiceBusinessDetails(invoice, profile);
+  const client = invoiceClientDetails(invoice);
+  const defaultTo = client.email ?? invoice.client.email ?? "";
+  const to = parseEmailList(text(formData, "to") || defaultTo, "To", true);
+  const cc = parseEmailList(text(formData, "cc"), "CC");
+  const bcc = parseEmailList(text(formData, "bcc"), "BCC");
+  const replyTo = profile?.replyToEmail || profile?.email || business.email;
+  if (replyTo && !EMAIL_RE.test(replyTo)) throw new Error("Configured reply-to email is invalid.");
+
+  let publicToken = invoice.publicToken;
+  const hadPublicTokenBeforeSend = Boolean(invoice.publicToken);
+  const publicLinkEnabledBeforeSend = invoice.publicTokenEnabled;
+  let publicUrl: string | null = null;
+
+  if (includePublicLink) {
+    assertInvoiceCanBeShared(invoice.status);
+    if (!publicToken) publicToken = await generateUniqueInvoiceToken();
+    publicUrl = invoicePublicUrl(publicToken);
+    if (!publicUrl) throw new Error("APP_BASE_URL is required to include a public invoice link.");
+
+    await prisma.invoice.update({
+      where: { id: invoiceId },
+      data: { publicToken, publicTokenEnabled: true }
+    });
+  }
+
+  const templateValues = invoiceTemplateValues(invoice, business, client);
+  const subjectInput = text(formData, "subject") || defaultInvoiceEmailSubject(invoice, business);
+  const bodyInput = text(formData, "message") || profile?.defaultInvoiceEmailBody || business.defaultInvoiceEmailMessage || defaultInvoiceEmailBody(invoice, business, client);
+  const subject = renderTemplate(subjectInput, templateValues).trim();
+  const message = renderTemplate(bodyInput, templateValues).trim();
+  if (!subject) throw new Error("Email subject is required.");
+  if (!message) throw new Error("Email message is required.");
+
+  const html = buildInvoiceEmailHtml({ invoice, business, client, message, publicUrl });
+  const plainText = [message, "", buildInvoicePlainText({ invoice, business, client, publicUrl })].join("\n");
+
+  await logAudit(ownerId, "invoice.email_attempted", "Invoice", invoiceId, {
+    invoiceNumber: invoice.invoiceNumber,
+    to: to.join(", "),
+    ccCount: cc.length,
+    bccCount: bcc.length,
+    includePublicLink
+  });
+
+  try {
+    const resend = new Resend(apiKey);
+    const { data, error } = await resend.emails.send({
+      from: senderAddress(business.name),
+      to,
+      cc: cc.length ? cc : undefined,
+      bcc: bcc.length ? bcc : undefined,
+      replyTo: replyTo || undefined,
+      subject,
+      html,
+      text: plainText
+    });
+
+    if (error) {
+      throw new Error(error.message || "Email provider rejected the message.");
+    }
+
+    await prisma.invoice.update({
+      where: { id: invoiceId },
+      data: {
+        lastEmailedAt: new Date(),
+        emailSendCount: { increment: 1 },
+        ...(publicToken && includePublicLink ? { publicToken, publicTokenEnabled: true } : {})
+      }
+    });
+
+    await logAudit(ownerId, "invoice.email_sent", "Invoice", invoiceId, {
+      invoiceNumber: invoice.invoiceNumber,
+      provider: "resend",
+      providerId: data?.id ?? null,
+      to: to.join(", "),
+      ccCount: cc.length,
+      bccCount: bcc.length,
+      includePublicLink
+    });
+  } catch (error) {
+    if (includePublicLink && publicToken && !publicLinkEnabledBeforeSend) {
+      await prisma.invoice.update({
+        where: { id: invoiceId },
+        data: { publicToken: hadPublicTokenBeforeSend ? publicToken : null, publicTokenEnabled: false }
+      });
+    }
+    await logAudit(ownerId, "invoice.email_failed", "Invoice", invoiceId, {
+      invoiceNumber: invoice.invoiceNumber,
+      reason: error instanceof Error ? error.message.slice(0, 180) : "Unknown error"
+    });
+    throw error;
+  }
+
+  revalidatePath(`/invoices/${invoiceId}`);
+  revalidatePath("/invoices");
+  if (publicToken) revalidatePath(`/public/invoices/${publicToken}`);
+  redirect(`/invoices/${invoiceId}/email?sent=1`);
 }

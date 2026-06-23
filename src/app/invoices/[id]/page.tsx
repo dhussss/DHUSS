@@ -1,11 +1,14 @@
 import Link from "next/link";
 import type { ReactNode } from "react";
 import { notFound } from "next/navigation";
-import { AlertTriangle, ArrowLeft, Banknote, RotateCcw, Send, Trash2, XCircle } from "lucide-react";
+import { AlertTriangle, ArrowLeft, Banknote, ExternalLink, Link2, Mail, RefreshCcw, RotateCcw, Send, Trash2, XCircle } from "lucide-react";
 import {
   deleteInvoiceAction,
+  enableInvoicePublicLinkAction,
   markInvoicePaidAction,
   markInvoiceSentAction,
+  regenerateInvoicePublicLinkAction,
+  revokeInvoicePublicLinkAction,
   unvoidInvoiceAction,
   voidInvoiceAction
 } from "@/app/actions";
@@ -15,10 +18,11 @@ import { createClient } from "@/lib/supabase/server";
 import { addDays, formatDateAU } from "@/lib/dates";
 import { formatMoney } from "@/lib/money";
 import { formatHours } from "@/lib/time";
+import { buildInvoicePlainText } from "@/lib/invoice-documents";
 import { InvoiceStatusPill } from "@/components/StatusPill";
 import { ConfirmSubmitButton } from "@/components/ConfirmSubmitButton";
 import { SubmitButton } from "@/components/SubmitButton";
-import { InvoiceExportActions } from "@/components/InvoiceExportActions";
+import { CopyTextButton, InvoiceExportActions } from "@/components/InvoiceExportActions";
 
 export const dynamic = "force-dynamic";
 
@@ -79,7 +83,6 @@ export default async function InvoiceDetailPage({ params }: { params: Promise<{ 
   const labourSubtotalCents = invoice.labourTotalCents;
   const expensesSubtotalCents = invoice.expensesSubtotalCents || invoice.itemTotalCents;
   const subtotalCents = invoice.subtotalCents || labourSubtotalCents + expensesSubtotalCents;
-  const totalDurationMinutes = invoice.totalDurationMinutes || Math.round(Number(invoice.totalHours) * 60);
   const labourLines = invoice.lineItems.filter((line) => line.type === "LABOUR");
   const expenseLines = invoice.lineItems.filter((line) => line.type === "EXPENSE");
   const invoiceTitle = business.gstRegistered ? "Tax Invoice" : "Invoice";
@@ -87,23 +90,15 @@ export default async function InvoiceDetailPage({ params }: { params: Promise<{ 
   const confirmationMessage = finaliseWarnings.length
     ? `This invoice has warnings: ${finaliseWarnings.join(" ")} Continue anyway?`
     : "";
+  const publicInvoicePath = invoice.publicToken ? `/public/invoices/${invoice.publicToken}` : null;
+  const publicInvoiceUrl = invoice.publicTokenEnabled && publicInvoicePath ? absoluteAppUrl(publicInvoicePath) : null;
+  const canSharePublicLink = invoice.status === "SENT" || invoice.status === "PAID";
 
-  const invoiceText = buildInvoiceText({
+  const invoiceText = buildInvoicePlainText({
     invoice,
-    invoiceTitle,
     business,
     client,
-    dueDate,
-    subtotalCents,
-    totalDurationMinutes
-  });
-  const emailText = buildEmailText({
-    invoiceNumber: invoice.invoiceNumber,
-    business,
-    client,
-    projectTitle: invoice.project.title,
-    total: formatMoney(invoice.grandTotalCents),
-    dueDate
+    publicUrl: publicInvoiceUrl
   });
 
   return (
@@ -197,7 +192,6 @@ export default async function InvoiceDetailPage({ params }: { params: Promise<{ 
                     <InvoiceRow
                       description={`Labour for ${invoice.project.title}`}
                       detail={`${formatDateAU(invoice.dateRangeStart)} - ${formatDateAU(invoice.dateRangeEnd)}`}
-                      mutedDetail="Daily hours and hourly rates hidden for simple invoice mode."
                       amount={formatMoney(labourSubtotalCents)}
                     />
                   ) : null}
@@ -288,8 +282,74 @@ export default async function InvoiceDetailPage({ params }: { params: Promise<{ 
 
           <section className="card">
             <p className="section-title">Actions</p>
-            <div className="mt-4">
-              <InvoiceExportActions invoiceText={invoiceText} emailText={emailText} />
+            <div className="mt-4 grid gap-2">
+              <Link href={`/invoices/${invoice.id}/email`} className="tap-primary w-full">
+                <Mail size={20} aria-hidden="true" />
+                Email Invoice
+              </Link>
+              <InvoiceExportActions invoiceText={invoiceText} />
+            </div>
+          </section>
+
+          <section className="card">
+            <p className="section-title">Client invoice link</p>
+            <div className="mt-4 grid gap-2">
+              {publicInvoiceUrl ? (
+                <>
+                  <p className="break-all rounded-lg border border-line bg-paper p-3 text-xs font-bold text-moss">{publicInvoiceUrl}</p>
+                  <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-1">
+                    <CopyTextButton value={publicInvoiceUrl} label="Client link" copiedLabel="Client link copied.">
+                      <Link2 size={18} aria-hidden="true" />
+                      Copy Link
+                    </CopyTextButton>
+                    <Link href={publicInvoiceUrl} className="tap-secondary w-full" target="_blank" rel="noreferrer">
+                      <ExternalLink size={18} aria-hidden="true" />
+                      Open
+                    </Link>
+                  </div>
+                  <form action={regenerateInvoicePublicLinkAction}>
+                    <input type="hidden" name="invoiceId" value={invoice.id} />
+                    <ConfirmSubmitButton
+                      className="tap-secondary w-full"
+                      message="Regenerate this invoice link? The current client link will stop working."
+                      pendingLabel="Regenerating..."
+                      showDefaultIcon={false}
+                    >
+                      <RefreshCcw size={18} aria-hidden="true" />
+                      Regenerate Link
+                    </ConfirmSubmitButton>
+                  </form>
+                  <form action={revokeInvoicePublicLinkAction}>
+                    <input type="hidden" name="invoiceId" value={invoice.id} />
+                    <ConfirmSubmitButton
+                      className="tap-danger w-full"
+                      message="Revoke this client invoice link? Anyone with the current link will lose access."
+                      pendingLabel="Revoking..."
+                      showDefaultIcon={false}
+                    >
+                      <XCircle size={18} aria-hidden="true" />
+                      Revoke Link
+                    </ConfirmSubmitButton>
+                  </form>
+                </>
+              ) : canSharePublicLink ? (
+                <form action={enableInvoicePublicLinkAction}>
+                  <input type="hidden" name="invoiceId" value={invoice.id} />
+                  <SubmitButton className="tap-secondary w-full" pendingLabel="Creating link...">
+                    <Link2 size={18} aria-hidden="true" />
+                    Create Client Link
+                  </SubmitButton>
+                </form>
+              ) : (
+                <p className="rounded-lg border border-line bg-paper p-3 text-sm font-bold text-moss">
+                  Mark this invoice as sent before creating a client link.
+                </p>
+              )}
+              {invoice.publicTokenEnabled && !publicInvoiceUrl ? (
+                <p className="rounded-lg border border-gum/30 bg-gum/10 p-3 text-sm font-bold text-gum">
+                  Set APP_BASE_URL in production so the app can build full client invoice links.
+                </p>
+              ) : null}
             </div>
           </section>
 
@@ -377,6 +437,11 @@ function snapshot(frozen: boolean, frozenValue: string | null | undefined, liveV
   return frozen ? frozenValue ?? liveValue ?? null : liveValue ?? null;
 }
 
+function absoluteAppUrl(path: string) {
+  const baseUrl = process.env.APP_BASE_URL?.replace(/\/$/, "") || (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL.replace(/\/$/, "")}` : "");
+  return baseUrl ? `${baseUrl}${path}` : path;
+}
+
 function invoiceWarnings(
   profile: {
     tradingName: string;
@@ -446,156 +511,4 @@ function TotalLine({ label, value, strong = false }: { label: string; value: str
       <dd className={strong ? "text-2xl font-black text-ink" : "font-black text-ink"}>{value}</dd>
     </div>
   );
-}
-
-type InvoiceTextSource = {
-  invoiceNumber: string;
-  project: { title: string };
-  dateRangeStart: Date;
-  dateRangeEnd: Date;
-  invoiceDate: Date;
-  mode: "SIMPLE" | "DETAILED";
-  labourTotalCents: number;
-  gstCents: number;
-  grandTotalCents: number;
-  lineItems: {
-    type: "LABOUR" | "EXPENSE";
-    description: string;
-    date: Date | null;
-    hoursMinutes: number | null;
-    unitAmountCents: number;
-    totalAmountCents: number;
-    quantity: unknown;
-    notes: string | null;
-  }[];
-};
-
-type ExportBusiness = {
-  name: string;
-  contactName: string | null;
-  abn: string | null;
-  bankAccountName: string | null;
-  bsb: string | null;
-  accountNumber: string | null;
-  defaultInvoiceEmailMessage: string | null;
-};
-
-type ExportClient = {
-  businessName: string;
-  contactName: string | null;
-};
-
-function buildInvoiceText({
-  invoice,
-  invoiceTitle,
-  business,
-  client,
-  dueDate,
-  subtotalCents,
-  totalDurationMinutes
-}: {
-  invoice: InvoiceTextSource;
-  invoiceTitle: string;
-  business: ExportBusiness;
-  client: ExportClient;
-  dueDate: Date;
-  subtotalCents: number;
-  totalDurationMinutes: number;
-}) {
-  const lines = [
-    `${invoiceTitle} ${invoice.invoiceNumber}`,
-    `Business: ${business.name}`,
-    business.abn ? `ABN: ${business.abn}` : "",
-    `Client: ${client.businessName}`,
-    `Project: ${invoice.project.title}`,
-    `Date range: ${formatDateAU(invoice.dateRangeStart)} - ${formatDateAU(invoice.dateRangeEnd)}`,
-    `Issue date: ${formatDateAU(invoice.invoiceDate)}`,
-    `Due date: ${formatDateAU(dueDate)}`,
-    "",
-    "Line items"
-  ];
-
-  if (invoice.mode === "SIMPLE") {
-    if (invoice.labourTotalCents > 0) {
-      lines.push(`- Labour for ${invoice.project.title}: ${formatMoney(invoice.labourTotalCents)}`);
-      lines.push(`  ${formatDateAU(invoice.dateRangeStart)} - ${formatDateAU(invoice.dateRangeEnd)}`);
-    }
-  } else {
-    for (const line of invoice.lineItems.filter((item) => item.type === "LABOUR")) {
-      lines.push(
-        `- ${line.date ? formatDateAU(line.date) : line.description}: ${formatHours(line.hoursMinutes ?? 0)} hrs at ${formatMoney(line.unitAmountCents)}/h - ${formatMoney(line.totalAmountCents)}`
-      );
-      if (line.notes) lines.push(`  ${line.notes}`);
-    }
-  }
-
-  for (const line of invoice.lineItems.filter((item) => item.type === "EXPENSE")) {
-    lines.push(`- ${line.description}: Qty ${Number(line.quantity ?? 0)} at ${formatMoney(line.unitAmountCents)} - ${formatMoney(line.totalAmountCents)}`);
-    if (line.notes) lines.push(`  ${line.notes}`);
-  }
-
-  lines.push("", `Labour: ${formatMoney(invoice.labourTotalCents)}`);
-  const expenseTotal = subtotalCents - invoice.labourTotalCents;
-  if (expenseTotal > 0) lines.push(`Expenses/materials: ${formatMoney(expenseTotal)}`);
-  lines.push(`Subtotal: ${formatMoney(subtotalCents)}`);
-  if (invoice.gstCents > 0) lines.push(`GST: ${formatMoney(invoice.gstCents)}`);
-  lines.push(`Total due: ${formatMoney(invoice.grandTotalCents)}`, `Payment reference: ${invoice.invoiceNumber}`, "");
-
-  if (business.bankAccountName || business.bsb || business.accountNumber) {
-    lines.push("Payment details");
-    if (business.bankAccountName) lines.push(`Account name: ${business.bankAccountName}`);
-    if (business.bsb) lines.push(`BSB: ${business.bsb}`);
-    if (business.accountNumber) lines.push(`Account: ${business.accountNumber}`);
-  }
-
-  if (invoice.mode === "SIMPLE" && totalDurationMinutes > 0) {
-    lines.push("", "Simple invoice mode hides daily/hourly labour detail.");
-  }
-
-  return lines.filter(Boolean).join("\n");
-}
-
-function buildEmailText({
-  invoiceNumber,
-  business,
-  client,
-  projectTitle,
-  total,
-  dueDate
-}: {
-  invoiceNumber: string;
-  business: ExportBusiness;
-  client: ExportClient;
-  projectTitle: string;
-  total: string;
-  dueDate: Date;
-}) {
-  const greetingName = client.contactName || client.businessName;
-  const customMessage = business.defaultInvoiceEmailMessage?.trim();
-
-  return [
-    `Subject: Invoice ${invoiceNumber} - ${business.name}`,
-    "",
-    `Hi ${greetingName},`,
-    "",
-    customMessage || `Please find invoice ${invoiceNumber} for work completed on ${projectTitle}.`,
-    "",
-    `Invoice number: ${invoiceNumber}`,
-    `Project: ${projectTitle}`,
-    `Total amount due: ${total}`,
-    `Due date: ${formatDateAU(dueDate)}`,
-    "",
-    "Payment details:",
-    business.bankAccountName ? `Account name: ${business.bankAccountName}` : "",
-    business.bsb ? `BSB: ${business.bsb}` : "",
-    business.accountNumber ? `Account: ${business.accountNumber}` : "",
-    `Payment reference: ${invoiceNumber}`,
-    "",
-    "The invoice is attached or included below for your records.",
-    "",
-    "Thanks,",
-    business.contactName || business.name
-  ]
-    .filter(Boolean)
-    .join("\n");
 }

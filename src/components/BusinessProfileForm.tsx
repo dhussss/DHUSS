@@ -2,9 +2,10 @@
 
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { AlertCircle, Building2, CheckCircle2, Save, Trash2, Upload } from "lucide-react";
+import { AlertCircle, Building2, CheckCircle2, Mail, Palette, Save, Trash2, Upload } from "lucide-react";
 import { updateBusinessProfileAction } from "@/app/actions";
 import { createClient } from "@/lib/supabase/browser";
+import { themePresets } from "@/lib/themes";
 
 type BusinessProfileFormValue = {
   tradingName: string;
@@ -26,6 +27,11 @@ type BusinessProfileFormValue = {
   paymentTermsDays: number;
   defaultInvoiceNotes: string;
   defaultInvoiceEmailMessage: string;
+  defaultInvoiceEmailSubjectTemplate: string;
+  defaultInvoiceEmailBody: string;
+  replyToEmail: string;
+  themeAccent: string;
+  themeMode: string;
   signatureFooter: string;
 };
 
@@ -217,12 +223,76 @@ export function BusinessProfileForm({
             <textarea name="defaultInvoiceNotes" defaultValue={profile.defaultInvoiceNotes} />
           </label>
           <label className="md:col-span-2">
-            Default invoice email message
-            <textarea name="defaultInvoiceEmailMessage" defaultValue={profile.defaultInvoiceEmailMessage} />
-          </label>
-          <label className="md:col-span-2">
             Signature/footer
             <textarea name="signatureFooter" defaultValue={profile.signatureFooter} />
+          </label>
+        </div>
+      </section>
+
+      <section className="card">
+        <div className="flex items-center gap-3">
+          <span className="grid size-10 place-items-center rounded-lg bg-mint/10 text-mint">
+            <Mail size={20} aria-hidden="true" />
+          </span>
+          <div>
+            <p className="section-title">Email defaults</p>
+            <h2 className="text-xl font-black tracking-normal">Invoice email</h2>
+          </div>
+        </div>
+        <div className="mt-5 grid gap-4">
+          <label>
+            Reply-to email
+            <input name="replyToEmail" type="email" defaultValue={profile.replyToEmail || profile.email} />
+          </label>
+          <label>
+            Default subject template
+            <input
+              name="defaultInvoiceEmailSubjectTemplate"
+              defaultValue={profile.defaultInvoiceEmailSubjectTemplate || "Invoice {{invoiceNumber}} – {{businessName}}"}
+            />
+          </label>
+          <label>
+            Default email body
+            <textarea
+              name="defaultInvoiceEmailBody"
+              defaultValue={
+                profile.defaultInvoiceEmailBody ||
+                profile.defaultInvoiceEmailMessage ||
+                "Hi {{clientName}},\n\nPlease find invoice {{invoiceNumber}} for {{projectName}}.\n\nTotal due: {{totalDue}}\nDue date: {{dueDate}}\n\nThanks,\n{{businessName}}"
+              }
+            />
+          </label>
+        </div>
+      </section>
+
+      <section className="card">
+        <div className="flex items-center gap-3">
+          <span className="grid size-10 place-items-center rounded-lg bg-mint/10 text-mint">
+            <Palette size={20} aria-hidden="true" />
+          </span>
+          <div>
+            <p className="section-title">App theme</p>
+            <h2 className="text-xl font-black tracking-normal">Professional colours</h2>
+          </div>
+        </div>
+        <div className="mt-5 grid gap-4 md:grid-cols-2">
+          <label>
+            Accent colour
+            <select name="themeAccent" defaultValue={profile.themeAccent || "emerald"}>
+              {Object.entries(themePresets).map(([value, preset]) => (
+                <option key={value} value={value}>
+                  {preset.label}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label>
+            Display mode
+            <select name="themeMode" defaultValue={profile.themeMode || "system"}>
+              <option value="system">System</option>
+              <option value="light">Light</option>
+              <option value="dark">Dark</option>
+            </select>
           </label>
         </div>
       </section>
@@ -318,6 +388,9 @@ function validateBusinessProfile(formData: FormData, gstRegistered: boolean, log
 
   const email = String(formData.get("email") ?? "").trim();
   if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return "Enter a valid email address.";
+
+  const replyToEmail = String(formData.get("replyToEmail") ?? "").trim();
+  if (replyToEmail && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(replyToEmail)) return "Enter a valid reply-to email address.";
 
   const bsb = digitsOnly(String(formData.get("bsb") ?? ""));
   if (bsb && bsb.length !== 6) return "BSB must be 6 digits.";

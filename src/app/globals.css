@@ -3,6 +3,8 @@
 @tailwind utilities;
 
 :root {
+  --color-accent-rgb: 15 159 143;
+  --color-secondary-rgb: 84 116 91;
   color: #17211c;
   background: #fbfaf6;
 }
@@ -112,6 +114,8 @@ label {
   .invoice-sheet {
     width: min(100%, 210mm);
     min-height: 297mm;
+    --color-accent-rgb: 15 159 143;
+    --color-secondary-rgb: 84 116 91;
     @apply mx-auto flex flex-col rounded-lg border border-line bg-white p-5 shadow-soft sm:p-8;
   }
 

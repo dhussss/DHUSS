@@ -28,6 +28,7 @@ export async function updateSession(request: NextRequest) {
   const path = request.nextUrl.pathname;
   const isAuthPage = path === "/login" || path === "/signup";
   const isAuthCallback = path.startsWith("/auth/callback");
+  const isPublicInvoice = path.startsWith("/public/invoices/");
   const isPublicAsset =
     path.startsWith("/_next") ||
     path.startsWith("/icons") ||
@@ -35,7 +36,7 @@ export async function updateSession(request: NextRequest) {
     path === "/sw.js" ||
     path === "/favicon.ico";
 
-  if (!user && !isAuthPage && !isAuthCallback && !isPublicAsset) {
+  if (!user && !isAuthPage && !isAuthCallback && !isPublicInvoice && !isPublicAsset) {
     const url = request.nextUrl.clone();
     url.pathname = "/login";
     url.searchParams.set("next", path);
