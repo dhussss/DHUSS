@@ -24,10 +24,10 @@ export default async function BusinessProfilePage({
 
   return (
     <main className="page-shell">
-      <header>
+      <header className="page-header">
         <p className="section-title">Business Profile</p>
-        <h1 className="mt-2 text-3xl font-black tracking-normal">Invoice identity</h1>
-        <p className="mt-2 max-w-2xl text-sm font-bold text-moss">
+        <h1 className="page-title">Invoice identity</h1>
+        <p className="page-subtitle">
           These details are private to your account and will be used for your invoices.
         </p>
       </header>

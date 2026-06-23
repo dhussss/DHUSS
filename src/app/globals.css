@@ -76,15 +76,43 @@ label {
 
 @layer components {
   .page-shell {
-    @apply mx-auto flex min-h-screen w-full max-w-5xl flex-col px-4 pb-40 pt-5 sm:px-6 md:pb-44;
+    @apply mx-auto flex min-h-screen w-full max-w-5xl flex-col px-4 pb-44 pt-5 sm:px-6 md:pb-44;
   }
 
   .section-title {
-    @apply text-sm font-bold uppercase text-moss;
+    @apply text-sm font-black uppercase text-moss;
+  }
+
+  .page-header {
+    @apply rounded-lg border border-line bg-white/85 p-4 shadow-soft sm:p-5;
+  }
+
+  .page-title {
+    @apply mt-2 text-3xl font-black tracking-normal text-ink sm:text-4xl;
+  }
+
+  .page-subtitle {
+    @apply mt-2 max-w-2xl text-sm font-bold leading-6 text-moss;
+  }
+
+  .surface-panel {
+    @apply overflow-hidden rounded-lg border border-line bg-white/85 shadow-soft;
+  }
+
+  .surface-header {
+    @apply border-b border-line bg-white p-4 sm:p-5;
+  }
+
+  .search-panel {
+    @apply rounded-lg border border-line bg-white/90 p-2 shadow-soft;
   }
 
   .card {
-    @apply rounded-lg border border-line bg-white/90 p-4 shadow-soft;
+    @apply rounded-lg border border-line bg-white/90 p-4 shadow-soft sm:p-5;
+  }
+
+  .icon-tile {
+    @apply grid size-10 shrink-0 place-items-center rounded-lg bg-mint/10 text-mint;
   }
 
   .tap-primary {
@@ -100,7 +128,7 @@ label {
   }
 
   .status-pill {
-    @apply inline-flex items-center rounded-full border px-2.5 py-1 text-xs font-bold uppercase;
+    @apply inline-flex shrink-0 items-center whitespace-nowrap rounded-full border px-2.5 py-1 text-xs font-black uppercase;
   }
 
   .bottom-safe {

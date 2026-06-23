@@ -93,7 +93,7 @@ export function HoursExportClient({
 
   return (
     <div className="grid gap-5">
-      <section className="grid gap-4">
+      <section className="card grid gap-4">
         <label>
           Project
           <select value={projectId} onChange={(event) => setProjectId(event.target.value)}>

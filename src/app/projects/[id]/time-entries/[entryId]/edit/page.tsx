@@ -34,10 +34,10 @@ export default async function EditTimeEntryPage({
         Project
       </Link>
 
-      <header>
+      <header className="page-header">
         <p className="section-title">Edit hours</p>
-        <h1 className="mt-2 text-3xl font-black tracking-normal">{entry.project.title}</h1>
-        <p className="mt-1 font-bold text-moss">{entry.project.client.businessName}</p>
+        <h1 className="page-title">{entry.project.title}</h1>
+        <p className="page-subtitle">{entry.project.client.businessName}</p>
       </header>
 
       <section className="mt-6 max-w-2xl">

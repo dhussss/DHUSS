@@ -46,9 +46,9 @@ export default async function EditProjectPage({
         Project
       </Link>
 
-      <header>
+      <header className="page-header">
         <p className="section-title">Edit project</p>
-        <h1 className="mt-2 text-3xl font-black tracking-normal">{project.title}</h1>
+        <h1 className="page-title">{project.title}</h1>
       </header>
 
       <section className="mt-6 max-w-2xl">

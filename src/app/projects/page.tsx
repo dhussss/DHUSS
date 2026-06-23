@@ -24,10 +24,10 @@ export default async function ProjectsPage({
 
   return (
     <main className="page-shell">
-      <header className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+      <header className="page-header flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
         <div>
           <p className="section-title">Projects</p>
-          <h1 className="mt-2 text-3xl font-black tracking-normal">Active jobs</h1>
+          <h1 className="page-title">Active jobs</h1>
         </div>
         <Link href="/projects/new" className="tap-primary">
           <Plus size={20} aria-hidden="true" />
@@ -35,7 +35,7 @@ export default async function ProjectsPage({
         </Link>
       </header>
 
-      <form className="mt-5 flex items-center gap-2 rounded-lg border border-line bg-white p-2">
+      <form className="search-panel mt-5 flex items-center gap-2">
         <Search size={20} className="ml-2 text-moss" aria-hidden="true" />
         <input
           className="min-h-10 border-0 bg-transparent p-2 shadow-none focus:shadow-none"

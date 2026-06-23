@@ -30,22 +30,6 @@ export type DashboardData = {
     draft: { count: number; valueCents: number };
     paidThisMonth: { count: number; valueCents: number };
   };
-  recentActivity: {
-    id: string;
-    kind: "time" | "invoice" | "audit";
-    createdAt: string;
-    projectId: string | null;
-    projectTitle: string | null;
-    clientName: string | null;
-    durationMinutes: number | null;
-    invoiceId: string | null;
-    invoiceNumber: string | null;
-    invoiceStatus: string | null;
-    invoiceTotalCents: number | null;
-    auditAction: string | null;
-    entityType: string | null;
-    entityId: string | null;
-  }[];
   sentInvoices: {
     id: string;
     invoiceNumber: string;
@@ -56,7 +40,6 @@ export type DashboardData = {
     project: { title: string };
     client: { businessName: string };
   }[];
-  paidInvoices: { paymentDate: string; grandTotalCents: number }[];
   currentWeekStart: string;
   currentWeekEnd: string;
   currentWeekDays: {
@@ -79,8 +62,6 @@ export type DashboardData = {
   pendingInvoicesCents: number;
   overdueInvoiceCount: number;
   overdueInvoiceCents: number;
-  paidThisMonthCents: number;
-  paidThisQuarterCents: number;
   previousWeekEntries: {
     id: string;
     date: string;
@@ -94,9 +75,7 @@ type DashboardRow = {
   projects: DashboardData["projects"];
   topActiveProjects: DashboardData["topActiveProjects"];
   invoiceSnapshots: DashboardData["invoiceSnapshots"];
-  recentActivity: DashboardData["recentActivity"];
   sentInvoices: DashboardData["sentInvoices"];
-  paidInvoices: DashboardData["paidInvoices"];
   previousWeekEntries: DashboardData["previousWeekEntries"];
   currentWeekEntries: {
     id: string;
@@ -114,8 +93,6 @@ type DashboardRow = {
   pendingInvoicesCents: bigint | number | null;
   overdueInvoiceCount: bigint | number | null;
   overdueInvoiceCents: bigint | number | null;
-  paidThisMonthCents: bigint | number | null;
-  paidThisQuarterCents: bigint | number | null;
 };
 
 function numberValue(value: bigint | number | null | undefined) {
@@ -127,7 +104,6 @@ export async function loadDashboardData(ownerId: string): Promise<DashboardData>
   const currentWeek = currentWeekMondayToSunday(today);
   const previousWeek = previousWeekMondayToSunday();
   const monthStart = new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), 1));
-  const quarterStart = new Date(Date.UTC(today.getUTCFullYear(), Math.floor(today.getUTCMonth() / 3) * 3, 1));
   const rows = await prisma.$queryRaw<DashboardRow[]>`
     WITH bounds AS (
       SELECT
@@ -136,8 +112,7 @@ export async function loadDashboardData(ownerId: string): Promise<DashboardData>
         ${previousWeek.start}::timestamp AS previous_start_at,
         ${previousWeek.endInclusive}::timestamp AS previous_end_at,
         ${today}::timestamp AS today_at,
-        ${monthStart}::timestamp AS month_start_at,
-        ${quarterStart}::timestamp AS quarter_start_at
+        ${monthStart}::timestamp AS month_start_at
     ),
     active_projects AS (
       SELECT COALESCE(
@@ -179,28 +154,6 @@ export async function loadDashboardData(ownerId: string): Promise<DashboardData>
       JOIN "Project" p ON p.id = i."projectId"
       JOIN "Client" c ON c.id = i."clientId"
       WHERE i.status = 'SENT' AND i."ownerId" = ${ownerId}
-    ),
-    paid_invoices AS (
-      SELECT COALESCE(
-        jsonb_agg(
-          jsonb_build_object(
-            'paymentDate', i."paymentDate",
-            'grandTotalCents', i."grandTotalCents"
-          )
-          ORDER BY i."paymentDate" DESC
-        ),
-        '[]'::jsonb
-      ) AS data
-      FROM "Invoice" i
-      WHERE i.status = 'PAID' AND i."paymentDate" IS NOT NULL AND i."ownerId" = ${ownerId}
-    ),
-    paid_totals AS (
-      SELECT
-        COALESCE(SUM(i."grandTotalCents") FILTER (WHERE i."paymentDate" >= b.month_start_at), 0) AS paid_month,
-        COALESCE(SUM(i."grandTotalCents") FILTER (WHERE i."paymentDate" >= b.quarter_start_at), 0) AS paid_quarter
-      FROM "Invoice" i
-      CROSS JOIN bounds b
-      WHERE i.status = 'PAID' AND i."paymentDate" IS NOT NULL AND i."ownerId" = ${ownerId}
     ),
     overdue_invoices AS (
       SELECT
@@ -348,107 +301,12 @@ export async function loadDashboardData(ownerId: string): Promise<DashboardData>
       FROM "Invoice" i
       CROSS JOIN bounds b
       WHERE i."ownerId" = ${ownerId}
-    ),
-    recent_activity_rows AS (
-      SELECT *
-      FROM (
-        SELECT
-          'time'::text AS kind,
-          t.id,
-          t."createdAt",
-          t."projectId",
-          p.title AS "projectTitle",
-          c."businessName" AS "clientName",
-          t."durationMinutes",
-          NULL::text AS "invoiceId",
-          NULL::text AS "invoiceNumber",
-          NULL::text AS "invoiceStatus",
-          NULL::integer AS "invoiceTotalCents",
-          NULL::text AS "auditAction",
-          NULL::text AS "entityType",
-          NULL::text AS "entityId"
-        FROM "TimeEntry" t
-        JOIN "Project" p ON p.id = t."projectId"
-        JOIN "Client" c ON c.id = p."clientId"
-        WHERE t."ownerId" = ${ownerId}
-
-        UNION ALL
-
-        SELECT
-          'invoice'::text AS kind,
-          i.id,
-          i."updatedAt" AS "createdAt",
-          i."projectId",
-          p.title AS "projectTitle",
-          c."businessName" AS "clientName",
-          NULL::integer AS "durationMinutes",
-          i.id AS "invoiceId",
-          i."invoiceNumber",
-          i.status::text AS "invoiceStatus",
-          i."grandTotalCents" AS "invoiceTotalCents",
-          NULL::text AS "auditAction",
-          NULL::text AS "entityType",
-          NULL::text AS "entityId"
-        FROM "Invoice" i
-        JOIN "Project" p ON p.id = i."projectId"
-        JOIN "Client" c ON c.id = i."clientId"
-        WHERE i."ownerId" = ${ownerId}
-
-        UNION ALL
-
-        SELECT
-          'audit'::text AS kind,
-          a.id,
-          a."createdAt",
-          NULL::text AS "projectId",
-          NULL::text AS "projectTitle",
-          NULL::text AS "clientName",
-          NULL::integer AS "durationMinutes",
-          NULL::text AS "invoiceId",
-          NULL::text AS "invoiceNumber",
-          NULL::text AS "invoiceStatus",
-          NULL::integer AS "invoiceTotalCents",
-          a.action AS "auditAction",
-          a."entityType",
-          a."entityId"
-        FROM "AuditLog" a
-        WHERE a."ownerId" = ${ownerId}
-      ) activity
-      ORDER BY "createdAt" DESC
-      LIMIT 8
-    ),
-    recent_activity AS (
-      SELECT COALESCE(
-        jsonb_agg(
-          jsonb_build_object(
-            'id', id,
-            'kind', kind,
-            'createdAt', "createdAt",
-            'projectId', "projectId",
-            'projectTitle', "projectTitle",
-            'clientName', "clientName",
-            'durationMinutes', "durationMinutes",
-            'invoiceId', "invoiceId",
-            'invoiceNumber', "invoiceNumber",
-            'invoiceStatus', "invoiceStatus",
-            'invoiceTotalCents', "invoiceTotalCents",
-            'auditAction', "auditAction",
-            'entityType', "entityType",
-            'entityId', "entityId"
-          )
-          ORDER BY "createdAt" DESC
-        ),
-        '[]'::jsonb
-      ) AS data
-      FROM recent_activity_rows
     )
     SELECT
       active_projects.data AS "projects",
       top_active_projects.data AS "topActiveProjects",
       invoice_snapshots.data AS "invoiceSnapshots",
-      recent_activity.data AS "recentActivity",
       sent_invoices.data AS "sentInvoices",
-      paid_invoices.data AS "paidInvoices",
       previous_week_entries.data AS "previousWeekEntries",
       current_week_entries.data AS "currentWeekEntries",
       current_week_entries.entry_count AS "currentWeekEntryCount",
@@ -459,10 +317,8 @@ export async function loadDashboardData(ownerId: string): Promise<DashboardData>
       sent_invoices.invoice_total AS "pendingPaymentCents",
       (unbilled_time.entry_total + unbilled_items.item_total) AS "pendingInvoicesCents",
       overdue_invoices.overdue_count AS "overdueInvoiceCount",
-      overdue_invoices.overdue_total AS "overdueInvoiceCents",
-      paid_totals.paid_month AS "paidThisMonthCents",
-      paid_totals.paid_quarter AS "paidThisQuarterCents"
-    FROM active_projects, top_active_projects, invoice_snapshots, recent_activity, sent_invoices, paid_invoices, paid_totals, overdue_invoices, unbilled_time, unbilled_items, previous_week_entries, current_week_entries
+      overdue_invoices.overdue_total AS "overdueInvoiceCents"
+    FROM active_projects, top_active_projects, invoice_snapshots, sent_invoices, overdue_invoices, unbilled_time, unbilled_items, previous_week_entries, current_week_entries
   `;
 
   const row = rows[0];
@@ -528,13 +384,7 @@ export async function loadDashboardData(ownerId: string): Promise<DashboardData>
         valueCents: numberValue(invoiceSnapshots.paidThisMonth.valueCents)
       }
     },
-    recentActivity: (row?.recentActivity ?? []).map((activity) => ({
-      ...activity,
-      durationMinutes: activity.durationMinutes === null ? null : numberValue(activity.durationMinutes),
-      invoiceTotalCents: activity.invoiceTotalCents === null ? null : numberValue(activity.invoiceTotalCents)
-    })),
     sentInvoices: row?.sentInvoices ?? [],
-    paidInvoices: row?.paidInvoices ?? [],
     currentWeekStart: dateInputValue(currentWeek.start),
     currentWeekEnd: dateInputValue(currentWeek.end),
     currentWeekDays,
@@ -547,9 +397,7 @@ export async function loadDashboardData(ownerId: string): Promise<DashboardData>
     pendingPaymentCents: numberValue(row?.pendingPaymentCents),
     pendingInvoicesCents: numberValue(row?.pendingInvoicesCents),
     overdueInvoiceCount: numberValue(row?.overdueInvoiceCount),
-    overdueInvoiceCents: numberValue(row?.overdueInvoiceCents),
-    paidThisMonthCents: numberValue(row?.paidThisMonthCents),
-    paidThisQuarterCents: numberValue(row?.paidThisQuarterCents)
+    overdueInvoiceCents: numberValue(row?.overdueInvoiceCents)
   };
 }
 

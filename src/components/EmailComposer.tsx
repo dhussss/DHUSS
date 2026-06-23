@@ -112,7 +112,7 @@ export function EmailComposer({
         </p>
       </div>
 
-      <article className="overflow-hidden rounded-lg border border-line bg-white shadow-soft">
+      <article className="surface-panel">
         <div className="border-b border-line bg-paper px-5 py-4">
           <p className="section-title">Prepared email preview</p>
           <div className="mt-3 grid gap-2 text-sm font-bold text-ink">
@@ -125,7 +125,7 @@ export function EmailComposer({
           </div>
         </div>
         <div className="bg-white px-5 py-6 sm:px-7">
-          <div className="mx-auto max-w-2xl rounded-lg border border-line bg-white p-5 shadow-soft sm:p-7">
+          <div className="mx-auto max-w-2xl">
             <PreviewBody body={body} />
           </div>
         </div>

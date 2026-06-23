@@ -118,15 +118,15 @@ export default async function NewInvoicePage({
         <ArrowLeft size={18} aria-hidden="true" />
         Invoices
       </Link>
-      <header>
+      <header className="page-header">
         <p className="section-title">New invoice</p>
-        <h1 className="mt-2 text-3xl font-black tracking-normal">Create invoice draft</h1>
-        <p className="mt-2 max-w-2xl text-sm font-bold text-moss">
+        <h1 className="page-title">Create invoice draft</h1>
+        <p className="page-subtitle">
           Build a draft from unbilled work, review what will be included, then finalise it from the invoice preview.
         </p>
       </header>
 
-      <section className="mt-6 grid gap-2 sm:grid-cols-5">
+      <section className="mt-5 grid gap-2 sm:grid-cols-5">
         {invoiceSteps.map(({ step, label, icon: Icon }) => (
           <div key={label} className="rounded-lg border border-line bg-white p-3">
             <div className="flex items-center gap-2">
@@ -138,7 +138,7 @@ export default async function NewInvoicePage({
         ))}
       </section>
 
-      <form className="mt-6 grid gap-4 rounded-lg border border-line bg-white p-4" method="get">
+      <form className="card mt-5 grid gap-4" method="get">
         <label>
           Project
           <select name="projectId" defaultValue={projectId} required>

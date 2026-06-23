@@ -1,20 +1,16 @@
 import Link from "next/link";
 import {
-  Activity,
   AlertTriangle,
   ArrowRight,
   Banknote,
   Building2,
-  CheckCircle2,
   ClipboardList,
   Clock3,
-  Download,
   FileClock,
   FilePlus2,
   FolderKanban,
   LogOut,
   ReceiptText,
-  ShieldCheck,
   Sparkles,
   Timer,
   TrendingUp,
@@ -24,9 +20,7 @@ import type { LucideIcon } from "lucide-react";
 import { Children, type ReactNode } from "react";
 import { logoutAction } from "@/app/actions";
 import { LogTimeSheet } from "@/components/LogTimeSheet";
-import { WeeklyPaidChart } from "@/components/WeeklyPaidChart";
 import { requireUserId } from "@/lib/auth";
-import { buildPaidWeeklyTotals } from "@/lib/dashboard";
 import { getDashboardData, type DashboardData } from "@/lib/app-data";
 import { dateInputValue, formatDateAU, previousWeekMondayToSunday, todayInPerth } from "@/lib/dates";
 import { formatMoney } from "@/lib/money";
@@ -50,9 +44,7 @@ export default async function DashboardPage() {
     projects,
     topActiveProjects,
     invoiceSnapshots,
-    recentActivity,
     sentInvoices,
-    paidInvoices,
     previousWeekEntries,
     currentWeekDays,
     totalCurrentWeekMinutes,
@@ -62,11 +54,9 @@ export default async function DashboardPage() {
     unbilledItemCount,
     pendingPaymentCents,
     pendingInvoicesCents,
-    overdueInvoiceCount,
-    overdueInvoiceCents
+    overdueInvoiceCount
   } = dashboardData;
 
-  const paidWeeks = buildPaidWeeklyTotals(paidInvoices);
   const displayName = profile?.contactName || profile?.tradingName || "there";
   const showSetup = !profile || projects.length === 0 || (unbilledEntryCount === 0 && unbilledItemCount === 0 && sentInvoices.length === 0);
   const todayLabel = new Intl.DateTimeFormat("en-AU", {
@@ -76,7 +66,6 @@ export default async function DashboardPage() {
     year: "numeric",
     timeZone: "UTC"
   }).format(today);
-  const attentionCount = Number(overdueInvoiceCount > 0) + Number(pendingInvoicesCents > 0) + Number(invoiceSnapshots.draft.count > 0);
 
   return (
     <main className="page-shell max-w-6xl">
@@ -140,13 +129,7 @@ export default async function DashboardPage() {
         </div>
 
         <div className="flex flex-wrap items-center gap-2 border-t border-white/10 bg-black/15 px-4 py-3 sm:px-6 lg:px-7">
-          <span className="inline-flex min-h-9 items-center gap-2 rounded-lg bg-white/10 px-3 text-xs font-black uppercase text-white/80">
-            <Activity size={16} aria-hidden="true" />
-            {attentionCount ? `${attentionCount} attention item${attentionCount === 1 ? "" : "s"}` : "All clear"}
-          </span>
           <AdminLink href="/business-profile" icon={Building2} label="Profile" />
-          <AdminLink href="/backup" icon={Download} label="Backup" />
-          <AdminLink href="/audit-log" icon={ShieldCheck} label="Audit" />
           <form action={logoutAction}>
             <button className="inline-flex min-h-9 items-center gap-2 rounded-lg px-3 text-xs font-bold text-white/75 transition hover:bg-white/10 hover:text-white" type="submit">
               <LogOut size={16} aria-hidden="true" />
@@ -194,7 +177,7 @@ export default async function DashboardPage() {
         <WeekCalendar days={currentWeekDays} hasEntries={currentWeekEntryCount > 0} />
       </section>
 
-      <section className="mt-4 grid gap-4 xl:grid-cols-[1.08fr_0.9fr_0.92fr]">
+      <section className="mt-4 grid gap-4 xl:grid-cols-[1.05fr_0.95fr_0.9fr]">
         <DashboardWidget
           title="Top Active Projects"
           actionHref="/projects"
@@ -232,66 +215,6 @@ export default async function DashboardPage() {
         </DashboardWidget>
 
         <DashboardWidget
-          title="Recent Activity"
-          actionHref="/audit-log"
-          actionLabel="Audit"
-          emptyIcon={Activity}
-          emptyText="No recent activity yet."
-          accent="ink"
-        >
-          {recentActivity.map((activity) => {
-            const copy = activityCopy(activity);
-            const href = activityHref(activity);
-            const content = (
-              <article className="rounded-lg border border-line bg-white p-3 transition hover:border-mint">
-                <div className="flex gap-3">
-                  <span className={`grid size-9 shrink-0 place-items-center rounded-lg ${activityIconTone(activity.kind)}`}>
-                    <copy.icon size={18} aria-hidden="true" />
-                  </span>
-                  <div className="min-w-0">
-                    <p className="font-black leading-5 text-ink">{copy.label}</p>
-                    <p className="mt-1 text-xs font-bold text-moss">
-                      {copy.detail}
-                      {copy.detail ? " - " : ""}
-                      {formatDateAU(activity.createdAt)}
-                    </p>
-                  </div>
-                </div>
-              </article>
-            );
-
-            return href ? (
-              <Link key={`${activity.kind}-${activity.id}`} href={href} className="block">
-                {content}
-              </Link>
-            ) : (
-              <div key={`${activity.kind}-${activity.id}`}>{content}</div>
-            );
-          })}
-        </DashboardWidget>
-      </section>
-
-      <section className="mt-4 grid gap-4 lg:grid-cols-[1fr_0.8fr]">
-        <DashboardWidget
-          title="Needs Attention"
-          actionHref="/invoices"
-          actionLabel="Open"
-          emptyIcon={CheckCircle2}
-          emptyText="Nothing urgent right now."
-          accent={attentionCount ? "gum" : "mint"}
-        >
-          {overdueInvoiceCount ? (
-            <AttentionItem icon={AlertTriangle} title={`${overdueInvoiceCount} overdue invoice${overdueInvoiceCount === 1 ? "" : "s"}`} detail={`${formatMoney(overdueInvoiceCents)} needs follow-up`} tone="gum" />
-          ) : null}
-          {pendingInvoicesCents ? (
-            <AttentionItem icon={ReceiptText} title="Work ready to invoice" detail={`${formatMoney(pendingInvoicesCents)} across unbilled time and expenses`} tone="mint" />
-          ) : null}
-          {invoiceSnapshots.draft.count ? (
-            <AttentionItem icon={FileClock} title={`${invoiceSnapshots.draft.count} draft invoice${invoiceSnapshots.draft.count === 1 ? "" : "s"}`} detail={`${formatMoney(invoiceSnapshots.draft.valueCents)} waiting to finalise`} tone="yolk" />
-          ) : null}
-        </DashboardWidget>
-
-        <DashboardWidget
           title="Previous Week Hours"
           actionHref={previousWeekExportLink}
           actionLabel="Export"
@@ -316,10 +239,6 @@ export default async function DashboardPage() {
           ))}
         </DashboardWidget>
       </section>
-
-      <div className="mt-4">
-        <WeeklyPaidChart weeks={paidWeeks} />
-      </div>
     </main>
   );
 }
@@ -392,43 +311,53 @@ function WeekTotal({ label, value }: { label: string; value: string }) {
 function WeekCalendar({ days, hasEntries }: { days: DashboardData["currentWeekDays"]; hasEntries: boolean }) {
   return (
     <section>
-      <div className="grid divide-y divide-line sm:grid-cols-7 sm:divide-x sm:divide-y-0">
-        {days.map((day) => {
-          const dayTarget = 8 * 60;
-          const progress = Math.min((day.totalMinutes / dayTarget) * 100, 100);
-          return (
-            <article key={day.date} className={`min-h-48 p-4 ${day.isToday ? "bg-mint/10" : "bg-white"}`}>
-              <div className="flex items-start justify-between gap-2">
-                <div>
-                  <p className="text-xs font-black uppercase text-moss">{day.dayName}</p>
-                  <p className="mt-1 text-2xl font-black tracking-normal text-ink">{day.dateLabel}</p>
-                </div>
-                {day.isToday ? <span className="status-pill border-mint bg-white text-mint">today</span> : null}
-              </div>
-              <div className="mt-5 grid grid-cols-2 gap-2">
-                <SnapshotMini label="Hours" value={`${formatHours(day.totalMinutes)}h`} />
-                <SnapshotMini label="Value" value={formatMoney(day.billableValueCents)} />
-              </div>
-              <div className="mt-4 h-2 overflow-hidden rounded-full bg-paper">
-                <div className={`h-full rounded-full ${day.isToday ? "bg-yolk" : "bg-mint"}`} style={{ width: `${Math.max(progress, day.totalMinutes ? 8 : 0)}%` }} />
-              </div>
-              <div className="mt-4 min-h-12 text-xs font-bold leading-5 text-moss">
-                {day.projects.length ? (
-                  <div className="flex flex-wrap gap-1.5">
-                    {day.projects.slice(0, 3).map((project) => (
-                      <span key={project} className="rounded-full bg-paper px-2 py-1">
-                        {project}
-                      </span>
-                    ))}
-                    {day.projects.length > 3 ? <span className="rounded-full bg-paper px-2 py-1">+{day.projects.length - 3}</span> : null}
+      <div className="overflow-x-auto">
+        <div className="grid min-w-[64rem] grid-cols-7 divide-x divide-line">
+          {days.map((day) => {
+            const dayTarget = 8 * 60;
+            const progress = Math.min((day.totalMinutes / dayTarget) * 100, 100);
+            const projectChips = day.projects.slice(0, 2);
+            const extraProjectCount = Math.max(day.projects.length - projectChips.length, 0);
+
+            return (
+              <article key={day.date} className={`min-h-56 p-4 ${day.isToday ? "bg-mint/10 shadow-[inset_0_3px_0_rgb(var(--color-accent-rgb))]" : "bg-white"}`}>
+                <div className="grid min-h-16 gap-2">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <p className="truncate text-xs font-black uppercase text-moss">{day.dayName}</p>
+                      <p className="mt-1 text-2xl font-black tracking-normal text-ink">{day.dateLabel}</p>
+                    </div>
+                    {day.isToday ? <span className="shrink-0 rounded-full border border-mint bg-white px-2 py-1 text-[0.64rem] font-black uppercase text-mint">Today</span> : null}
                   </div>
-                ) : (
-                  "No work logged"
-                )}
-              </div>
-            </article>
-          );
-        })}
+                </div>
+
+                <div className="mt-4 space-y-1.5">
+                  <p className="text-lg font-black text-ink">{formatHours(day.totalMinutes)}h logged</p>
+                  <p className="text-sm font-bold text-moss">{formatMoney(day.billableValueCents)} billable</p>
+                </div>
+
+                <div className="mt-4 h-2 overflow-hidden rounded-full bg-paper">
+                  <div className={`h-full rounded-full ${day.isToday ? "bg-yolk" : "bg-mint"}`} style={{ width: `${Math.max(progress, day.totalMinutes ? 8 : 0)}%` }} />
+                </div>
+
+                <div className="mt-4 min-h-16 text-xs font-bold leading-5 text-moss">
+                  {projectChips.length ? (
+                    <div className="flex flex-wrap gap-1.5">
+                      {projectChips.map((project) => (
+                        <span key={project} className="max-w-full truncate rounded-full bg-paper px-2 py-1">
+                          {project}
+                        </span>
+                      ))}
+                      {extraProjectCount ? <span className="rounded-full bg-paper px-2 py-1">+{extraProjectCount} more</span> : null}
+                    </div>
+                  ) : (
+                    <span className="text-moss/75">No work logged</span>
+                  )}
+                </div>
+              </article>
+            );
+          })}
+        </div>
       </div>
 
       {!hasEntries ? (
@@ -538,20 +467,6 @@ function InvoiceSnapshotGrid({ snapshots }: { snapshots: DashboardData["invoiceS
   );
 }
 
-function AttentionItem({ icon: Icon, title, detail, tone }: { icon: LucideIcon; title: string; detail: string; tone: "mint" | "yolk" | "gum" }) {
-  return (
-    <article className="flex items-center gap-3 rounded-lg border border-line bg-white p-3">
-      <span className={`grid size-10 shrink-0 place-items-center rounded-lg ${snapshotTone(tone)}`}>
-        <Icon size={19} aria-hidden="true" />
-      </span>
-      <div>
-        <p className="font-black text-ink">{title}</p>
-        <p className="mt-1 text-sm font-bold text-moss">{detail}</p>
-      </div>
-    </article>
-  );
-}
-
 function snapshotTone(tone: "mint" | "yolk" | "gum" | "ink") {
   const tones = {
     mint: "bg-mint/10 text-mint",
@@ -560,76 +475,4 @@ function snapshotTone(tone: "mint" | "yolk" | "gum" | "ink") {
     ink: "bg-ink/10 text-ink"
   };
   return tones[tone];
-}
-
-function activityIconTone(kind: DashboardData["recentActivity"][number]["kind"]) {
-  const tones = {
-    time: "bg-mint/10 text-mint",
-    invoice: "bg-yolk/15 text-yolk",
-    audit: "bg-ink/10 text-ink"
-  };
-  return tones[kind];
-}
-
-function activityCopy(activity: DashboardData["recentActivity"][number]): { icon: LucideIcon; label: string; detail: string } {
-  if (activity.kind === "time") {
-    return {
-      icon: Clock3,
-      label: `Logged ${formatHours(activity.durationMinutes ?? 0)}h on ${activity.projectTitle ?? "a project"}`,
-      detail: activity.clientName ?? "Time entry"
-    };
-  }
-
-  if (activity.kind === "invoice") {
-    return {
-      icon: ReceiptText,
-      label: `Invoice ${activity.invoiceNumber ?? ""} ${invoiceActivityStatus(activity.invoiceStatus)}`.trim(),
-      detail: [activity.projectTitle, activity.invoiceTotalCents === null ? null : formatMoney(activity.invoiceTotalCents)].filter(Boolean).join(" - ")
-    };
-  }
-
-  return {
-    icon: Activity,
-    label: auditActionLabel(activity.auditAction),
-    detail: activity.entityType ?? "Activity"
-  };
-}
-
-function invoiceActivityStatus(status: string | null) {
-  if (status === "SENT") return "marked sent";
-  if (status === "PAID") return "marked paid";
-  if (status === "DRAFT") return "saved as draft";
-  if (status === "VOID") return "voided";
-  return "updated";
-}
-
-function auditActionLabel(action: string | null) {
-  const labels: Record<string, string> = {
-    "client.created": "Client created",
-    "client.updated": "Client updated",
-    "client.deleted": "Client removed",
-    "project.created": "Project created",
-    "project.updated": "Project updated",
-    "project.archived": "Project archived",
-    "project.unarchived": "Project restored",
-    "time_entry.created": "Time entry logged",
-    "time_entry.updated": "Time entry updated",
-    "time_entry.deleted": "Time entry removed",
-    "invoice.draft_created": "Invoice draft created",
-    "invoice.finalised_sent": "Invoice marked sent",
-    "invoice.marked_paid": "Invoice marked paid",
-    "invoice.email_prepared": "Invoice email prepared"
-  };
-
-  if (!action) return "Activity recorded";
-  return labels[action] ?? action.replaceAll("_", " ").replaceAll(".", " ");
-}
-
-function activityHref(activity: DashboardData["recentActivity"][number]) {
-  if (activity.kind === "time" && activity.projectId) return `/projects/${activity.projectId}`;
-  if (activity.kind === "invoice" && activity.invoiceId) return `/invoices/${activity.invoiceId}`;
-  if (activity.entityType === "Project" && activity.entityId) return `/projects/${activity.entityId}`;
-  if (activity.entityType === "Invoice" && activity.entityId) return `/invoices/${activity.entityId}`;
-  if (activity.entityType === "Client") return "/clients";
-  return null;
 }

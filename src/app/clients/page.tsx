@@ -40,15 +40,15 @@ export default async function ClientsPage({
 
   return (
     <main className="page-shell">
-      <header>
+      <header className="page-header">
         <div className="flex items-center gap-2 text-moss">
           <UsersRound size={20} aria-hidden="true" />
           <p className="section-title">Clients</p>
         </div>
-        <h1 className="mt-2 text-3xl font-black tracking-normal">Client register</h1>
+        <h1 className="page-title">Client register</h1>
       </header>
 
-      <form className="mt-5 flex items-center gap-2 rounded-lg border border-line bg-white p-2">
+      <form className="search-panel mt-5 flex items-center gap-2">
         <Search size={20} className="ml-2 text-moss" aria-hidden="true" />
         <input
           className="min-h-10 border-0 bg-transparent p-2 shadow-none focus:shadow-none"

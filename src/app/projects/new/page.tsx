@@ -19,12 +19,12 @@ export default async function NewProjectPage() {
         <ArrowLeft size={18} aria-hidden="true" />
         Projects
       </Link>
-      <header>
+      <header className="page-header">
         <p className="section-title">New project</p>
-        <h1 className="mt-2 text-3xl font-black tracking-normal">Add a job</h1>
+        <h1 className="page-title">Add a job</h1>
       </header>
 
-      <section className="mt-6 max-w-2xl">
+      <section className="card mt-6 max-w-2xl">
         <CreateProjectForm clients={clients} />
       </section>
     </main>

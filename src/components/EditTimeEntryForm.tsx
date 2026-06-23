@@ -31,7 +31,7 @@ export function EditTimeEntryForm({ entry }: { entry: EditableTimeEntry }) {
   }, [startTime, endTime]);
 
   return (
-    <form action={updateTimeEntryAction} className="mt-6 grid gap-4">
+    <form action={updateTimeEntryAction} className="card grid gap-4">
       <input type="hidden" name="entryId" value={entry.id} />
       <input type="hidden" name="projectId" value={entry.projectId} />
 

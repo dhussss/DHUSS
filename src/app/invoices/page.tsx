@@ -34,10 +34,10 @@ export default async function InvoicesPage({
 
   return (
     <main className="page-shell">
-      <header className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+      <header className="page-header flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
         <div>
           <p className="section-title">Invoices</p>
-          <h1 className="mt-2 text-3xl font-black tracking-normal">Invoice history</h1>
+          <h1 className="page-title">Invoice history</h1>
         </div>
         <Link href="/invoices/new" className="tap-primary">
           <Plus size={20} aria-hidden="true" />
@@ -57,7 +57,7 @@ export default async function InvoicesPage({
         ))}
       </nav>
 
-      <form className="mt-4 flex flex-col gap-2 rounded-lg border border-line bg-white p-3 sm:flex-row" action="/invoices">
+      <form className="search-panel mt-4 flex flex-col gap-2 sm:flex-row" action="/invoices">
         {status !== "ALL" ? <input type="hidden" name="status" value={status.toLowerCase()} /> : null}
         <label className="flex-1">
           Search invoices

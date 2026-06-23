@@ -77,10 +77,10 @@ export default async function InvoiceEmailPage({ params }: { params: Promise<{ i
         </Link>
       </div>
 
-      <header className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+      <header className="page-header flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
         <div>
           <p className="section-title">Email invoice</p>
-          <h1 className="mt-2 text-3xl font-black tracking-normal">Prepare email</h1>
+          <h1 className="page-title">Prepare email</h1>
           <p className="mt-1 text-xl font-black tracking-normal">{invoice.invoiceNumber}</p>
           <p className="mt-1 text-sm font-bold text-moss">
             {invoice.project.title} - {client.businessName}

@@ -22,9 +22,9 @@ export default async function HoursExportPage({
 
   return (
     <main className="page-shell">
-      <header>
+      <header className="page-header">
         <p className="section-title">Hours Export</p>
-        <h1 className="mt-2 text-3xl font-black tracking-normal">Text report generator</h1>
+        <h1 className="page-title">Text report generator</h1>
       </header>
 
       <section className="mt-6 max-w-3xl">

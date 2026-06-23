@@ -141,7 +141,7 @@ export default async function ProjectDetailPage({ params }: { params: Promise<{ 
             </Link>
           ) : null}
         </div>
-        <div className={`grid divide-y sm:grid-cols-4 sm:divide-x sm:divide-y-0 ${hasUnbilledWork ? "divide-white/10 border-t border-white/10 bg-white/10" : "divide-line border-t border-line bg-paper/40"}`}>
+        <div className={`grid gap-3 border-t p-4 sm:grid-cols-2 xl:grid-cols-4 ${hasUnbilledWork ? "border-white/10 bg-black/10" : "border-line bg-paper/40"}`}>
           <UnbilledStat label="Hours" value={`${formatHours(unbilledMinutes)}h`} dark={hasUnbilledWork} />
           <UnbilledStat label="Labour" value={formatMoney(unbilledTimeValueCents)} dark={hasUnbilledWork} />
           <UnbilledStat label="Expenses" value={formatMoney(unbilledExpenseValueCents)} dark={hasUnbilledWork} />
@@ -288,9 +288,9 @@ function ProjectMetric({
 
 function UnbilledStat({ label, value, dark }: { label: string; value: string; dark: boolean }) {
   return (
-    <div className="p-4">
+    <div className={`rounded-lg border p-4 shadow-soft ${dark ? "border-white/15 bg-gradient-to-br from-mint/20 to-white/10" : "border-line bg-white"}`}>
       <p className={`text-xs font-black uppercase ${dark ? "text-white/60" : "text-moss"}`}>{label}</p>
-      <p className={`mt-1 text-2xl font-black tracking-normal ${dark ? "text-white" : "text-ink"}`}>{value}</p>
+      <p className={`mt-2 text-2xl font-black tracking-normal ${dark ? "text-white" : "text-ink"}`}>{value}</p>
     </div>
   );
 }

@@ -33,15 +33,15 @@ export default async function EditClientPage({ params }: { params: Promise<{ id:
         Clients
       </Link>
 
-      <header>
+      <header className="page-header">
         <div className="flex items-center gap-2 text-moss">
           <UsersRound size={20} aria-hidden="true" />
           <p className="section-title">Edit client</p>
         </div>
-        <h1 className="mt-2 text-3xl font-black tracking-normal">{client.businessName}</h1>
+        <h1 className="page-title">{client.businessName}</h1>
       </header>
 
-      <section className="mt-6 max-w-2xl">
+      <section className="card mt-6 max-w-2xl">
         <ClientEditForm client={client} />
       </section>
     </main>
