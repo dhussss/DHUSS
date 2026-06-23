@@ -44,7 +44,8 @@ export default async function InvoiceEmailPage({ params }: { params: Promise<{ i
     total: formatMoney(invoice.grandTotalCents),
     totalDue: formatMoney(invoice.grandTotalCents),
     amountDue: formatMoney(invoice.grandTotalCents),
-    dueDate: formatEmailDate(dueDate)
+    dueDate: formatEmailDate(dueDate),
+    senderName: business.contactName || business.name
   };
   const subjectTemplate = profile?.defaultInvoiceEmailSubjectTemplate || "Invoice {{invoiceNumber}} from {{businessName}}";
   const subject = renderTemplate(subjectTemplate, templateValues);
@@ -53,10 +54,13 @@ export default async function InvoiceEmailPage({ params }: { params: Promise<{ i
     business,
     client,
     publicUrl: fullPublicUrl,
-    greeting: renderTemplate(profile?.defaultInvoiceGreeting || "Hi {{clientName}},\n\nI hope you're well.", templateValues),
-    intro: renderTemplate(profile?.defaultInvoiceBody || "Please find invoice {{invoiceNumber}} for {{projectName}}.", templateValues),
-    signOff: renderTemplate(profile?.defaultInvoiceSignOff || "Kind regards,", templateValues),
-    footer: renderTemplate(profile?.defaultInvoiceFooter || "{{businessName}}", templateValues)
+    greeting: profile?.defaultEmailGreeting,
+    intro: profile?.defaultEmailIntro,
+    paymentLine: profile?.defaultEmailPaymentLine,
+    signOff: profile?.defaultEmailSignOff,
+    includePaymentDetails: profile?.includePaymentDetailsInEmail ?? false,
+    includeInvoiceSummary: profile?.includeInvoiceSummaryInEmail ?? false,
+    includePublicInvoiceLink: profile?.includePublicInvoiceLinkInEmail ?? true
   });
   const disabledReason = !canSend
     ? "Mark this invoice as sent before emailing it."
@@ -110,13 +114,18 @@ export default async function InvoiceEmailPage({ params }: { params: Promise<{ i
           <section className="card">
             <p className="section-title">Client link</p>
             {fullPublicUrl ? (
-              <Link href={fullPublicUrl} target="_blank" rel="noreferrer" className="tap-secondary mt-4 w-full">
-                <ExternalLink size={18} aria-hidden="true" />
-                Open Link
-              </Link>
+              <div className="mt-4 grid gap-3">
+                <p className="rounded-lg border border-mint/30 bg-mint/10 p-3 text-sm font-bold text-moss">
+                  Public invoice link is active{profile?.includePublicInvoiceLinkInEmail ?? true ? " and will be included in the email." : ", but email inclusion is turned off in Business Profile."}
+                </p>
+                <Link href={fullPublicUrl} target="_blank" rel="noreferrer" className="tap-secondary w-full">
+                  <ExternalLink size={18} aria-hidden="true" />
+                  Open Link
+                </Link>
+              </div>
             ) : (
               <p className="mt-4 rounded-lg border border-line bg-paper p-3 text-sm font-bold text-moss">
-                No active client link. The prepared email includes a clear invoice summary instead.
+                No active client link. The email stays short and plain text.
               </p>
             )}
           </section>

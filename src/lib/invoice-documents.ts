@@ -97,13 +97,18 @@ export function defaultInvoiceEmailBody(invoice: InvoiceDocumentData, business: 
   return [
     `Hi ${client.contactName || client.businessName},`,
     "",
+    "I hope you're well.",
+    "",
     `Please find invoice ${invoice.invoiceNumber} for ${invoice.project.title}.`,
     "",
-    `Total due: ${formatMoney(invoice.grandTotalCents)}`,
-    `Due date: ${formatDateAU(dueDate)}`,
+    `Amount due: ${formatMoney(invoice.grandTotalCents)}`,
+    `Due date: ${formatEmailDate(dueDate)}`,
     "",
-    "Thanks,",
-    business.contactName || business.name
+    "Payment can be made using the invoice number as the reference.",
+    "",
+    "Kind regards,",
+    business.contactName || business.name,
+    business.name
   ].join("\n");
 }
 
@@ -114,8 +119,11 @@ export function buildPreparedInvoiceEmailBody({
   publicUrl,
   greeting,
   intro,
+  paymentLine,
   signOff,
-  footer
+  includePaymentDetails = false,
+  includeInvoiceSummary = false,
+  includePublicInvoiceLink = true
 }: {
   invoice: InvoiceDocumentData;
   business: InvoiceBusinessDetails;
@@ -123,75 +131,53 @@ export function buildPreparedInvoiceEmailBody({
   publicUrl?: string | null;
   greeting?: string | null;
   intro?: string | null;
+  paymentLine?: string | null;
   signOff?: string | null;
-  footer?: string | null;
+  includePaymentDetails?: boolean;
+  includeInvoiceSummary?: boolean;
+  includePublicInvoiceLink?: boolean;
 }) {
   const dueDate = invoiceDueDate(invoice);
-  const { labourSubtotalCents, expensesSubtotalCents, subtotalCents } = invoiceSubtotals(invoice);
-  const opening = greeting?.trim() || `Hi ${client.contactName || client.businessName},\n\nI hope you're well.`;
-  const introText = intro?.trim() || `Please find invoice ${invoice.invoiceNumber} for ${invoice.project.title}.`;
-  const lines = [
-    ...opening.split("\n"),
+  const { labourSubtotalCents, expensesSubtotalCents } = invoiceSubtotals(invoice);
+  const values = invoiceEmailTemplateValues({ invoice, business, client, publicUrl, dueDate, labourSubtotalCents, expensesSubtotalCents });
+  const blocks = [
+    renderTemplate(greeting || "Hi {{clientName}},", values),
     "",
-    ...introText.split("\n"),
+    renderTemplate(intro || "I hope you're well.\n\nPlease find invoice {{invoiceNumber}} for {{projectName}}.", values),
     "",
-    "Invoice Details",
+    `Amount due: ${values.amountDue}`,
+    `Due date: ${values.dueDate}`,
     "",
-    "Invoice Number:",
-    invoice.invoiceNumber,
-    "",
-    "Project:",
-    invoice.project.title,
-    "",
-    "Amount Due:",
-    formatMoney(invoice.grandTotalCents),
-    "",
-    "Due Date:",
-    formatEmailDate(dueDate),
-    "",
-    "Payment Reference:",
-    invoice.invoiceNumber,
-    "",
-    "Payment Details",
-    ""
+    renderTemplate(paymentLine || "Payment can be made using the invoice number as the reference.", values)
   ];
 
-  if (business.bankAccountName) lines.push("Account Name:", business.bankAccountName, "");
-  if (business.bsb) lines.push("BSB:", business.bsb, "");
-  if (business.accountNumber) lines.push("Account Number:", business.accountNumber, "");
-
-  if (publicUrl) {
-    lines.push("View Invoice Online:", publicUrl, "");
-  } else {
-    lines.push(
-      "Invoice Summary",
-      "",
-      "Labour:",
-      formatMoney(labourSubtotalCents),
-      "",
-      ...(expensesSubtotalCents > 0 ? ["Expenses / Materials:", formatMoney(expensesSubtotalCents), ""] : []),
-      "Subtotal:",
-      formatMoney(subtotalCents),
-      "",
-      ...(invoice.gstCents > 0 ? ["GST:", formatMoney(invoice.gstCents), ""] : []),
-      "Total Due:",
-      formatMoney(invoice.grandTotalCents),
-      ""
-    );
+  if (includePublicInvoiceLink && publicUrl) {
+    blocks.push("", "View invoice online:", publicUrl);
   }
 
-  lines.push(
-    "If you have any questions regarding this invoice, please feel free to contact us.",
-    "",
-    ...(signOff?.trim() || "Kind regards,").split("\n"),
-    "",
-    business.contactName || business.name
-  );
+  if (includePaymentDetails) {
+    blocks.push("", "Payment details:");
+    if (business.bankAccountName) blocks.push(`Account name: ${business.bankAccountName}`);
+    if (business.bsb) blocks.push(`BSB: ${business.bsb}`);
+    if (business.accountNumber) blocks.push(`Account number: ${business.accountNumber}`);
+    blocks.push(`Reference: ${invoice.invoiceNumber}`);
+  }
 
-  const footerText = footer?.trim();
-  lines.push(...(footerText || business.name).split("\n"));
+  if (includeInvoiceSummary) {
+    blocks.push("", "Invoice summary:");
+    if (labourSubtotalCents > 0) blocks.push(`Labour: ${values.labourTotal}`);
+    if (expensesSubtotalCents > 0) blocks.push(`Expenses: ${values.expensesTotal}`);
+    if (invoice.gstCents > 0) blocks.push(`GST: ${values.gstTotal}`);
+    blocks.push(`Total: ${values.amountDue}`);
+  }
 
-  return lines.join("\n").replace(/\n{3,}/g, "\n\n").trim();
+  blocks.push("", renderTemplate(signOff || "Kind regards,\n{{senderName}}\n{{businessName}}", values));
+
+  return blocks
+    .join("\n")
+    .replace(/[ \t]+\n/g, "\n")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
 }
 
 function formatEmailDate(date: Date | string | number) {
@@ -202,6 +188,44 @@ function formatEmailDate(date: Date | string | number) {
     year: "numeric",
     timeZone: "UTC"
   }).format(value);
+}
+
+function invoiceEmailTemplateValues({
+  invoice,
+  business,
+  client,
+  publicUrl,
+  dueDate,
+  labourSubtotalCents,
+  expensesSubtotalCents
+}: {
+  invoice: InvoiceDocumentData;
+  business: InvoiceBusinessDetails;
+  client: InvoiceClientDetails;
+  publicUrl?: string | null;
+  dueDate: Date;
+  labourSubtotalCents: number;
+  expensesSubtotalCents: number;
+}) {
+  return {
+    clientName: client.contactName || client.businessName,
+    clientBusinessName: client.businessName,
+    invoiceNumber: invoice.invoiceNumber,
+    projectName: invoice.project.title,
+    projectTitle: invoice.project.title,
+    amountDue: formatMoney(invoice.grandTotalCents),
+    dueDate: formatEmailDate(dueDate),
+    senderName: business.contactName || business.name,
+    businessName: business.name,
+    accountName: business.bankAccountName || "",
+    bsb: business.bsb || "",
+    accountNumber: business.accountNumber || "",
+    paymentReference: invoice.invoiceNumber,
+    labourTotal: formatMoney(labourSubtotalCents),
+    expensesTotal: formatMoney(expensesSubtotalCents),
+    gstTotal: formatMoney(invoice.gstCents),
+    publicInvoiceLink: publicUrl || ""
+  };
 }
 
 export function buildInvoicePlainText({

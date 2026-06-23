@@ -181,13 +181,13 @@ The diagnostics page helps choose the next fix: if TCP/TLS connect is fast but P
 
 ## Invoice Email Setup
 
-No email provider is required for the normal workflow. `/invoices/<id>/email` prepares an editable email, then opens the user's default email app with a `mailto:` link so the invoice is sent from that user's own account.
+No email provider is required for the normal workflow. `/invoices/<id>/email` prepares a short, editable plain-text email, then opens the user's default email app with a `mailto:` link so the invoice is sent from that user's own account.
 
-Set `APP_BASE_URL` in Vercel if you use public invoice links. Without it, the email body falls back to a clear invoice summary instead of a public link.
+Set `APP_BASE_URL` in Vercel if you use public invoice links. When a public link exists, Business Profile controls whether that link is included in the prepared email.
 
-The default invoice email template can be customised in `/business-profile` with merge tags: `{{clientName}}`, `{{invoiceNumber}}`, `{{projectName}}`, `{{amountDue}}`, `{{dueDate}}`, and `{{businessName}}`.
+The default invoice email template can be customised in `/business-profile` with merge tags: `{{clientName}}`, `{{invoiceNumber}}`, `{{projectName}}`, `{{amountDue}}`, `{{dueDate}}`, `{{senderName}}`, and `{{businessName}}`. Payment details and a short invoice summary are optional and off by default.
 
-Resend/API-key based server sending is not part of the active workflow. If server-side sending is reintroduced later, treat `RESEND_API_KEY` and `RESEND_FROM_EMAIL` as optional future-only environment variables.
+Resend/API-key based server sending is not part of the active workflow. Fully branded HTML invoice emails require a verified sending provider such as Resend, Postmark, or similar, and are a future option. If server-side sending is reintroduced later, treat `RESEND_API_KEY` and `RESEND_FROM_EMAIL` as optional future-only environment variables.
 
 ## Backup Export
 
@@ -215,7 +215,7 @@ Use `/diagnostics?token=<BACKUP_EXPORT_TOKEN>` while logged in to open a private
 - `/login` signs users in with Supabase Auth.
 - Dashboard, clients, projects, invoices, hours export, backup, diagnostics, and server actions require a logged-in user.
 - `/business-profile` lets each user save their own trading name, legal details, ABN/ACN, contact details, GST defaults, bank details, invoice notes, email message, logo, and footer.
-- `/business-profile` also stores default invoice email subject, greeting, body, sign-off, footer, reply-to email, and the app theme preset.
+- `/business-profile` also stores default invoice email subject, plain-text greeting, intro, payment line, sign-off, optional email include settings, reply-to email, and the app theme preset.
 - Logo files are uploaded directly from the browser to the private `business-logos` Storage bucket under the user's own folder. The server action stores only the Storage path, which avoids Vercel's 1 MB Server Action body limit.
 - Logo validation allows PNG, JPG, WEBP, and SVG files up to 1 MB. 500 KB or smaller is recommended for fast invoice previews.
 - Invoice detail pages show the user's logo when available.
@@ -233,7 +233,7 @@ Use `/diagnostics?token=<BACKUP_EXPORT_TOKEN>` while logged in to open a private
 - Invoice preview uses an A4-style document layout for screen and print. App navigation, action buttons, and app backgrounds are hidden in print.
 - Invoice preview supports Copy Invoice Text, browser Print / Save as PDF, and a prepare-email workflow at `/invoices/<id>/email`.
 - Email preparation requires the invoice to be sent or paid. It does not require `RESEND_API_KEY` or `RESEND_FROM_EMAIL`.
-- The email composer opens the user's own email app with the recipient, subject, and body filled in. Copy Email Text is available as a fallback.
+- The email composer opens the user's own email app with the recipient, subject, and professional plain-text body filled in. Copy Email Text is available as a fallback.
 - `APP_BASE_URL` is only needed when the prepared email includes an active public invoice link.
 - Sent and paid invoices can create a secure client invoice link at `/public/invoices/<token>`. Links can be revoked or regenerated from the invoice page.
 - Public invoice links are token-based, unlisted, and only work while enabled on sent or paid invoices. Void invoices automatically disable their public link.

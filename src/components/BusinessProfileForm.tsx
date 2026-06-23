@@ -33,6 +33,13 @@ type BusinessProfileFormValue = {
   defaultInvoiceBody: string;
   defaultInvoiceSignOff: string;
   defaultInvoiceFooter: string;
+  defaultEmailGreeting: string;
+  defaultEmailIntro: string;
+  defaultEmailPaymentLine: string;
+  defaultEmailSignOff: string;
+  includePaymentDetailsInEmail: boolean;
+  includeInvoiceSummaryInEmail: boolean;
+  includePublicInvoiceLinkInEmail: boolean;
   replyToEmail: string;
   themeAccent: string;
   themeMode: string;
@@ -256,31 +263,43 @@ export function BusinessProfileForm({
             />
           </label>
           <label>
-            Default invoice greeting
+            Default email greeting
+            <textarea name="defaultEmailGreeting" rows={2} defaultValue={profile.defaultEmailGreeting || "Hi {{clientName}},"} />
+          </label>
+          <label>
+            Default email intro
             <textarea
-              name="defaultInvoiceGreeting"
+              name="defaultEmailIntro"
+              rows={4}
+              defaultValue={profile.defaultEmailIntro || "I hope you're well.\n\nPlease find invoice {{invoiceNumber}} for {{projectName}}."}
+            />
+          </label>
+          <label>
+            Default email payment line
+            <textarea
+              name="defaultEmailPaymentLine"
               rows={2}
-              defaultValue={profile.defaultInvoiceGreeting || "Hi {{clientName}},\n\nI hope you're well."}
+              defaultValue={profile.defaultEmailPaymentLine || "Payment can be made using the invoice number as the reference."}
             />
           </label>
           <label>
-            Default invoice body
-            <textarea
-              name="defaultInvoiceBody"
-              rows={3}
-              defaultValue={profile.defaultInvoiceBody || profile.defaultInvoiceEmailBody || profile.defaultInvoiceEmailMessage || "Please find invoice {{invoiceNumber}} for {{projectName}}."}
-            />
+            Default email sign-off
+            <textarea name="defaultEmailSignOff" rows={3} defaultValue={profile.defaultEmailSignOff || "Kind regards,\n{{senderName}}\n{{businessName}}"} />
           </label>
-          <label>
-            Default invoice sign-off
-            <textarea name="defaultInvoiceSignOff" rows={2} defaultValue={profile.defaultInvoiceSignOff || "Kind regards,"} />
+          <label className="flex min-h-12 grid-cols-none flex-row items-center gap-3 rounded-lg border border-line bg-white px-3">
+            <input className="size-5 min-h-0 w-auto" type="checkbox" name="includePublicInvoiceLinkInEmail" defaultChecked={profile.includePublicInvoiceLinkInEmail} />
+            Include public invoice link when available
           </label>
-          <label>
-            Default invoice footer
-            <textarea name="defaultInvoiceFooter" rows={2} defaultValue={profile.defaultInvoiceFooter || "{{businessName}}"} />
+          <label className="flex min-h-12 grid-cols-none flex-row items-center gap-3 rounded-lg border border-line bg-white px-3">
+            <input className="size-5 min-h-0 w-auto" type="checkbox" name="includePaymentDetailsInEmail" defaultChecked={profile.includePaymentDetailsInEmail} />
+            Include payment details in email
+          </label>
+          <label className="flex min-h-12 grid-cols-none flex-row items-center gap-3 rounded-lg border border-line bg-white px-3">
+            <input className="size-5 min-h-0 w-auto" type="checkbox" name="includeInvoiceSummaryInEmail" defaultChecked={profile.includeInvoiceSummaryInEmail} />
+            Include short invoice summary in email
           </label>
           <p className="rounded-lg border border-line bg-paper p-3 text-xs font-bold text-moss">
-            Merge tags: {"{{clientName}}"}, {"{{invoiceNumber}}"}, {"{{projectName}}"}, {"{{amountDue}}"}, {"{{dueDate}}"}, {"{{businessName}}"}
+            Merge tags: {"{{clientName}}"}, {"{{invoiceNumber}}"}, {"{{projectName}}"}, {"{{amountDue}}"}, {"{{dueDate}}"}, {"{{senderName}}"}, {"{{businessName}}"}
           </p>
         </div>
       </section>

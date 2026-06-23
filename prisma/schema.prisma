@@ -277,6 +277,13 @@ model BusinessProfile {
   defaultInvoiceBody         String?
   defaultInvoiceSignOff      String?
   defaultInvoiceFooter       String?
+  defaultEmailGreeting       String?
+  defaultEmailIntro          String?
+  defaultEmailPaymentLine    String?
+  defaultEmailSignOff        String?
+  includePaymentDetailsInEmail Boolean @default(false)
+  includeInvoiceSummaryInEmail Boolean @default(false)
+  includePublicInvoiceLinkInEmail Boolean @default(true)
   replyToEmail               String?
   themeAccent                String   @default("emerald")
   themeSecondary             String?

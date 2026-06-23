@@ -161,8 +161,17 @@ export async function updateBusinessProfileAction(formData: FormData) {
   const { invoicePrefix, gstRate, themeAccent, themeMode } = validateBusinessProfileInput(formData, gstRegistered);
   const defaultInvoiceEmailBody = text(formData, "defaultInvoiceEmailBody") || text(formData, "defaultInvoiceBody") || null;
   const defaultInvoiceBody = text(formData, "defaultInvoiceBody") || defaultInvoiceEmailBody;
+  const includePaymentDetailsInEmail = text(formData, "includePaymentDetailsInEmail") === "on";
+  const includeInvoiceSummaryInEmail = text(formData, "includeInvoiceSummaryInEmail") === "on";
+  const includePublicInvoiceLinkInEmail = text(formData, "includePublicInvoiceLinkInEmail") === "on";
 
   const existing = await prisma.businessProfile.findUnique({ where: { ownerId } });
+  const legacyDefaultInvoiceEmailMessage = text(formData, "defaultInvoiceEmailMessage") || defaultInvoiceEmailBody || existing?.defaultInvoiceEmailMessage || null;
+  const legacyDefaultInvoiceEmailBody = defaultInvoiceEmailBody || existing?.defaultInvoiceEmailBody || null;
+  const legacyDefaultInvoiceGreeting = text(formData, "defaultInvoiceGreeting") || existing?.defaultInvoiceGreeting || null;
+  const legacyDefaultInvoiceBody = defaultInvoiceBody || existing?.defaultInvoiceBody || null;
+  const legacyDefaultInvoiceSignOff = text(formData, "defaultInvoiceSignOff") || existing?.defaultInvoiceSignOff || null;
+  const legacyDefaultInvoiceFooter = text(formData, "defaultInvoiceFooter") || existing?.defaultInvoiceFooter || null;
   let logoPath = existing?.logoPath ?? null;
   const removeLogo = text(formData, "removeLogo") === "on";
   const submittedLogoPath = text(formData, "logoPath");
@@ -203,13 +212,20 @@ export async function updateBusinessProfileAction(formData: FormData) {
       accountNumber: text(formData, "accountNumber") || null,
       paymentTermsDays: optionalInt(formData, "paymentTermsDays", 14),
       defaultInvoiceNotes: text(formData, "defaultInvoiceNotes") || null,
-      defaultInvoiceEmailMessage: text(formData, "defaultInvoiceEmailMessage") || defaultInvoiceEmailBody,
+      defaultInvoiceEmailMessage: legacyDefaultInvoiceEmailMessage,
       defaultInvoiceEmailSubjectTemplate: text(formData, "defaultInvoiceEmailSubjectTemplate") || null,
-      defaultInvoiceEmailBody,
-      defaultInvoiceGreeting: text(formData, "defaultInvoiceGreeting") || null,
-      defaultInvoiceBody: defaultInvoiceBody || null,
-      defaultInvoiceSignOff: text(formData, "defaultInvoiceSignOff") || null,
-      defaultInvoiceFooter: text(formData, "defaultInvoiceFooter") || null,
+      defaultInvoiceEmailBody: legacyDefaultInvoiceEmailBody,
+      defaultInvoiceGreeting: legacyDefaultInvoiceGreeting,
+      defaultInvoiceBody: legacyDefaultInvoiceBody,
+      defaultInvoiceSignOff: legacyDefaultInvoiceSignOff,
+      defaultInvoiceFooter: legacyDefaultInvoiceFooter,
+      defaultEmailGreeting: text(formData, "defaultEmailGreeting") || null,
+      defaultEmailIntro: text(formData, "defaultEmailIntro") || null,
+      defaultEmailPaymentLine: text(formData, "defaultEmailPaymentLine") || null,
+      defaultEmailSignOff: text(formData, "defaultEmailSignOff") || null,
+      includePaymentDetailsInEmail,
+      includeInvoiceSummaryInEmail,
+      includePublicInvoiceLinkInEmail,
       replyToEmail: text(formData, "replyToEmail") || null,
       themeAccent,
       themeMode,
@@ -235,13 +251,20 @@ export async function updateBusinessProfileAction(formData: FormData) {
       accountNumber: text(formData, "accountNumber") || null,
       paymentTermsDays: optionalInt(formData, "paymentTermsDays", 14),
       defaultInvoiceNotes: text(formData, "defaultInvoiceNotes") || null,
-      defaultInvoiceEmailMessage: text(formData, "defaultInvoiceEmailMessage") || defaultInvoiceEmailBody,
+      defaultInvoiceEmailMessage: legacyDefaultInvoiceEmailMessage,
       defaultInvoiceEmailSubjectTemplate: text(formData, "defaultInvoiceEmailSubjectTemplate") || null,
-      defaultInvoiceEmailBody,
-      defaultInvoiceGreeting: text(formData, "defaultInvoiceGreeting") || null,
-      defaultInvoiceBody: defaultInvoiceBody || null,
-      defaultInvoiceSignOff: text(formData, "defaultInvoiceSignOff") || null,
-      defaultInvoiceFooter: text(formData, "defaultInvoiceFooter") || null,
+      defaultInvoiceEmailBody: legacyDefaultInvoiceEmailBody,
+      defaultInvoiceGreeting: legacyDefaultInvoiceGreeting,
+      defaultInvoiceBody: legacyDefaultInvoiceBody,
+      defaultInvoiceSignOff: legacyDefaultInvoiceSignOff,
+      defaultInvoiceFooter: legacyDefaultInvoiceFooter,
+      defaultEmailGreeting: text(formData, "defaultEmailGreeting") || null,
+      defaultEmailIntro: text(formData, "defaultEmailIntro") || null,
+      defaultEmailPaymentLine: text(formData, "defaultEmailPaymentLine") || null,
+      defaultEmailSignOff: text(formData, "defaultEmailSignOff") || null,
+      includePaymentDetailsInEmail,
+      includeInvoiceSummaryInEmail,
+      includePublicInvoiceLinkInEmail,
       replyToEmail: text(formData, "replyToEmail") || null,
       themeAccent,
       themeMode,
