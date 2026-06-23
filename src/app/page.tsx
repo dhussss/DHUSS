@@ -68,7 +68,7 @@ export default async function DashboardPage() {
   }).format(today);
 
   return (
-    <main className="page-shell max-w-6xl">
+    <main className="page-shell max-w-[92rem]">
       <section className="overflow-hidden rounded-lg border border-ink/10 bg-ink text-white shadow-soft">
         <div className="bg-[radial-gradient(circle_at_top_left,rgba(15,159,143,0.42),transparent_34rem),linear-gradient(135deg,rgba(255,255,255,0.12),transparent_38%)] p-4 sm:p-6 lg:p-7">
           <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-start">
@@ -95,7 +95,7 @@ export default async function DashboardPage() {
             </div>
           </div>
 
-          <div className="mt-6 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+          <div className="mt-6 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
             <HeroKpi
               icon={Clock3}
               label="Weekly Hours"
@@ -160,24 +160,29 @@ export default async function DashboardPage() {
         </section>
       ) : null}
 
-      <section className="mt-4 overflow-hidden rounded-lg border border-line bg-white shadow-soft">
-        <div className="grid gap-3 border-b border-line bg-white p-4 md:grid-cols-[minmax(0,1fr)_auto] md:items-end">
-          <div>
-            <p className="section-title">Current week planner</p>
-            <h2 className="mt-1 text-3xl font-black tracking-normal">Monday to Sunday</h2>
-            <p className="mt-1 text-sm font-bold text-moss">
-              {formatDateAU(dashboardData.currentWeekStart)} - {formatDateAU(dashboardData.currentWeekEnd)}
-            </p>
-          </div>
-          <div className="grid grid-cols-2 gap-2 sm:w-[25rem]">
-            <WeekTotal label="Week hours" value={`${formatHours(totalCurrentWeekMinutes)}h`} />
-            <WeekTotal label="Week earnings" value={formatMoney(totalCurrentWeekBillableCents)} />
+      <section className="mt-5 rounded-lg border border-ink/10 bg-white shadow-soft">
+        <div className="rounded-t-lg bg-ink p-5 text-white sm:p-6">
+          <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-end">
+            <div>
+              <p className="inline-flex items-center gap-2 text-sm font-black uppercase text-mint">
+                <Timer size={17} aria-hidden="true" />
+                Current week planner
+              </p>
+              <h2 className="mt-1 text-3xl font-black tracking-normal sm:text-4xl">Monday to Sunday</h2>
+              <p className="mt-2 text-sm font-bold text-white/70">
+                {formatDateAU(dashboardData.currentWeekStart)} - {formatDateAU(dashboardData.currentWeekEnd)}
+              </p>
+            </div>
+            <div className="grid gap-2 sm:grid-cols-2 lg:w-[28rem]">
+              <WeekSummaryCard label="This Week" value={`${formatHours(totalCurrentWeekMinutes)}h`} note="logged hours" />
+              <WeekSummaryCard label="Earned" value={formatMoney(totalCurrentWeekBillableCents)} note="billable value" />
+            </div>
           </div>
         </div>
         <WeekCalendar days={currentWeekDays} hasEntries={currentWeekEntryCount > 0} />
       </section>
 
-      <section className="mt-4 grid gap-4 xl:grid-cols-[1.05fr_0.95fr_0.9fr]">
+      <section className="mt-5 grid gap-4 xl:grid-cols-[1.05fr_0.95fr_0.9fr]">
         <DashboardWidget
           title="Top Active Projects"
           actionHref="/projects"
@@ -299,11 +304,12 @@ function AdminLink({ href, icon: Icon, label }: { href: string; icon: LucideIcon
   );
 }
 
-function WeekTotal({ label, value }: { label: string; value: string }) {
+function WeekSummaryCard({ label, value, note }: { label: string; value: string; note: string }) {
   return (
-    <div className="rounded-lg border border-line bg-paper p-3">
-      <p className="text-xs font-black uppercase text-moss">{label}</p>
-      <p className="mt-1 text-2xl font-black tracking-normal text-ink">{value}</p>
+    <div className="rounded-lg border border-white/15 bg-white/10 p-4 shadow-soft">
+      <p className="text-xs font-black uppercase tracking-[0.12em] text-white/60">{label}</p>
+      <p className="mt-2 text-3xl font-black tracking-normal text-white">{value}</p>
+      <p className="mt-1 text-xs font-bold text-white/60">{note}</p>
     </div>
   );
 }
@@ -311,48 +317,59 @@ function WeekTotal({ label, value }: { label: string; value: string }) {
 function WeekCalendar({ days, hasEntries }: { days: DashboardData["currentWeekDays"]; hasEntries: boolean }) {
   return (
     <section>
-      <div className="overflow-x-auto">
-        <div className="grid min-w-[64rem] grid-cols-7 divide-x divide-line">
+      <div className="overflow-x-auto p-4 sm:p-5">
+        <div className="grid min-w-[82rem] grid-cols-7 items-stretch gap-3">
           {days.map((day) => {
             const dayTarget = 8 * 60;
             const progress = Math.min((day.totalMinutes / dayTarget) * 100, 100);
             const projectChips = day.projects.slice(0, 2);
             const extraProjectCount = Math.max(day.projects.length - projectChips.length, 0);
+            const entryLabel = `${day.entryCount} entr${day.entryCount === 1 ? "y" : "ies"}`;
 
             return (
-              <article key={day.date} className={`min-h-56 p-4 ${day.isToday ? "bg-mint/10 shadow-[inset_0_3px_0_rgb(var(--color-accent-rgb))]" : "bg-white"}`}>
-                <div className="grid min-h-16 gap-2">
-                  <div className="flex items-start justify-between gap-3">
-                    <div className="min-w-0">
-                      <p className="truncate text-xs font-black uppercase text-moss">{day.dayName}</p>
-                      <p className="mt-1 text-2xl font-black tracking-normal text-ink">{day.dateLabel}</p>
-                    </div>
-                    {day.isToday ? <span className="shrink-0 rounded-full border border-mint bg-white px-2 py-1 text-[0.64rem] font-black uppercase text-mint">Today</span> : null}
+              <article
+                key={day.date}
+                className={`flex h-full min-h-[21rem] flex-col rounded-lg border p-5 shadow-soft ${
+                  day.isToday ? "border-mint bg-mint/10 ring-2 ring-mint/20" : "border-line bg-white"
+                }`}
+              >
+                <header className="space-y-2">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <p className="text-xs font-black uppercase tracking-[0.12em] text-moss">{day.dayName}</p>
+                    {day.isToday ? <span className="rounded-full border border-mint bg-white px-2.5 py-1 text-[0.65rem] font-black uppercase leading-none text-mint">Today</span> : null}
+                  </div>
+                  <p className="text-3xl font-black tracking-normal text-ink">{day.dateLabel}</p>
+                </header>
+
+                <div className="mt-6 grid gap-3">
+                  <div className="rounded-lg border border-line bg-paper p-3">
+                    <p className="text-lg font-black text-ink">{formatHours(day.totalMinutes)}h logged</p>
+                    <p className="mt-1 text-sm font-bold text-moss">{formatMoney(day.billableValueCents)} billable</p>
+                  </div>
+
+                  <div className="h-2.5 overflow-hidden rounded-full bg-paper">
+                    <div className={`h-full rounded-full ${day.isToday ? "bg-yolk" : "bg-mint"}`} style={{ width: `${Math.max(progress, day.totalMinutes ? 8 : 0)}%` }} />
                   </div>
                 </div>
 
-                <div className="mt-4 space-y-1.5">
-                  <p className="text-lg font-black text-ink">{formatHours(day.totalMinutes)}h logged</p>
-                  <p className="text-sm font-bold text-moss">{formatMoney(day.billableValueCents)} billable</p>
-                </div>
-
-                <div className="mt-4 h-2 overflow-hidden rounded-full bg-paper">
-                  <div className={`h-full rounded-full ${day.isToday ? "bg-yolk" : "bg-mint"}`} style={{ width: `${Math.max(progress, day.totalMinutes ? 8 : 0)}%` }} />
-                </div>
-
-                <div className="mt-4 min-h-16 text-xs font-bold leading-5 text-moss">
+                <div className="mt-5 grid gap-2">
+                  <p className="text-xs font-black uppercase tracking-[0.12em] text-moss">Projects</p>
                   {projectChips.length ? (
                     <div className="flex flex-wrap gap-1.5">
                       {projectChips.map((project) => (
-                        <span key={project} className="max-w-full truncate rounded-full bg-paper px-2 py-1">
+                        <span key={project} className="max-w-full break-words rounded-full bg-paper px-2.5 py-1.5 text-xs font-bold leading-4 text-moss">
                           {project}
                         </span>
                       ))}
-                      {extraProjectCount ? <span className="rounded-full bg-paper px-2 py-1">+{extraProjectCount} more</span> : null}
+                      {extraProjectCount ? <span className="rounded-full bg-paper px-2.5 py-1.5 text-xs font-black leading-4 text-moss">+{extraProjectCount} more</span> : null}
                     </div>
                   ) : (
-                    <span className="text-moss/75">No work logged</span>
+                    <p className="rounded-lg border border-dashed border-line bg-paper/50 p-3 text-sm font-bold text-moss">No work logged</p>
                   )}
+                </div>
+
+                <div className="mt-auto pt-5">
+                  <p className="rounded-lg border border-line bg-white/80 px-3 py-2 text-xs font-black uppercase tracking-[0.1em] text-moss">{entryLabel}</p>
                 </div>
               </article>
             );
@@ -361,7 +378,7 @@ function WeekCalendar({ days, hasEntries }: { days: DashboardData["currentWeekDa
       </div>
 
       {!hasEntries ? (
-        <div className="border-t border-line bg-mint/10 p-4">
+        <div className="border-t border-line bg-mint/10 p-4 sm:p-5">
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div>
               <p className="font-black text-ink">No hours logged this week yet</p>
