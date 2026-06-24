@@ -244,6 +244,10 @@ label {
 
   body {
     color: #17211c;
+    width: 100%;
+    margin: 0;
+    print-color-adjust: exact;
+    -webkit-print-color-adjust: exact;
   }
 
   .no-print,
@@ -258,15 +262,84 @@ label {
     min-height: auto;
     max-width: none;
     padding: 0;
+    width: 100%;
+  }
+
+  .invoice-workspace,
+  .invoice-layout {
+    display: block !important;
+    width: 100% !important;
+    max-width: none !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    background: #fff !important;
   }
 
   .invoice-print {
-    width: auto !important;
+    display: block !important;
+    width: 100% !important;
+    max-width: calc(210mm - 24mm) !important;
     min-height: calc(297mm - 24mm);
+    margin: 0 auto !important;
     border: 0 !important;
     box-shadow: none !important;
     padding: 0 !important;
     border-radius: 0 !important;
+  }
+
+  .invoice-sheet {
+    box-sizing: border-box;
+  }
+
+  .invoice-address-grid {
+    display: grid !important;
+    grid-template-columns: 1fr 1fr !important;
+    gap: 10mm !important;
+  }
+
+  .invoice-header {
+    display: grid !important;
+    grid-template-columns: minmax(0, 1fr) auto !important;
+    gap: 10mm !important;
+    align-items: start !important;
+  }
+
+  .invoice-footer {
+    display: grid !important;
+    grid-template-columns: 1fr 1fr !important;
+    gap: 10mm !important;
+    align-items: start !important;
+  }
+
+  .invoice-meta-grid {
+    display: grid !important;
+    grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+  }
+
+  .invoice-totals-section {
+    display: grid !important;
+    grid-template-columns: minmax(0, 1fr) 58mm !important;
+    gap: 10mm !important;
+    align-items: start !important;
+  }
+
+  .invoice-note-box,
+  .invoice-total-card {
+    width: 100% !important;
+  }
+
+  .invoice-table-wrap {
+    overflow: visible !important;
+  }
+
+  .invoice-table {
+    width: 100% !important;
+    table-layout: fixed !important;
+  }
+
+  .invoice-table th,
+  .invoice-table td {
+    overflow-wrap: anywhere;
   }
 
   .invoice-header,

@@ -48,7 +48,7 @@ export default async function PublicInvoicePage({ params }: { params: Promise<{ 
   }
 
   return (
-    <main className="invoice-workspace min-h-screen px-4 py-6 print:p-0">
+    <main className="invoice-workspace print-shell min-h-screen px-4 py-6 print:p-0">
       <InvoiceDocumentView invoice={invoice} business={business} client={client} logoUrl={logoUrl} />
     </main>
   );

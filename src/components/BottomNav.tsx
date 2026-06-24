@@ -2,14 +2,14 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Clock3, FileText, FolderKanban, LayoutDashboard, UsersRound } from "lucide-react";
+import { FileText, FolderKanban, LayoutDashboard, MoreHorizontal, UsersRound } from "lucide-react";
 
 const items = [
   { href: "/", label: "Dashboard", icon: LayoutDashboard },
   { href: "/clients", label: "Clients", icon: UsersRound },
   { href: "/projects", label: "Projects", icon: FolderKanban },
   { href: "/invoices", label: "Invoices", icon: FileText },
-  { href: "/hours-export", label: "Hours", icon: Clock3 }
+  { href: "/more", label: "More", icon: MoreHorizontal }
 ];
 
 export function BottomNav() {
@@ -21,7 +21,12 @@ export function BottomNav() {
       <div className="grid grid-cols-5 gap-1 md:gap-2">
         {items.map((item) => {
           const Icon = item.icon;
-          const active = item.href === "/" ? pathname === "/" : pathname.startsWith(item.href);
+          const active =
+            item.href === "/"
+              ? pathname === "/"
+              : item.href === "/more"
+                ? pathname.startsWith("/more") || pathname.startsWith("/insights") || pathname.startsWith("/hours-export") || pathname.startsWith("/business-profile")
+                : pathname.startsWith(item.href);
 
           return (
             <Link

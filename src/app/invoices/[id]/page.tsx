@@ -110,7 +110,7 @@ export default async function InvoiceDetailPage({ params }: { params: Promise<{ 
         </Link>
       </div>
 
-      <div className="grid gap-5 xl:grid-cols-[minmax(0,210mm)_20rem] xl:items-start xl:justify-center">
+      <div className="invoice-layout grid gap-5 xl:grid-cols-[minmax(0,210mm)_20rem] xl:items-start xl:justify-center">
         <article className="invoice-sheet invoice-print">
           <header className="invoice-header">
             <div className="flex min-w-0 items-start gap-4">

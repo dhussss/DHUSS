@@ -20,6 +20,7 @@ import type { LucideIcon } from "lucide-react";
 import { Children, type ReactNode } from "react";
 import { logoutAction } from "@/app/actions";
 import { LogTimeSheet } from "@/components/LogTimeSheet";
+import { WeeklyPerformanceChart } from "@/components/AnalyticsCharts";
 import { requireUserId } from "@/lib/auth";
 import { getDashboardData, type DashboardData } from "@/lib/app-data";
 import { dateInputValue, formatDateAU, previousWeekMondayToSunday, todayInPerth } from "@/lib/dates";
@@ -49,6 +50,9 @@ export default async function DashboardPage() {
     currentWeekDays,
     totalCurrentWeekMinutes,
     totalCurrentWeekBillableCents,
+    rolling30AverageDailyMinutes,
+    currentWeekAverageDailyMinutes,
+    weeklyAverageDeltaMinutes,
     currentWeekEntryCount,
     unbilledEntryCount,
     unbilledItemCount,
@@ -179,7 +183,15 @@ export default async function DashboardPage() {
             </div>
           </div>
         </div>
-        <WeekCalendar days={currentWeekDays} hasEntries={currentWeekEntryCount > 0} />
+        <WeeklyPerformanceChart
+          days={currentWeekDays}
+          totalMinutes={totalCurrentWeekMinutes}
+          billableValueCents={totalCurrentWeekBillableCents}
+          rollingAverageDailyMinutes={rolling30AverageDailyMinutes}
+          currentWeekAverageDailyMinutes={currentWeekAverageDailyMinutes}
+          averageDeltaMinutes={weeklyAverageDeltaMinutes}
+          hasEntries={currentWeekEntryCount > 0}
+        />
       </section>
 
       <section className="mt-5 grid gap-4 xl:grid-cols-[1.05fr_0.95fr_0.9fr]">
@@ -314,87 +326,6 @@ function WeekSummaryCard({ label, value, note }: { label: string; value: string;
   );
 }
 
-function WeekCalendar({ days, hasEntries }: { days: DashboardData["currentWeekDays"]; hasEntries: boolean }) {
-  return (
-    <section>
-      <div className="overflow-x-auto p-4 sm:p-5">
-        <div className="grid min-w-[82rem] grid-cols-7 items-stretch gap-3">
-          {days.map((day) => {
-            const dayTarget = 8 * 60;
-            const progress = Math.min((day.totalMinutes / dayTarget) * 100, 100);
-            const projectChips = day.projects.slice(0, 2);
-            const extraProjectCount = Math.max(day.projects.length - projectChips.length, 0);
-            const entryLabel = `${day.entryCount} entr${day.entryCount === 1 ? "y" : "ies"}`;
-
-            return (
-              <article
-                key={day.date}
-                className={`flex h-full min-h-[21rem] flex-col rounded-lg border p-5 shadow-soft ${
-                  day.isToday ? "border-mint bg-mint/10 ring-2 ring-mint/20" : "border-line bg-white"
-                }`}
-              >
-                <header className="space-y-2">
-                  <div className="flex flex-wrap items-center gap-2">
-                    <p className="text-xs font-black uppercase tracking-[0.12em] text-moss">{day.dayName}</p>
-                    {day.isToday ? <span className="rounded-full border border-mint bg-white px-2.5 py-1 text-[0.65rem] font-black uppercase leading-none text-mint">Today</span> : null}
-                  </div>
-                  <p className="text-3xl font-black tracking-normal text-ink">{day.dateLabel}</p>
-                </header>
-
-                <div className="mt-6 grid gap-3">
-                  <div className="rounded-lg border border-line bg-paper p-3">
-                    <p className="text-lg font-black text-ink">{formatHours(day.totalMinutes)}h logged</p>
-                    <p className="mt-1 text-sm font-bold text-moss">{formatMoney(day.billableValueCents)} billable</p>
-                  </div>
-
-                  <div className="h-2.5 overflow-hidden rounded-full bg-paper">
-                    <div className={`h-full rounded-full ${day.isToday ? "bg-yolk" : "bg-mint"}`} style={{ width: `${Math.max(progress, day.totalMinutes ? 8 : 0)}%` }} />
-                  </div>
-                </div>
-
-                <div className="mt-5 grid gap-2">
-                  <p className="text-xs font-black uppercase tracking-[0.12em] text-moss">Projects</p>
-                  {projectChips.length ? (
-                    <div className="flex flex-wrap gap-1.5">
-                      {projectChips.map((project) => (
-                        <span key={project} className="max-w-full break-words rounded-full bg-paper px-2.5 py-1.5 text-xs font-bold leading-4 text-moss">
-                          {project}
-                        </span>
-                      ))}
-                      {extraProjectCount ? <span className="rounded-full bg-paper px-2.5 py-1.5 text-xs font-black leading-4 text-moss">+{extraProjectCount} more</span> : null}
-                    </div>
-                  ) : (
-                    <p className="rounded-lg border border-dashed border-line bg-paper/50 p-3 text-sm font-bold text-moss">No work logged</p>
-                  )}
-                </div>
-
-                <div className="mt-auto pt-5">
-                  <p className="rounded-lg border border-line bg-white/80 px-3 py-2 text-xs font-black uppercase tracking-[0.1em] text-moss">{entryLabel}</p>
-                </div>
-              </article>
-            );
-          })}
-        </div>
-      </div>
-
-      {!hasEntries ? (
-        <div className="border-t border-line bg-mint/10 p-4 sm:p-5">
-          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-            <div>
-              <p className="font-black text-ink">No hours logged this week yet</p>
-              <p className="mt-1 text-sm font-bold text-moss">Start with today&apos;s first entry and the week planner will fill in.</p>
-            </div>
-            <Link href="/projects" className="tap-secondary bg-white">
-              <Timer size={18} aria-hidden="true" />
-              Choose Project
-            </Link>
-          </div>
-        </div>
-      ) : null}
-    </section>
-  );
-}
-
 function DashboardWidget({
   title,
   actionHref,
@@ -457,27 +388,32 @@ function SnapshotMini({ label, value }: { label: string; value: string }) {
 }
 
 function InvoiceSnapshotGrid({ snapshots }: { snapshots: DashboardData["invoiceSnapshots"] }) {
+  const unbilledCaption = [
+    `${snapshots.unbilled.timeEntryCount} time entr${snapshots.unbilled.timeEntryCount === 1 ? "y" : "ies"}`,
+    snapshots.unbilled.expenseItemCount ? `${snapshots.unbilled.expenseItemCount} expense${snapshots.unbilled.expenseItemCount === 1 ? "" : "s"}` : ""
+  ].filter(Boolean).join(", ");
   const rows = [
-    { label: "Overdue", data: snapshots.overdue, tone: "gum" as const, icon: AlertTriangle },
-    { label: "Sent", data: snapshots.sent, tone: "mint" as const, icon: Banknote },
-    { label: "Draft", data: snapshots.draft, tone: "yolk" as const, icon: FileClock },
-    { label: "Paid This Month", data: snapshots.paidThisMonth, tone: "ink" as const, icon: TrendingUp }
+    { label: "Unbilled", valueCents: snapshots.unbilled.valueCents, caption: unbilledCaption || "No work ready to bill", tone: "mint" as const, icon: ReceiptText, href: "/invoices/new" },
+    { label: "Overdue", valueCents: snapshots.overdue.valueCents, caption: `${snapshots.overdue.count} invoice${snapshots.overdue.count === 1 ? "" : "s"}`, tone: "gum" as const, icon: AlertTriangle, href: "/invoices?status=overdue" },
+    { label: "Sent", valueCents: snapshots.sent.valueCents, caption: `${snapshots.sent.count} invoice${snapshots.sent.count === 1 ? "" : "s"}`, tone: "mint" as const, icon: Banknote, href: "/invoices?status=sent" },
+    { label: "Draft", valueCents: snapshots.draft.valueCents, caption: `${snapshots.draft.count} invoice${snapshots.draft.count === 1 ? "" : "s"}`, tone: "yolk" as const, icon: FileClock, href: "/invoices?status=draft" },
+    { label: "Paid This Month", valueCents: snapshots.paidThisMonth.valueCents, caption: `${snapshots.paidThisMonth.count} invoice${snapshots.paidThisMonth.count === 1 ? "" : "s"}`, tone: "ink" as const, icon: TrendingUp, href: "/invoices?status=paid" }
   ];
 
   return (
     <div className="grid gap-2">
       {rows.map((row) => (
-        <Link key={row.label} href={row.label === "Paid This Month" ? "/invoices?status=paid" : `/invoices?status=${row.label.toLowerCase().split(" ")[0]}`} className="flex items-center justify-between gap-3 rounded-lg border border-line bg-white p-3 transition hover:border-mint">
+        <Link key={row.label} href={row.href} className="flex items-center justify-between gap-3 rounded-lg border border-line bg-white p-3 transition hover:border-mint">
           <div className="flex items-center gap-3">
             <span className={`grid size-10 place-items-center rounded-lg ${snapshotTone(row.tone)}`}>
               <row.icon size={19} aria-hidden="true" />
             </span>
             <div>
               <p className="font-black text-ink">{row.label}</p>
-              <p className="text-sm font-bold text-moss">{row.data.count} invoice{row.data.count === 1 ? "" : "s"}</p>
+              <p className="text-sm font-bold text-moss">{row.caption}</p>
             </div>
           </div>
-          <p className="text-lg font-black text-ink">{formatMoney(row.data.valueCents)}</p>
+          <p className="text-lg font-black text-ink">{formatMoney(row.valueCents)}</p>
         </Link>
       ))}
     </div>

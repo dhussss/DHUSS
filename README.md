@@ -18,6 +18,7 @@ Mobile-first PWA for a sole trader/subcontractor to track clients, projects, log
 - Prisma migrations use the session-mode pooler through `DIRECT_URL`.
 - The root route config uses the Node.js runtime for Prisma, and `vercel.json` pins Vercel Functions to `syd1` to run close to the current Supabase `ap-southeast-2` project.
 - Dashboard totals ignore void invoices. Deleted invoices are gone from the database, and their linked time/items are returned to unbilled before deletion.
+- Dashboard and Insights analytics use owner-scoped, cached read helpers and short revalidation so the app stays responsive after time, project, client, and invoice mutations.
 - Project and client delete actions are guarded. Records with invoices or billed history should be archived, not deleted.
 
 ## Environment Variables
@@ -209,6 +210,14 @@ Run a backup before production migrations or any manual database maintenance.
 
 Use `/diagnostics?token=<BACKUP_EXPORT_TOKEN>` while logged in to open a private performance diagnostics page. It shows the Vercel region signals available to the app plus server, TCP/TLS, Prisma first-query, Prisma second-query, count-query, and dashboard-query timings in milliseconds. It also explains whether slowness appears to be database/network latency, Prisma overhead, dashboard query work, or general server/frontend time. The page does not print secrets, profile details, or bank details.
 
+## Dashboard And Insights
+
+- The dashboard weekly planner is a Monday-to-Sunday performance chart, not a rolling seven-day view.
+- The 30-day average is calculated per calendar day over the last 30 Perth dates, including quiet days. This makes the comparison a workload pace signal rather than an average of only days where hours were logged.
+- Invoice Snapshot includes Unbilled work across active projects, combining unbilled time entries and expense items.
+- `/insights` provides workload, revenue, current-quarter trend, financial-year cumulative paid invoice value, and concise insight cards.
+- The bottom nav keeps five main items. Hours Export, Insights, Business Profile, and Privacy live under `/more`.
+
 ## Authentication And Business Profile
 
 - `/signup` creates a Supabase Auth account.
@@ -230,7 +239,9 @@ Use `/diagnostics?token=<BACKUP_EXPORT_TOKEN>` while logged in to open a private
 - Marking a draft invoice sent or paid finalises it, marks linked entries/items billed, calculates GST from the current business profile, and stores business/client snapshots on the invoice.
 - Sent and paid invoices do not silently mutate if the business profile or client changes later.
 - Invoice preview at `/invoices/<id>` is printable and supports browser Print / Save as PDF.
-- Invoice preview uses an A4-style document layout for screen and print. App navigation, action buttons, and app backgrounds are hidden in print.
+- Invoice preview uses a centred A4 print layout with `@page` margins and print-specific invoice containers so the saved PDF uses the printable page width instead of inheriting app/dashboard layout constraints.
+- The public invoice route `/public/invoices/<token>` uses the same print rules as the private invoice preview.
+- App navigation, action buttons, and app backgrounds are hidden in print.
 - Invoice preview supports Copy Invoice Text, browser Print / Save as PDF, and a prepare-email workflow at `/invoices/<id>/email`.
 - Email preparation requires the invoice to be sent or paid. It does not require `RESEND_API_KEY` or `RESEND_FROM_EMAIL`.
 - The email composer opens the user's own email app with the recipient, subject, and professional plain-text body filled in. Copy Email Text is available as a fallback.

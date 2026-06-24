@@ -1,6 +1,6 @@
 import { Prisma } from "@prisma/client";
 import { unstable_cache } from "next/cache";
-import { currentWeekMondayToSunday, dateInputValue, previousWeekMondayToSunday, todayInPerth } from "@/lib/dates";
+import { addDays, currentWeekMondayToSunday, dateInputValue, endOfDay, previousWeekMondayToSunday, todayInPerth } from "@/lib/dates";
 import { prisma } from "@/lib/prisma";
 
 export const CACHE_TAGS = {
@@ -8,7 +8,8 @@ export const CACHE_TAGS = {
   projects: "projects-data",
   clients: "clients-data",
   invoices: "invoices-data",
-  hoursExport: "hours-export-data"
+  hoursExport: "hours-export-data",
+  insights: "insights-data"
 } as const;
 
 const SHORT_REVALIDATE_SECONDS = 20;
@@ -29,6 +30,7 @@ export type DashboardData = {
     sent: { count: number; valueCents: number };
     draft: { count: number; valueCents: number };
     paidThisMonth: { count: number; valueCents: number };
+    unbilled: { count: number; valueCents: number; timeEntryCount: number; expenseItemCount: number };
   };
   sentInvoices: {
     id: string;
@@ -55,6 +57,10 @@ export type DashboardData = {
   }[];
   totalCurrentWeekMinutes: number;
   totalCurrentWeekBillableCents: number;
+  rolling30AverageDailyMinutes: number;
+  currentWeekAverageDailyMinutes: number;
+  weeklyAverageDeltaMinutes: number;
+  currentWeekElapsedDays: number;
   currentWeekEntryCount: number;
   unbilledEntryCount: number;
   unbilledItemCount: number;
@@ -87,6 +93,7 @@ type DashboardRow = {
   currentWeekEntryCount: bigint | number | null;
   totalCurrentWeekMinutes: bigint | number | null;
   totalCurrentWeekBillableCents: bigint | number | null;
+  rolling30TotalMinutes: bigint | number | null;
   unbilledEntryCount: bigint | number | null;
   unbilledItemCount: bigint | number | null;
   pendingPaymentCents: bigint | number | null;
@@ -104,6 +111,7 @@ export async function loadDashboardData(ownerId: string): Promise<DashboardData>
   const currentWeek = currentWeekMondayToSunday(today);
   const previousWeek = previousWeekMondayToSunday();
   const monthStart = new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), 1));
+  const rolling30Start = addDays(today, -29);
   const rows = await prisma.$queryRaw<DashboardRow[]>`
     WITH bounds AS (
       SELECT
@@ -112,6 +120,8 @@ export async function loadDashboardData(ownerId: string): Promise<DashboardData>
         ${previousWeek.start}::timestamp AS previous_start_at,
         ${previousWeek.endInclusive}::timestamp AS previous_end_at,
         ${today}::timestamp AS today_at,
+        ${endOfDay(today)}::timestamp AS today_end_at,
+        ${rolling30Start}::timestamp AS rolling_start_at,
         ${monthStart}::timestamp AS month_start_at
     ),
     active_projects AS (
@@ -168,16 +178,32 @@ export async function loadDashboardData(ownerId: string): Promise<DashboardData>
     unbilled_time AS (
       SELECT
         COUNT(*) AS entry_count,
-        COALESCE(SUM(ROUND(("durationMinutes"::numeric / 60) * "hourlyRateCentsSnapshot")), 0) AS entry_total
-      FROM "TimeEntry"
-      WHERE "billingStatus" = 'UNBILLED' AND "ownerId" = ${ownerId}
+        COALESCE(SUM(ROUND((t."durationMinutes"::numeric / 60) * t."hourlyRateCentsSnapshot")), 0) AS entry_total
+      FROM "TimeEntry" t
+      JOIN "Project" p ON p.id = t."projectId"
+      WHERE t."billingStatus" = 'UNBILLED'
+        AND t."ownerId" = ${ownerId}
+        AND p."ownerId" = ${ownerId}
+        AND p.status = 'ACTIVE'
     ),
     unbilled_items AS (
       SELECT
         COUNT(*) AS item_count,
-        COALESCE(SUM("totalCostCents"), 0) AS item_total
-      FROM "ExpenseItem"
-      WHERE "billingStatus" = 'UNBILLED' AND "ownerId" = ${ownerId}
+        COALESCE(SUM(e."totalCostCents"), 0) AS item_total
+      FROM "ExpenseItem" e
+      JOIN "Project" p ON p.id = e."projectId"
+      WHERE e."billingStatus" = 'UNBILLED'
+        AND e."ownerId" = ${ownerId}
+        AND p."ownerId" = ${ownerId}
+        AND p.status = 'ACTIVE'
+    ),
+    rolling_30_work AS (
+      SELECT COALESCE(SUM(t."durationMinutes"), 0) AS total_minutes
+      FROM "TimeEntry" t
+      CROSS JOIN bounds b
+      WHERE t."ownerId" = ${ownerId}
+        AND t.date >= b.rolling_start_at
+        AND t.date <= b.today_end_at
     ),
     previous_week_entries AS (
       SELECT COALESCE(
@@ -312,13 +338,14 @@ export async function loadDashboardData(ownerId: string): Promise<DashboardData>
       current_week_entries.entry_count AS "currentWeekEntryCount",
       current_week_entries.total_minutes AS "totalCurrentWeekMinutes",
       current_week_entries.billable_value AS "totalCurrentWeekBillableCents",
+      rolling_30_work.total_minutes AS "rolling30TotalMinutes",
       unbilled_time.entry_count AS "unbilledEntryCount",
       unbilled_items.item_count AS "unbilledItemCount",
       sent_invoices.invoice_total AS "pendingPaymentCents",
       (unbilled_time.entry_total + unbilled_items.item_total) AS "pendingInvoicesCents",
       overdue_invoices.overdue_count AS "overdueInvoiceCount",
       overdue_invoices.overdue_total AS "overdueInvoiceCents"
-    FROM active_projects, top_active_projects, invoice_snapshots, sent_invoices, overdue_invoices, unbilled_time, unbilled_items, previous_week_entries, current_week_entries
+    FROM active_projects, top_active_projects, invoice_snapshots, sent_invoices, overdue_invoices, unbilled_time, unbilled_items, rolling_30_work, previous_week_entries, current_week_entries
   `;
 
   const row = rows[0];
@@ -354,8 +381,16 @@ export async function loadDashboardData(ownerId: string): Promise<DashboardData>
     overdue: { count: 0, valueCents: 0 },
     sent: { count: 0, valueCents: 0 },
     draft: { count: 0, valueCents: 0 },
-    paidThisMonth: { count: 0, valueCents: 0 }
+    paidThisMonth: { count: 0, valueCents: 0 },
+    unbilled: { count: 0, valueCents: 0, timeEntryCount: 0, expenseItemCount: 0 }
   };
+  const unbilledEntryCount = numberValue(row?.unbilledEntryCount);
+  const unbilledItemCount = numberValue(row?.unbilledItemCount);
+  const pendingInvoicesCents = numberValue(row?.pendingInvoicesCents);
+  const elapsedDays = Math.max(1, Math.min(7, Math.floor((today.getTime() - currentWeek.start.getTime()) / 86_400_000) + 1));
+  // Rolling average is per calendar day across the last 30 Perth dates, including quiet days, so it reflects workload pace rather than only logged-work days.
+  const rolling30AverageDailyMinutes = numberValue(row?.rolling30TotalMinutes) / 30;
+  const currentWeekAverageDailyMinutes = numberValue(row?.totalCurrentWeekMinutes) / elapsedDays;
 
   return {
     projects: row?.projects ?? [],
@@ -382,6 +417,12 @@ export async function loadDashboardData(ownerId: string): Promise<DashboardData>
       paidThisMonth: {
         count: numberValue(invoiceSnapshots.paidThisMonth.count),
         valueCents: numberValue(invoiceSnapshots.paidThisMonth.valueCents)
+      },
+      unbilled: {
+        count: unbilledEntryCount + unbilledItemCount,
+        valueCents: pendingInvoicesCents,
+        timeEntryCount: unbilledEntryCount,
+        expenseItemCount: unbilledItemCount
       }
     },
     sentInvoices: row?.sentInvoices ?? [],
@@ -390,12 +431,16 @@ export async function loadDashboardData(ownerId: string): Promise<DashboardData>
     currentWeekDays,
     totalCurrentWeekMinutes: numberValue(row?.totalCurrentWeekMinutes),
     totalCurrentWeekBillableCents: numberValue(row?.totalCurrentWeekBillableCents),
+    rolling30AverageDailyMinutes,
+    currentWeekAverageDailyMinutes,
+    weeklyAverageDeltaMinutes: currentWeekAverageDailyMinutes - rolling30AverageDailyMinutes,
+    currentWeekElapsedDays: elapsedDays,
     currentWeekEntryCount: numberValue(row?.currentWeekEntryCount),
     previousWeekEntries: row?.previousWeekEntries ?? [],
-    unbilledEntryCount: numberValue(row?.unbilledEntryCount),
-    unbilledItemCount: numberValue(row?.unbilledItemCount),
+    unbilledEntryCount,
+    unbilledItemCount,
     pendingPaymentCents: numberValue(row?.pendingPaymentCents),
-    pendingInvoicesCents: numberValue(row?.pendingInvoicesCents),
+    pendingInvoicesCents,
     overdueInvoiceCount: numberValue(row?.overdueInvoiceCount),
     overdueInvoiceCents: numberValue(row?.overdueInvoiceCents)
   };
