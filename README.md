@@ -1,6 +1,6 @@
 # Trade Invoice Tracker
 
-Mobile-first PWA for a sole trader/subcontractor to track clients, projects, logged hours, expense items, invoices, dashboard totals, and weekly hours exports.
+Mobile-first PWA for a sole trader/subcontractor to track clients, projects, logged hours, work expenses, invoice expense items, invoices, dashboard totals, insights, and weekly hours exports.
 
 ## Stack
 
@@ -20,6 +20,7 @@ Mobile-first PWA for a sole trader/subcontractor to track clients, projects, log
 - Dashboard totals ignore void invoices. Deleted invoices are gone from the database, and their linked time/items are returned to unbilled before deletion.
 - Dashboard and Insights analytics use owner-scoped, cached read helpers and short revalidation so the app stays responsive after time, project, client, and invoice mutations.
 - Project and client delete actions are guarded. Records with invoices or billed history should be archived, not deleted.
+- Tax and super set-aside figures are estimates only, not tax advice. Australian resident tax brackets are centralised in `src/lib/planning.ts` so the rates can be reviewed and updated in one place.
 
 ## Environment Variables
 
@@ -176,6 +177,14 @@ pnpm run db:migrate
 
 `db:migrate` runs `prisma migrate deploy`, which applies committed Prisma migration files without creating new ones.
 
+After this pass, make sure production has applied:
+
+```bash
+pnpm run db:migrate
+```
+
+The new migration adds Business Profile tax/super planning settings, the work expense register, and day-off logs.
+
 6. Confirm Vercel deployments run near Supabase. This app sets `regions: ["syd1"]` in `vercel.json`. After deployment, open `/diagnostics?token=<BACKUP_EXPORT_TOKEN>` and check `x-vercel-id`. The first segment should be `syd1`.
 
 The diagnostics page helps choose the next fix: if TCP/TLS connect is fast but Prisma `SELECT 1` is high, Prisma engine/pooler overhead is the main problem; if both TCP/TLS and Prisma are high, network or Supabase pooler latency is the main problem; if `SELECT 1` is low but dashboard is high, query work is the main problem.
@@ -200,6 +209,8 @@ Use `/backup` locally while logged in to download a JSON backup. In production, 
 - rate history
 - time entries
 - expense items
+- work expenses
+- day-off logs
 - invoices
 - invoice line items
 - audit logs
@@ -213,10 +224,23 @@ Use `/diagnostics?token=<BACKUP_EXPORT_TOKEN>` while logged in to open a private
 ## Dashboard And Insights
 
 - The dashboard weekly planner is a Monday-to-Sunday performance chart, not a rolling seven-day view.
-- The 30-day average is calculated per calendar day over the last 30 Perth dates, including quiet days. This makes the comparison a workload pace signal rather than an average of only days where hours were logged.
+- The 30-day average is now an included-day average. It includes days with logged hours and explicit planned day-off records, but it does not punish normal quiet weekends with zero hours.
 - Invoice Snapshot includes Unbilled work across active projects, combining unbilled time entries and expense items.
-- `/insights` provides workload, revenue, current-quarter trend, financial-year cumulative paid invoice value, and concise insight cards.
-- The bottom nav keeps five main items. Hours Export, Insights, Business Profile, and Privacy live under `/more`.
+- `/insights` provides workload, revenue, tax set-aside estimates, optional super planning, work expense summaries, current-quarter trend, financial-year paid income, and concise insight cards.
+- The tax set-aside panel annualises current-week billable value and estimates tax using the configured bracket table. Users can switch the estimate off or set a custom percentage override in Business Profile.
+- Optional super planning is a planning estimate only. It does not record or assume any super contribution has been paid.
+- The bottom nav keeps five main items. Hours Export, Insights, Expenses, Day Off, Business Profile, Backup, Audit, Privacy, and Logout live under `/more`.
+
+## Expenses And Day Offs
+
+- `/expenses` logs work-related expenses for tax/audit tracking.
+- Expenses can be general or linked to a project. Linked expenses appear on the project detail page.
+- Expense fields include date, category, description, supplier/vendor, amount, GST included/amount, payment method, receipt/reference, notes, billable/reimbursable, and status.
+- Expense statuses are logged, allocated, invoiced/reimbursed, and tax record only.
+- Invoiced/reimbursed expenses should be archived instead of destructively deleted.
+- `/day-off` logs planned zero-hour work days. These records improve rolling averages without counting ordinary inactive weekends.
+- Backup exports include work expenses and day-off logs.
+- Audit log entries are written for expense create/update/archive/restore/delete and day-off create/update events.
 
 ## Authentication And Business Profile
 
@@ -225,6 +249,7 @@ Use `/diagnostics?token=<BACKUP_EXPORT_TOKEN>` while logged in to open a private
 - Dashboard, clients, projects, invoices, hours export, backup, diagnostics, and server actions require a logged-in user.
 - `/business-profile` lets each user save their own trading name, legal details, ABN/ACN, contact details, GST defaults, bank details, invoice notes, email message, logo, and footer.
 - `/business-profile` also stores default invoice email subject, plain-text greeting, intro, payment line, sign-off, optional email include settings, reply-to email, and the app theme preset.
+- `/business-profile` stores tax set-aside preferences, custom tax percentage override, GST set-aside preference, optional super planning percentage, super fund name, and member number.
 - Logo files are uploaded directly from the browser to the private `business-logos` Storage bucket under the user's own folder. The server action stores only the Storage path, which avoids Vercel's 1 MB Server Action body limit.
 - Logo validation allows PNG, JPG, WEBP, and SVG files up to 1 MB. 500 KB or smaller is recommended for fast invoice previews.
 - Invoice detail pages show the user's logo when available.

@@ -9,7 +9,8 @@ export const CACHE_TAGS = {
   clients: "clients-data",
   invoices: "invoices-data",
   hoursExport: "hours-export-data",
-  insights: "insights-data"
+  insights: "insights-data",
+  expenses: "expenses-data"
 } as const;
 
 const SHORT_REVALIDATE_SECONDS = 20;
@@ -94,6 +95,7 @@ type DashboardRow = {
   totalCurrentWeekMinutes: bigint | number | null;
   totalCurrentWeekBillableCents: bigint | number | null;
   rolling30TotalMinutes: bigint | number | null;
+  rolling30IncludedDayCount: bigint | number | null;
   unbilledEntryCount: bigint | number | null;
   unbilledItemCount: bigint | number | null;
   pendingPaymentCents: bigint | number | null;
@@ -197,13 +199,31 @@ export async function loadDashboardData(ownerId: string): Promise<DashboardData>
         AND p."ownerId" = ${ownerId}
         AND p.status = 'ACTIVE'
     ),
-    rolling_30_work AS (
-      SELECT COALESCE(SUM(t."durationMinutes"), 0) AS total_minutes
+    rolling_30_time_by_day AS (
+      SELECT t.date::date AS date_key, COALESCE(SUM(t."durationMinutes"), 0) AS minutes
       FROM "TimeEntry" t
       CROSS JOIN bounds b
       WHERE t."ownerId" = ${ownerId}
         AND t.date >= b.rolling_start_at
         AND t.date <= b.today_end_at
+      GROUP BY t.date::date
+    ),
+    rolling_30_day_offs AS (
+      SELECT d.date::date AS date_key
+      FROM "DayOffLog" d
+      CROSS JOIN bounds b
+      WHERE d."ownerId" = ${ownerId}
+        AND d."plannedWorkDay" = true
+        AND d.date >= b.rolling_start_at
+        AND d.date <= b.today_end_at
+    ),
+    rolling_30_work AS (
+      SELECT
+        COALESCE(SUM(COALESCE(t.minutes, 0)), 0) AS total_minutes,
+        COUNT(*) AS included_day_count
+      FROM rolling_30_time_by_day t
+      FULL OUTER JOIN rolling_30_day_offs d ON d.date_key = t.date_key
+      WHERE COALESCE(t.minutes, 0) > 0 OR d.date_key IS NOT NULL
     ),
     previous_week_entries AS (
       SELECT COALESCE(
@@ -339,6 +359,7 @@ export async function loadDashboardData(ownerId: string): Promise<DashboardData>
       current_week_entries.total_minutes AS "totalCurrentWeekMinutes",
       current_week_entries.billable_value AS "totalCurrentWeekBillableCents",
       rolling_30_work.total_minutes AS "rolling30TotalMinutes",
+      rolling_30_work.included_day_count AS "rolling30IncludedDayCount",
       unbilled_time.entry_count AS "unbilledEntryCount",
       unbilled_items.item_count AS "unbilledItemCount",
       sent_invoices.invoice_total AS "pendingPaymentCents",
@@ -388,8 +409,8 @@ export async function loadDashboardData(ownerId: string): Promise<DashboardData>
   const unbilledItemCount = numberValue(row?.unbilledItemCount);
   const pendingInvoicesCents = numberValue(row?.pendingInvoicesCents);
   const elapsedDays = Math.max(1, Math.min(7, Math.floor((today.getTime() - currentWeek.start.getTime()) / 86_400_000) + 1));
-  // Rolling average is per calendar day across the last 30 Perth dates, including quiet days, so it reflects workload pace rather than only logged-work days.
-  const rolling30AverageDailyMinutes = numberValue(row?.rolling30TotalMinutes) / 30;
+  const rolling30IncludedDayCount = numberValue(row?.rolling30IncludedDayCount);
+  const rolling30AverageDailyMinutes = rolling30IncludedDayCount ? numberValue(row?.rolling30TotalMinutes) / rolling30IncludedDayCount : 0;
   const currentWeekAverageDailyMinutes = numberValue(row?.totalCurrentWeekMinutes) / elapsedDays;
 
   return {
@@ -640,6 +661,33 @@ export const getInvoicesPageData = unstable_cache(
     }),
   ["invoices-page-data"],
   { revalidate: SHORT_REVALIDATE_SECONDS, tags: [CACHE_TAGS.invoices] }
+);
+
+export const getExpensesPageData = unstable_cache(
+  async (ownerId: string) =>
+    prisma.workExpense.findMany({
+      where: { ownerId },
+      select: {
+        id: true,
+        date: true,
+        category: true,
+        description: true,
+        vendor: true,
+        amountCents: true,
+        gstIncluded: true,
+        gstAmountCents: true,
+        paymentMethod: true,
+        receiptReference: true,
+        notes: true,
+        billable: true,
+        status: true,
+        archivedAt: true,
+        project: { select: { id: true, title: true, client: { select: { businessName: true } } } }
+      },
+      orderBy: [{ archivedAt: "asc" }, { date: "desc" }, { createdAt: "desc" }]
+    }),
+  ["expenses-page-data"],
+  { revalidate: SHORT_REVALIDATE_SECONDS, tags: [CACHE_TAGS.expenses] }
 );
 
 export type HoursExportProject = {

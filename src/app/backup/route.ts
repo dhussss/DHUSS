@@ -28,13 +28,15 @@ export async function GET(request: NextRequest) {
   }
   const ownerId = user.id;
 
-  const [profile, clients, projects, rateHistory, timeEntries, expenseItems, invoices, invoiceLineItems, auditLogs] = await Promise.all([
+  const [profile, clients, projects, rateHistory, timeEntries, expenseItems, workExpenses, dayOffLogs, invoices, invoiceLineItems, auditLogs] = await Promise.all([
     prisma.businessProfile.findUnique({ where: { ownerId } }),
     prisma.client.findMany({ where: { ownerId }, orderBy: [{ businessName: "asc" }, { createdAt: "asc" }] }),
     prisma.project.findMany({ where: { ownerId }, orderBy: [{ updatedAt: "desc" }, { createdAt: "asc" }] }),
     prisma.rateHistory.findMany({ where: { ownerId }, orderBy: [{ projectId: "asc" }, { startsAt: "asc" }] }),
     prisma.timeEntry.findMany({ where: { ownerId }, orderBy: [{ date: "asc" }, { createdAt: "asc" }] }),
     prisma.expenseItem.findMany({ where: { ownerId }, orderBy: [{ datePurchased: "asc" }, { createdAt: "asc" }] }),
+    prisma.workExpense.findMany({ where: { ownerId }, orderBy: [{ date: "asc" }, { createdAt: "asc" }] }),
+    prisma.dayOffLog.findMany({ where: { ownerId }, orderBy: [{ date: "asc" }, { createdAt: "asc" }] }),
     prisma.invoice.findMany({ where: { ownerId }, orderBy: [{ invoiceDate: "asc" }, { invoiceNumber: "asc" }] }),
     prisma.invoiceLineItem.findMany({ where: { ownerId }, orderBy: [{ invoiceId: "asc" }, { sortOrder: "asc" }] }),
     prisma.auditLog.findMany({ where: { ownerId }, orderBy: { createdAt: "asc" } })
@@ -65,6 +67,8 @@ export async function GET(request: NextRequest) {
         rateHistory,
         timeEntries,
         expenseItems,
+        workExpenses,
+        dayOffLogs,
         invoices,
         invoiceLineItems,
         auditLogs

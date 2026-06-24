@@ -25,7 +25,15 @@ export function BottomNav() {
             item.href === "/"
               ? pathname === "/"
               : item.href === "/more"
-                ? pathname.startsWith("/more") || pathname.startsWith("/insights") || pathname.startsWith("/hours-export") || pathname.startsWith("/business-profile")
+                ? pathname.startsWith("/more") ||
+                  pathname.startsWith("/insights") ||
+                  pathname.startsWith("/expenses") ||
+                  pathname.startsWith("/day-off") ||
+                  pathname.startsWith("/hours-export") ||
+                  pathname.startsWith("/business-profile") ||
+                  pathname.startsWith("/audit-log") ||
+                  pathname.startsWith("/backup") ||
+                  pathname.startsWith("/privacy")
                 : pathname.startsWith(item.href);
 
           return (

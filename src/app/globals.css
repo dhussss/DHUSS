@@ -21,7 +21,7 @@ body {
   min-height: 100%;
   margin: 0;
   background:
-    linear-gradient(180deg, rgba(15, 159, 143, 0.07), transparent 260px),
+    linear-gradient(180deg, rgb(var(--color-accent-rgb) / 0.07), transparent 260px),
     #fbfaf6;
   color: #17211c;
   font-family:
@@ -62,8 +62,8 @@ textarea {
 input:focus,
 select:focus,
 textarea:focus {
-  border-color: #0f9f8f;
-  box-shadow: 0 0 0 3px rgba(15, 159, 143, 0.14);
+  border-color: rgb(var(--color-accent-rgb));
+  box-shadow: 0 0 0 3px rgb(var(--color-accent-rgb) / 0.14);
 }
 
 label {
@@ -113,6 +113,16 @@ label {
 
   .icon-tile {
     @apply grid size-10 shrink-0 place-items-center rounded-lg bg-mint/10 text-mint;
+  }
+
+  .command-hero-bg {
+    background:
+      radial-gradient(circle at top left, rgb(var(--color-accent-rgb) / 0.42), transparent 34rem),
+      linear-gradient(135deg, rgb(255 255 255 / 0.12), transparent 38%);
+  }
+
+  .accent-glow-bg {
+    background: radial-gradient(circle at top left, rgb(var(--color-accent-rgb) / 0.36), transparent 28rem);
   }
 
   .tap-primary {

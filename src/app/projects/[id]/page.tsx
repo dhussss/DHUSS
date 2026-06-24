@@ -11,6 +11,7 @@ import { formatHours, labourTotalCents } from "@/lib/time";
 import { ConfirmSubmitButton } from "@/components/ConfirmSubmitButton";
 import { InvoiceStatusPill, ProjectStatusPill } from "@/components/StatusPill";
 import { LogTimeSheet } from "@/components/LogTimeSheet";
+import { expenseCategoryLabel, expenseStatusLabel } from "@/lib/expenses";
 
 export const dynamic = "force-dynamic";
 
@@ -24,6 +25,7 @@ export default async function ProjectDetailPage({ params }: { params: Promise<{ 
         client: true,
         timeEntries: { orderBy: [{ date: "desc" }, { createdAt: "desc" }] },
         expenseItems: { orderBy: [{ datePurchased: "desc" }, { createdAt: "desc" }] },
+        workExpenses: { where: { archivedAt: null }, orderBy: [{ date: "desc" }, { createdAt: "desc" }] },
         invoices: { orderBy: { invoiceDate: "desc" } }
       }
     }),
@@ -115,7 +117,7 @@ export default async function ProjectDetailPage({ params }: { params: Promise<{ 
       </header>
 
       <section className={`mt-4 overflow-hidden rounded-lg border shadow-soft ${hasUnbilledWork ? "border-mint/30 bg-ink text-white" : "border-line bg-white"}`}>
-        <div className={`grid gap-5 p-5 sm:p-6 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-center ${hasUnbilledWork ? "bg-[radial-gradient(circle_at_top_left,rgba(15,159,143,0.36),transparent_28rem)]" : ""}`}>
+        <div className={`grid gap-5 p-5 sm:p-6 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-center ${hasUnbilledWork ? "accent-glow-bg" : ""}`}>
           <div>
             <div className="flex items-center gap-2">
               {hasUnbilledWork ? (
@@ -228,6 +230,37 @@ export default async function ProjectDetailPage({ params }: { params: Promise<{ 
                 ))
               ) : (
                 <EmptyPanel icon={ReceiptText} title="No expense items" text="Materials and reimbursable items will appear here." />
+              )}
+            </div>
+          </section>
+
+          <section>
+            <div className="mb-3 flex items-center justify-between gap-3">
+              <h2 className="text-xl font-black tracking-normal">Work expenses</h2>
+              <Link href="/expenses" className="text-sm font-bold text-mint">Expenses</Link>
+            </div>
+            <div className="grid gap-3">
+              {project.workExpenses.length ? (
+                project.workExpenses.map((expense) => (
+                  <Link href={`/expenses/${expense.id}/edit`} key={expense.id} className="card block transition hover:border-mint">
+                    <div className="flex items-start justify-between gap-3">
+                      <div>
+                        <p className="font-black">{expense.description}</p>
+                        <p className="mt-1 text-sm font-bold text-moss">
+                          {formatDateAU(expense.date)} · {expenseCategoryLabel(expense.category)}
+                        </p>
+                      </div>
+                      <span className="text-lg font-black">{formatMoney(expense.amountCents)}</span>
+                    </div>
+                    <p className="mt-2 text-sm font-bold text-moss">
+                      {expenseStatusLabel(expense.status)}
+                      {expense.billable ? " · billable/reimbursable" : ""}
+                    </p>
+                    {expense.notes ? <p className="mt-2 text-sm font-bold leading-6 text-moss">{expense.notes}</p> : null}
+                  </Link>
+                ))
+              ) : (
+                <EmptyPanel icon={ReceiptText} title="No linked work expenses" text="Project-allocated work expenses from the expense register will appear here." />
               )}
             </div>
           </section>

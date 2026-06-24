@@ -1,6 +1,8 @@
 import { unstable_cache } from "next/cache";
 import { addDays, currentWeekMondayToSunday, dateInputValue, endOfDay, todayInPerth } from "@/lib/dates";
+import { expenseCategoryLabel } from "@/lib/expenses";
 import { CACHE_TAGS } from "@/lib/app-data";
+import { calculateSetAsidePlanning, type SetAsidePlanning } from "@/lib/planning";
 import { prisma } from "@/lib/prisma";
 
 const SHORT_REVALIDATE_SECONDS = 20;
@@ -38,6 +40,8 @@ export type CurrentWeekPerformance = {
 export type Rolling30Stats = {
   totalMinutes: number;
   loggedDayCount: number;
+  includedDayCount: number;
+  dayOffCount: number;
   averageDailyMinutes: number;
   loggedDayAverageMinutes: number;
 };
@@ -47,6 +51,7 @@ export type QuarterTrendPoint = {
   label: string;
   minutes: number;
   rollingAverageMinutes: number;
+  projects: string[];
 };
 
 export type FinancialYearPoint = {
@@ -86,6 +91,15 @@ export type InsightsData = {
     unbilledExpenseItemCount: number;
     averageHourlyRateCents: number | null;
   };
+  expenses: {
+    thisMonthCents: number;
+    financialYearCents: number;
+    generalFinancialYearCents: number;
+    largestCategoryThisMonth: { category: string; valueCents: number } | null;
+    byCategoryThisMonth: { category: string; label: string; valueCents: number }[];
+    byProjectThisMonth: { project: string; valueCents: number }[];
+  };
+  taxSetAside: SetAsidePlanning;
   topUnbilledProject: { title: string; valueCents: number } | null;
   quarterTrend: QuarterTrendPoint[];
   financialYear: {
@@ -109,6 +123,8 @@ type InsightRow = {
   totalCurrentWeekBillableCents: Numeric;
   rolling30TotalMinutes: Numeric;
   rolling30LoggedDayCount: Numeric;
+  rolling30IncludedDayCount: Numeric;
+  rolling30DayOffCount: Numeric;
   hoursThisMonthMinutes: Numeric;
   hoursThisQuarterMinutes: Numeric;
   billableThisMonthCents: Numeric;
@@ -124,8 +140,14 @@ type InsightRow = {
   bestDayThisMonth: { date: string; minutes: number } | null;
   busiestProjectThisMonth: { title: string; minutes: number } | null;
   topUnbilledProject: { title: string; valueCents: number } | null;
-  quarterDaily: { date: string; minutes: number }[];
+  quarterDaily: { date: string; minutes: number; projects: string[] }[];
   fyPaidMonthly: { month: string; valueCents: number }[];
+  expenseThisMonthCents: Numeric;
+  expenseFyCents: Numeric;
+  generalExpenseFyCents: Numeric;
+  largestExpenseCategoryThisMonth: { category: string; valueCents: number } | null;
+  expensesByCategoryThisMonth: { category: string; valueCents: number }[];
+  expensesByProjectThisMonth: { project: string; valueCents: number }[];
 };
 
 function numberValue(value: Numeric) {
@@ -208,7 +230,8 @@ export async function loadInsightsData(ownerId: string): Promise<InsightsData> {
   const quarterEnd = endOfQuarter(today);
   const fy = financialYearBounds(today);
 
-  const rows = await prisma.$queryRaw<InsightRow[]>`
+  const [rows, profile] = await Promise.all([
+    prisma.$queryRaw<InsightRow[]>`
     WITH bounds AS (
       SELECT
         ${currentWeek.start}::timestamp AS current_start_at,
@@ -247,15 +270,35 @@ export async function loadInsightsData(ownerId: string): Promise<InsightsData> {
         AND t.date >= b.current_start_at
         AND t.date <= b.current_end_at
     ),
-    rolling_30 AS (
+    rolling_30_time_by_day AS (
       SELECT
-        COALESCE(SUM(t."durationMinutes"), 0) AS total_minutes,
-        COUNT(DISTINCT t.date) AS logged_day_count
+        t.date::date AS date_key,
+        COALESCE(SUM(t."durationMinutes"), 0) AS minutes
       FROM "TimeEntry" t
       CROSS JOIN bounds b
       WHERE t."ownerId" = ${ownerId}
         AND t.date >= b.rolling_start_at
         AND t.date <= b.today_end_at
+      GROUP BY t.date::date
+    ),
+    rolling_30_day_offs AS (
+      SELECT d.date::date AS date_key
+      FROM "DayOffLog" d
+      CROSS JOIN bounds b
+      WHERE d."ownerId" = ${ownerId}
+        AND d."plannedWorkDay" = true
+        AND d.date >= b.rolling_start_at
+        AND d.date <= b.today_end_at
+    ),
+    rolling_30 AS (
+      SELECT
+        COALESCE(SUM(COALESCE(t.minutes, 0)), 0) AS total_minutes,
+        COUNT(t.date_key) FILTER (WHERE COALESCE(t.minutes, 0) > 0) AS logged_day_count,
+        COUNT(*) AS included_day_count,
+        COUNT(d.date_key) AS day_off_count
+      FROM rolling_30_time_by_day t
+      FULL OUTER JOIN rolling_30_day_offs d ON d.date_key = t.date_key
+      WHERE COALESCE(t.minutes, 0) > 0 OR d.date_key IS NOT NULL
     ),
     month_work AS (
       SELECT
@@ -312,16 +355,21 @@ export async function loadInsightsData(ownerId: string): Promise<InsightsData> {
     quarter_daily AS (
       SELECT COALESCE(
         jsonb_agg(
-          jsonb_build_object('date', daily.date, 'minutes', daily.minutes)
+          jsonb_build_object('date', daily.date, 'minutes', daily.minutes, 'projects', daily.projects)
           ORDER BY daily.date ASC
         ),
         '[]'::jsonb
       ) AS data
       FROM (
-        SELECT t.date, COALESCE(SUM(t."durationMinutes"), 0) AS minutes
+        SELECT
+          t.date,
+          COALESCE(SUM(t."durationMinutes"), 0) AS minutes,
+          to_jsonb(ARRAY_AGG(DISTINCT p.title ORDER BY p.title)) AS projects
         FROM "TimeEntry" t
+        JOIN "Project" p ON p.id = t."projectId"
         CROSS JOIN bounds b
         WHERE t."ownerId" = ${ownerId}
+          AND p."ownerId" = ${ownerId}
           AND t.date >= b.quarter_start_at
           AND t.date <= b.today_end_at
         GROUP BY t.date
@@ -415,6 +463,66 @@ export async function loadInsightsData(ownerId: string): Promise<InsightsData> {
           AND i."paymentDate" <= b.today_end_at
         GROUP BY month_key
       ) paid
+    ),
+    expense_summary AS (
+      SELECT
+        COALESCE(SUM(w."amountCents") FILTER (WHERE w.date >= b.month_start_at AND w.date <= b.today_end_at), 0) AS this_month_total,
+        COALESCE(SUM(w."amountCents") FILTER (WHERE w.date >= b.fy_start_at AND w.date <= b.today_end_at), 0) AS fy_total,
+        COALESCE(SUM(w."amountCents") FILTER (WHERE w."projectId" IS NULL AND w.date >= b.fy_start_at AND w.date <= b.today_end_at), 0) AS general_fy_total
+      FROM "WorkExpense" w
+      CROSS JOIN bounds b
+      WHERE w."ownerId" = ${ownerId}
+        AND w."archivedAt" IS NULL
+    ),
+    largest_expense_category AS (
+      SELECT (
+        SELECT jsonb_build_object('category', ranked.category, 'valueCents', ranked.value_cents)
+        FROM (
+          SELECT w.category::text AS category, COALESCE(SUM(w."amountCents"), 0) AS value_cents
+          FROM "WorkExpense" w
+          CROSS JOIN bounds b
+          WHERE w."ownerId" = ${ownerId}
+            AND w."archivedAt" IS NULL
+            AND w.date >= b.month_start_at
+            AND w.date <= b.today_end_at
+          GROUP BY w.category
+          ORDER BY value_cents DESC, category ASC
+          LIMIT 1
+        ) ranked
+      ) AS data
+    ),
+    expenses_by_category AS (
+      SELECT COALESCE(
+        jsonb_agg(jsonb_build_object('category', grouped.category, 'valueCents', grouped.value_cents) ORDER BY grouped.value_cents DESC),
+        '[]'::jsonb
+      ) AS data
+      FROM (
+        SELECT w.category::text AS category, COALESCE(SUM(w."amountCents"), 0) AS value_cents
+        FROM "WorkExpense" w
+        CROSS JOIN bounds b
+        WHERE w."ownerId" = ${ownerId}
+          AND w."archivedAt" IS NULL
+          AND w.date >= b.month_start_at
+          AND w.date <= b.today_end_at
+        GROUP BY w.category
+      ) grouped
+    ),
+    expenses_by_project AS (
+      SELECT COALESCE(
+        jsonb_agg(jsonb_build_object('project', grouped.project, 'valueCents', grouped.value_cents) ORDER BY grouped.value_cents DESC),
+        '[]'::jsonb
+      ) AS data
+      FROM (
+        SELECT COALESCE(p.title, 'General expenses') AS project, COALESCE(SUM(w."amountCents"), 0) AS value_cents
+        FROM "WorkExpense" w
+        LEFT JOIN "Project" p ON p.id = w."projectId" AND p."ownerId" = ${ownerId}
+        CROSS JOIN bounds b
+        WHERE w."ownerId" = ${ownerId}
+          AND w."archivedAt" IS NULL
+          AND w.date >= b.month_start_at
+          AND w.date <= b.today_end_at
+        GROUP BY COALESCE(p.title, 'General expenses')
+      ) grouped
     )
     SELECT
       current_week_entries.data AS "currentWeekEntries",
@@ -423,6 +531,8 @@ export async function loadInsightsData(ownerId: string): Promise<InsightsData> {
       current_week_entries.billable_value AS "totalCurrentWeekBillableCents",
       rolling_30.total_minutes AS "rolling30TotalMinutes",
       rolling_30.logged_day_count AS "rolling30LoggedDayCount",
+      rolling_30.included_day_count AS "rolling30IncludedDayCount",
+      rolling_30.day_off_count AS "rolling30DayOffCount",
       month_work.total_minutes AS "hoursThisMonthMinutes",
       quarter_work.total_minutes AS "hoursThisQuarterMinutes",
       month_work.billable_value AS "billableThisMonthCents",
@@ -439,9 +549,29 @@ export async function loadInsightsData(ownerId: string): Promise<InsightsData> {
       busiest_project.data AS "busiestProjectThisMonth",
       top_unbilled.data AS "topUnbilledProject",
       quarter_daily.data AS "quarterDaily",
-      fy_paid_monthly.data AS "fyPaidMonthly"
-    FROM current_week_entries, rolling_30, month_work, quarter_work, revenue_summary, unbilled_time, unbilled_items, best_day, busiest_project, top_unbilled, quarter_daily, fy_paid_monthly
-  `;
+      fy_paid_monthly.data AS "fyPaidMonthly",
+      expense_summary.this_month_total AS "expenseThisMonthCents",
+      expense_summary.fy_total AS "expenseFyCents",
+      expense_summary.general_fy_total AS "generalExpenseFyCents",
+      largest_expense_category.data AS "largestExpenseCategoryThisMonth",
+      expenses_by_category.data AS "expensesByCategoryThisMonth",
+      expenses_by_project.data AS "expensesByProjectThisMonth"
+    FROM current_week_entries, rolling_30, month_work, quarter_work, revenue_summary, unbilled_time, unbilled_items, best_day, busiest_project, top_unbilled, quarter_daily, fy_paid_monthly, expense_summary, largest_expense_category, expenses_by_category, expenses_by_project
+  `,
+    prisma.businessProfile.findUnique({
+      where: { ownerId },
+      select: {
+        gstRegistered: true,
+        gstRate: true,
+        taxSetAsideEnabled: true,
+        customTaxPercentageOverride: true,
+        includeGstInTaxEstimate: true,
+        includeSuperInSetAsidePlanning: true,
+        superPlanningEnabled: true,
+        superContributionPercentage: true
+      }
+    })
+  ]);
 
   const row = rows[0];
   const currentWeekEntries = row?.currentWeekEntries ?? [];
@@ -474,26 +604,36 @@ export async function loadInsightsData(ownerId: string): Promise<InsightsData> {
   });
 
   const elapsedDays = Math.max(1, Math.min(7, Math.floor((today.getTime() - currentWeek.start.getTime()) / DAY_MS) + 1));
-  // Calendar-day averaging includes days without work. That gives a truer pace signal than averaging only logged days.
-  const rolling30AverageDailyMinutes = numberValue(row?.rolling30TotalMinutes) / 30;
   const rolling30LoggedDayCount = numberValue(row?.rolling30LoggedDayCount);
+  const rolling30IncludedDayCount = numberValue(row?.rolling30IncludedDayCount);
+  const rolling30DayOffCount = numberValue(row?.rolling30DayOffCount);
+  const rolling30AverageDailyMinutes = rolling30IncludedDayCount ? numberValue(row?.rolling30TotalMinutes) / rolling30IncludedDayCount : 0;
   const currentWeekAverageDailyMinutes = numberValue(row?.totalCurrentWeekMinutes) / elapsedDays;
   const monthMinutes = numberValue(row?.hoursThisMonthMinutes);
   const billableThisMonthCents = numberValue(row?.billableThisMonthCents);
   const averageHourlyRateCents = monthMinutes > 0 ? Math.round(billableThisMonthCents / (monthMinutes / 60)) : null;
 
-  const quarterDailyMap = new Map((row?.quarterDaily ?? []).map((point) => [dateInputValue(point.date), numberValue(point.minutes)]));
+  const quarterDailyMap = new Map(
+    (row?.quarterDaily ?? []).map((point) => [
+      dateInputValue(point.date),
+      {
+        minutes: numberValue(point.minutes),
+        projects: Array.isArray(point.projects) ? point.projects : []
+      }
+    ])
+  );
   const quarterTrend = eachDay(quarterStart, today).map((day, index, days) => {
     const key = dateInputValue(day);
     const windowStart = Math.max(0, index - 6);
     const windowDays = days.slice(windowStart, index + 1);
-    const rollingAverageMinutes = windowDays.reduce((sum, windowDay) => sum + (quarterDailyMap.get(dateInputValue(windowDay)) ?? 0), 0) / windowDays.length;
+    const rollingAverageMinutes = windowDays.reduce((sum, windowDay) => sum + (quarterDailyMap.get(dateInputValue(windowDay))?.minutes ?? 0), 0) / windowDays.length;
 
     return {
       date: key,
       label: `${day.getUTCDate()}/${day.getUTCMonth() + 1}`,
-      minutes: quarterDailyMap.get(key) ?? 0,
-      rollingAverageMinutes
+      minutes: quarterDailyMap.get(key)?.minutes ?? 0,
+      rollingAverageMinutes,
+      projects: quarterDailyMap.get(key)?.projects ?? []
     };
   });
 
@@ -527,12 +667,34 @@ export async function loadInsightsData(ownerId: string): Promise<InsightsData> {
     unbilledExpenseItemCount: numberValue(row?.unbilledExpenseItemCount),
     averageHourlyRateCents
   };
+  const expenses = {
+    thisMonthCents: numberValue(row?.expenseThisMonthCents),
+    financialYearCents: numberValue(row?.expenseFyCents),
+    generalFinancialYearCents: numberValue(row?.generalExpenseFyCents),
+    largestCategoryThisMonth: row?.largestExpenseCategoryThisMonth
+      ? {
+          category: row.largestExpenseCategoryThisMonth.category,
+          valueCents: numberValue(row.largestExpenseCategoryThisMonth.valueCents)
+        }
+      : null,
+    byCategoryThisMonth: (row?.expensesByCategoryThisMonth ?? []).map((item) => ({
+      category: item.category,
+      label: expenseCategoryLabel(item.category),
+      valueCents: numberValue(item.valueCents)
+    })),
+    byProjectThisMonth: (row?.expensesByProjectThisMonth ?? []).map((item) => ({
+      project: item.project,
+      valueCents: numberValue(item.valueCents)
+    }))
+  };
+  const taxSetAside = calculateSetAsidePlanning(revenue.billableThisWeekCents, profile, today);
 
   const topUnbilledProject = row?.topUnbilledProject
     ? { title: row.topUnbilledProject.title, valueCents: numberValue(row.topUnbilledProject.valueCents) }
     : null;
 
   const deltaMinutes = currentWeekAverageDailyMinutes - rolling30AverageDailyMinutes;
+  const strongestPaidMonth = fyPoints.reduce<FinancialYearPoint | null>((best, point) => (!best || point.paidCents > best.paidCents ? point : best), null);
   const insightCards: InsightCard[] = [
     revenue.unbilledCents > 0
       ? {
@@ -550,8 +712,35 @@ export async function loadInsightsData(ownerId: string): Promise<InsightsData> {
     {
       title: "Weekly pace",
       value: `${deltaMinutes >= 0 ? "+" : "-"}${formatInsightHours(Math.abs(deltaMinutes))}/day`,
-      body: `This week is tracking ${deltaMinutes >= 0 ? "above" : "below"} your 30-day daily average.`,
+      body: `This week is tracking ${deltaMinutes >= 0 ? "above" : "below"} your included-day 30-day average.`,
       tone: deltaMinutes >= 0 ? "mint" : "yolk"
+    },
+    expenses.largestCategoryThisMonth
+      ? {
+          title: "Largest expense category",
+          value: formatShortMoney(expenses.largestCategoryThisMonth.valueCents),
+          body: `${expenseCategoryLabel(expenses.largestCategoryThisMonth.category)} is your largest category this month.`,
+          tone: "ink"
+        }
+      : {
+          title: "Largest expense category",
+          value: "$0",
+          body: "No work expenses logged this month.",
+          tone: "ink"
+        },
+    {
+      title: "Tax set-aside",
+      value: formatShortMoney(taxSetAside.suggestedTaxWeeklyCents),
+      body: taxSetAside.taxEnabled
+        ? `Estimate only for this week, using ${taxSetAside.customTaxRate ? "your custom rate" : `${taxSetAside.financialYear} resident brackets`}.`
+        : "Tax set-aside is switched off in Business Profile.",
+      tone: taxSetAside.taxEnabled ? "mint" : "ink"
+    },
+    {
+      title: "Super planning",
+      value: formatShortMoney(taxSetAside.suggestedSuperWeeklyCents),
+      body: taxSetAside.superEnabled ? `Optional ${taxSetAside.superRate}% planning estimate for this week.` : "Super planning is switched off in Business Profile.",
+      tone: taxSetAside.superEnabled ? "mint" : "ink"
     },
     topUnbilledProject
       ? {
@@ -584,6 +773,19 @@ export async function loadInsightsData(ownerId: string): Promise<InsightsData> {
       value: formatShortMoney(revenue.paidThisMonthCents),
       body: `${revenue.paidThisMonthCount} paid invoice${revenue.paidThisMonthCount === 1 ? "" : "s"} based on your logged data.`,
       tone: "ink"
+    },
+    strongestPaidMonth && strongestPaidMonth.paidCents > 0
+      ? {
+          title: "Strongest FY month",
+          value: formatShortMoney(strongestPaidMonth.paidCents),
+          body: `${strongestPaidMonth.label} has the highest paid income this financial year.`,
+          tone: "mint"
+        }
+      : {
+          title: "Strongest FY month",
+          value: "None",
+          body: "No paid invoice income has been recorded this financial year.",
+          tone: "ink"
     }
   ];
 
@@ -603,6 +805,8 @@ export async function loadInsightsData(ownerId: string): Promise<InsightsData> {
     rolling30: {
       totalMinutes: numberValue(row?.rolling30TotalMinutes),
       loggedDayCount: rolling30LoggedDayCount,
+      includedDayCount: rolling30IncludedDayCount,
+      dayOffCount: rolling30DayOffCount,
       averageDailyMinutes: rolling30AverageDailyMinutes,
       loggedDayAverageMinutes: rolling30LoggedDayCount ? numberValue(row?.rolling30TotalMinutes) / rolling30LoggedDayCount : 0
     },
@@ -615,6 +819,8 @@ export async function loadInsightsData(ownerId: string): Promise<InsightsData> {
         : null
     },
     revenue,
+    expenses,
+    taxSetAside,
     topUnbilledProject,
     quarterTrend,
     financialYear: {

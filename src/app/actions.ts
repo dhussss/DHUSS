@@ -1,7 +1,7 @@
 "use server";
 
 import crypto from "node:crypto";
-import type { InvoiceMode, ProjectStatus } from "@prisma/client";
+import type { InvoiceMode, ProjectStatus, WorkExpenseCategory, WorkExpenseStatus } from "@prisma/client";
 import { revalidatePath, revalidateTag } from "next/cache";
 import { redirect } from "next/navigation";
 import { prisma } from "@/lib/prisma";
@@ -9,6 +9,7 @@ import { requireUserId } from "@/lib/auth";
 import { CACHE_TAGS } from "@/lib/app-data";
 import { dollarsToCents } from "@/lib/money";
 import { addDays, endOfDay, parseInputDate } from "@/lib/dates";
+import { expenseCategoryOptions, expenseStatusOptions } from "@/lib/expenses";
 import { buildInvoiceLineData, invoiceTotals, summaryText } from "@/lib/invoices";
 import { isQuarterHour, isQuarterHourClock, parseClockTime } from "@/lib/time";
 import { createClient } from "@/lib/supabase/server";
@@ -41,6 +42,16 @@ function optionalDecimal(formData: FormData, key: string, fallback: number) {
   if (!raw) return fallback;
   const value = Number.parseFloat(raw);
   if (!Number.isFinite(value) || value < 0) throw new Error(`${key} must be a valid number.`);
+  return value;
+}
+
+function optionalPercentage(formData: FormData, key: string) {
+  const raw = text(formData, key);
+  if (!raw) return null;
+  const value = Number.parseFloat(raw);
+  if (!Number.isFinite(value) || value < 0 || value > 100) {
+    throw new Error(`${key} must be between 0 and 100.`);
+  }
   return value;
 }
 
@@ -153,6 +164,10 @@ function validateBusinessProfileInput(formData: FormData, gstRegistered: boolean
     throw new Error("Choose a valid display mode.");
   }
 
+  optionalPercentage(formData, "customTaxPercentageOverride");
+  const superContributionPercentage = optionalDecimal(formData, "superContributionPercentage", 11.5);
+  if (superContributionPercentage > 100) throw new Error("Super contribution percentage must be between 0 and 100.");
+
   return { invoicePrefix, gstRate, themeAccent, themeMode };
 }
 
@@ -168,6 +183,12 @@ export async function updateBusinessProfileAction(formData: FormData) {
   const includePaymentDetailsInEmail = text(formData, "includePaymentDetailsInEmail") === "on";
   const includeInvoiceSummaryInEmail = text(formData, "includeInvoiceSummaryInEmail") === "on";
   const includePublicInvoiceLinkInEmail = text(formData, "includePublicInvoiceLinkInEmail") === "on";
+  const taxSetAsideEnabled = text(formData, "taxSetAsideEnabled") === "on";
+  const includeGstInTaxEstimate = text(formData, "includeGstInTaxEstimate") === "on";
+  const includeSuperInSetAsidePlanning = text(formData, "includeSuperInSetAsidePlanning") === "on";
+  const superPlanningEnabled = text(formData, "superPlanningEnabled") === "on";
+  const customTaxPercentageOverride = optionalPercentage(formData, "customTaxPercentageOverride");
+  const superContributionPercentage = optionalDecimal(formData, "superContributionPercentage", 11.5);
 
   const existing = await prisma.businessProfile.findUnique({ where: { ownerId } });
   const legacyDefaultInvoiceEmailMessage = text(formData, "defaultInvoiceEmailMessage") || defaultInvoiceEmailBody || existing?.defaultInvoiceEmailMessage || null;
@@ -230,6 +251,14 @@ export async function updateBusinessProfileAction(formData: FormData) {
       includePaymentDetailsInEmail,
       includeInvoiceSummaryInEmail,
       includePublicInvoiceLinkInEmail,
+      taxSetAsideEnabled,
+      customTaxPercentageOverride,
+      includeGstInTaxEstimate,
+      includeSuperInSetAsidePlanning,
+      superPlanningEnabled,
+      superContributionPercentage,
+      superFundName: text(formData, "superFundName") || null,
+      superMemberNumber: text(formData, "superMemberNumber") || null,
       replyToEmail: text(formData, "replyToEmail") || null,
       themeAccent,
       themeMode,
@@ -269,6 +298,14 @@ export async function updateBusinessProfileAction(formData: FormData) {
       includePaymentDetailsInEmail,
       includeInvoiceSummaryInEmail,
       includePublicInvoiceLinkInEmail,
+      taxSetAsideEnabled,
+      customTaxPercentageOverride,
+      includeGstInTaxEstimate,
+      includeSuperInSetAsidePlanning,
+      superPlanningEnabled,
+      superContributionPercentage,
+      superFundName: text(formData, "superFundName") || null,
+      superMemberNumber: text(formData, "superMemberNumber") || null,
       replyToEmail: text(formData, "replyToEmail") || null,
       themeAccent,
       themeMode,
@@ -478,6 +515,196 @@ export async function createExpenseItemAction(formData: FormData) {
   await logAudit(ownerId, "expense_item.created", "ExpenseItem", expense.id, { projectId });
   revalidatePath("/");
   revalidatePath("/projects");
+  revalidateAppData();
+  redirect(returnTo(formData));
+}
+
+const expenseCategoryValues = new Set(expenseCategoryOptions.map((option) => option.value));
+const expenseStatusValues = new Set(expenseStatusOptions.map((option) => option.value));
+
+function parseWorkExpenseData(formData: FormData) {
+  const projectIdValue = text(formData, "projectId");
+  const projectId = projectIdValue && projectIdValue !== "__none" ? projectIdValue : null;
+  const category = text(formData, "category") as WorkExpenseCategory;
+  const status = text(formData, "status") as WorkExpenseStatus;
+  const description = text(formData, "description");
+  const amountCents = dollarsToCents(formData.get("amount"));
+  const gstIncluded = text(formData, "gstIncluded") === "on";
+  const submittedGstAmount = optionalPositiveCents(formData, "gstAmount");
+  const gstAmountCents = gstIncluded ? (submittedGstAmount ?? Math.round(amountCents / 11)) : 0;
+
+  if (!expenseCategoryValues.has(category)) throw new Error("Choose a valid expense category.");
+  if (!expenseStatusValues.has(status)) throw new Error("Choose a valid expense status.");
+  if (!description) throw new Error("Expense description is required.");
+  positive(amountCents, "Expense amount must be greater than zero.");
+  if (gstAmountCents > amountCents) throw new Error("GST amount cannot be more than the expense amount.");
+
+  return {
+    projectId,
+    date: parseInputDate(formData.get("date")),
+    category,
+    description,
+    vendor: text(formData, "vendor") || null,
+    amountCents,
+    gstIncluded,
+    gstAmountCents,
+    paymentMethod: text(formData, "paymentMethod") || null,
+    receiptReference: text(formData, "receiptReference") || null,
+    notes: text(formData, "notes") || null,
+    billable: text(formData, "billable") === "on",
+    status
+  };
+}
+
+async function assertOwnedProject(ownerId: string, projectId: string | null) {
+  if (!projectId) return;
+  const project = await prisma.project.findFirst({ where: { id: projectId, ownerId }, select: { id: true } });
+  if (!project) throw new Error("Choose one of your projects.");
+}
+
+export async function createWorkExpenseAction(formData: FormData) {
+  const ownerId = await requireUserId();
+  const data = parseWorkExpenseData(formData);
+  await assertOwnedProject(ownerId, data.projectId);
+
+  const expense = await prisma.workExpense.create({
+    data: {
+      ownerId,
+      ...data
+    }
+  });
+
+  await logAudit(ownerId, "work_expense.created", "WorkExpense", expense.id, {
+    category: expense.category,
+    status: expense.status,
+    projectId: expense.projectId
+  });
+  revalidatePath("/");
+  revalidatePath("/expenses");
+  revalidatePath("/insights");
+  if (expense.projectId) revalidatePath(`/projects/${expense.projectId}`);
+  revalidateAppData();
+  redirect(returnTo(formData));
+}
+
+export async function updateWorkExpenseAction(formData: FormData) {
+  const ownerId = await requireUserId();
+  const expenseId = text(formData, "expenseId");
+  const existing = await prisma.workExpense.findFirst({
+    where: { id: expenseId, ownerId },
+    select: { id: true, projectId: true, status: true }
+  });
+  if (!existing) throw new Error("Expense not found.");
+
+  const data = parseWorkExpenseData(formData);
+  await assertOwnedProject(ownerId, data.projectId);
+
+  const expense = await prisma.workExpense.update({
+    where: { id: existing.id },
+    data
+  });
+
+  await logAudit(ownerId, "work_expense.updated", "WorkExpense", expense.id, {
+    category: expense.category,
+    status: expense.status,
+    projectChanged: existing.projectId !== expense.projectId
+  });
+  revalidatePath("/");
+  revalidatePath("/expenses");
+  revalidatePath(`/expenses/${expense.id}/edit`);
+  revalidatePath("/insights");
+  if (existing.projectId) revalidatePath(`/projects/${existing.projectId}`);
+  if (expense.projectId) revalidatePath(`/projects/${expense.projectId}`);
+  revalidateAppData();
+  redirect("/expenses?saved=expense-updated");
+}
+
+export async function archiveWorkExpenseAction(formData: FormData) {
+  const ownerId = await requireUserId();
+  const expenseId = text(formData, "expenseId");
+  const expense = await prisma.workExpense.findFirst({ where: { id: expenseId, ownerId }, select: { id: true, projectId: true } });
+  if (!expense) throw new Error("Expense not found.");
+
+  await prisma.workExpense.update({ where: { id: expense.id }, data: { archivedAt: new Date() } });
+  await logAudit(ownerId, "work_expense.archived", "WorkExpense", expense.id, { projectId: expense.projectId });
+  revalidatePath("/");
+  revalidatePath("/expenses");
+  revalidatePath("/insights");
+  if (expense.projectId) revalidatePath(`/projects/${expense.projectId}`);
+  revalidateAppData();
+  redirect(returnTo(formData));
+}
+
+export async function restoreWorkExpenseAction(formData: FormData) {
+  const ownerId = await requireUserId();
+  const expenseId = text(formData, "expenseId");
+  const expense = await prisma.workExpense.findFirst({ where: { id: expenseId, ownerId }, select: { id: true, projectId: true } });
+  if (!expense) throw new Error("Expense not found.");
+
+  await prisma.workExpense.update({ where: { id: expense.id }, data: { archivedAt: null } });
+  await logAudit(ownerId, "work_expense.restored", "WorkExpense", expense.id, { projectId: expense.projectId });
+  revalidatePath("/");
+  revalidatePath("/expenses");
+  revalidatePath("/insights");
+  if (expense.projectId) revalidatePath(`/projects/${expense.projectId}`);
+  revalidateAppData();
+  redirect(returnTo(formData));
+}
+
+export async function deleteWorkExpenseAction(formData: FormData) {
+  const ownerId = await requireUserId();
+  const expenseId = text(formData, "expenseId");
+  const expense = await prisma.workExpense.findFirst({
+    where: { id: expenseId, ownerId },
+    select: { id: true, projectId: true, status: true }
+  });
+  if (!expense) throw new Error("Expense not found.");
+
+  if (expense.status === "INVOICED_REIMBURSED") {
+    await prisma.workExpense.update({ where: { id: expense.id }, data: { archivedAt: new Date() } });
+    await logAudit(ownerId, "work_expense.delete_blocked_archived", "WorkExpense", expense.id, { projectId: expense.projectId });
+  } else {
+    await prisma.workExpense.delete({ where: { id: expense.id } });
+    await logAudit(ownerId, "work_expense.deleted", "WorkExpense", expense.id, { projectId: expense.projectId });
+  }
+
+  revalidatePath("/");
+  revalidatePath("/expenses");
+  revalidatePath("/insights");
+  if (expense.projectId) revalidatePath(`/projects/${expense.projectId}`);
+  revalidateAppData();
+  redirect(returnTo(formData));
+}
+
+export async function logDayOffAction(formData: FormData) {
+  const ownerId = await requireUserId();
+  const date = parseInputDate(formData.get("date"));
+  const plannedWorkDay = text(formData, "plannedWorkDay") === "on";
+  const existing = await prisma.dayOffLog.findUnique({
+    where: { ownerId_date: { ownerId, date } },
+    select: { id: true }
+  });
+
+  const dayOff = await prisma.dayOffLog.upsert({
+    where: { ownerId_date: { ownerId, date } },
+    create: {
+      ownerId,
+      date,
+      reason: text(formData, "reason") || null,
+      plannedWorkDay,
+      notes: text(formData, "notes") || null
+    },
+    update: {
+      reason: text(formData, "reason") || null,
+      plannedWorkDay,
+      notes: text(formData, "notes") || null
+    }
+  });
+
+  await logAudit(ownerId, existing ? "day_off.updated" : "day_off.created", "DayOffLog", dayOff.id, { plannedWorkDay });
+  revalidatePath("/");
+  revalidatePath("/day-off");
+  revalidatePath("/insights");
   revalidateAppData();
   redirect(returnTo(formData));
 }

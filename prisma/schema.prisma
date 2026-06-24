@@ -35,6 +35,27 @@ enum LineItemType {
   EXPENSE
 }
 
+enum WorkExpenseCategory {
+  TOOLS
+  MATERIALS
+  FUEL
+  VEHICLE
+  PPE
+  PHONE_INTERNET
+  TRAINING_TICKETS
+  INSURANCE
+  SOFTWARE
+  SUBCONTRACTOR
+  OTHER
+}
+
+enum WorkExpenseStatus {
+  LOGGED
+  ALLOCATED
+  INVOICED_REIMBURSED
+  TAX_RECORD_ONLY
+}
+
 model Client {
   id           String    @id @default(cuid())
   ownerId      String?
@@ -69,6 +90,7 @@ model Project {
   client                  Client        @relation(fields: [clientId], references: [id], onDelete: Restrict)
   timeEntries             TimeEntry[]
   expenseItems            ExpenseItem[]
+  workExpenses            WorkExpense[]
   invoices                Invoice[]
   rateHistory             RateHistory[]
 
@@ -149,6 +171,48 @@ model ExpenseItem {
   @@index([ownerId, datePurchased])
   @@index([ownerId, billingStatus])
   @@index([ownerId, invoiceId])
+}
+
+model WorkExpense {
+  id               String              @id @default(cuid())
+  ownerId          String
+  projectId        String?
+  date             DateTime
+  category         WorkExpenseCategory
+  description      String
+  vendor           String?
+  amountCents      Int
+  gstIncluded      Boolean             @default(false)
+  gstAmountCents   Int                 @default(0)
+  paymentMethod    String?
+  receiptReference String?
+  notes            String?
+  billable         Boolean             @default(false)
+  status           WorkExpenseStatus   @default(LOGGED)
+  archivedAt       DateTime?
+  createdAt        DateTime            @default(now())
+  updatedAt        DateTime            @updatedAt
+  project          Project?            @relation(fields: [projectId], references: [id], onDelete: SetNull)
+
+  @@index([ownerId, date])
+  @@index([ownerId, category])
+  @@index([ownerId, projectId])
+  @@index([ownerId, status])
+  @@index([ownerId, archivedAt])
+}
+
+model DayOffLog {
+  id             String   @id @default(cuid())
+  ownerId        String
+  date           DateTime
+  reason         String?
+  plannedWorkDay Boolean  @default(true)
+  notes          String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@unique([ownerId, date])
+  @@index([ownerId, date])
 }
 
 model Invoice {
@@ -284,6 +348,14 @@ model BusinessProfile {
   includePaymentDetailsInEmail Boolean @default(false)
   includeInvoiceSummaryInEmail Boolean @default(false)
   includePublicInvoiceLinkInEmail Boolean @default(true)
+  taxSetAsideEnabled       Boolean  @default(true)
+  customTaxPercentageOverride Decimal?
+  includeGstInTaxEstimate  Boolean  @default(false)
+  includeSuperInSetAsidePlanning Boolean @default(false)
+  superPlanningEnabled     Boolean  @default(false)
+  superContributionPercentage Decimal @default(11.5)
+  superFundName            String?
+  superMemberNumber        String?
   replyToEmail               String?
   themeAccent                String   @default("emerald")
   themeSecondary             String?

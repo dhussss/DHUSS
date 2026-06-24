@@ -4,6 +4,7 @@ import {
   ArrowRight,
   Banknote,
   Building2,
+  Calculator,
   ClipboardList,
   Clock3,
   FileClock,
@@ -25,6 +26,7 @@ import { requireUserId } from "@/lib/auth";
 import { getDashboardData, type DashboardData } from "@/lib/app-data";
 import { dateInputValue, formatDateAU, previousWeekMondayToSunday, todayInPerth } from "@/lib/dates";
 import { formatMoney } from "@/lib/money";
+import { calculateSetAsidePlanning, formatPercent } from "@/lib/planning";
 import { prisma } from "@/lib/prisma";
 import { formatHours } from "@/lib/time";
 
@@ -38,7 +40,22 @@ export default async function DashboardPage() {
 
   const [dashboardData, profile] = await Promise.all([
     getDashboardData(ownerId),
-    prisma.businessProfile.findUnique({ where: { ownerId }, select: { id: true, tradingName: true, contactName: true } })
+    prisma.businessProfile.findUnique({
+      where: { ownerId },
+      select: {
+        id: true,
+        tradingName: true,
+        contactName: true,
+        gstRegistered: true,
+        gstRate: true,
+        taxSetAsideEnabled: true,
+        customTaxPercentageOverride: true,
+        includeGstInTaxEstimate: true,
+        includeSuperInSetAsidePlanning: true,
+        superPlanningEnabled: true,
+        superContributionPercentage: true
+      }
+    })
   ]);
 
   const {
@@ -70,11 +87,12 @@ export default async function DashboardPage() {
     year: "numeric",
     timeZone: "UTC"
   }).format(today);
+  const setAside = calculateSetAsidePlanning(totalCurrentWeekBillableCents, profile, today);
 
   return (
     <main className="page-shell max-w-[92rem]">
       <section className="overflow-hidden rounded-lg border border-ink/10 bg-ink text-white shadow-soft">
-        <div className="bg-[radial-gradient(circle_at_top_left,rgba(15,159,143,0.42),transparent_34rem),linear-gradient(135deg,rgba(255,255,255,0.12),transparent_38%)] p-4 sm:p-6 lg:p-7">
+        <div className="command-hero-bg p-4 sm:p-6 lg:p-7">
           <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-start">
             <div>
               <p className="inline-flex items-center gap-2 text-sm font-black uppercase text-mint">
@@ -112,7 +130,7 @@ export default async function DashboardPage() {
               label="Weekly Billable Value"
               value={formatMoney(totalCurrentWeekBillableCents)}
               note="Labour value logged this week"
-              tone="yolk"
+              tone="mint"
             />
             <HeroKpi
               icon={Banknote}
@@ -140,6 +158,29 @@ export default async function DashboardPage() {
               Logout
             </button>
           </form>
+        </div>
+      </section>
+
+      <section className="mt-5 rounded-lg border border-line bg-white shadow-soft">
+        <div className="grid gap-4 p-4 sm:p-5 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-center">
+          <div className="flex items-start gap-3">
+            <span className="icon-tile">
+              <Calculator size={20} aria-hidden="true" />
+            </span>
+            <div>
+              <p className="section-title">Tax Set Aside</p>
+              <h2 className="mt-1 text-2xl font-black tracking-normal text-ink">{formatMoney(setAside.combinedWeeklyCents)} this week</h2>
+              <p className="mt-2 max-w-3xl text-sm font-bold leading-6 text-moss">
+                Estimate only, not tax advice. Based on {formatMoney(setAside.currentWeekEarningsCents)} current-week billable value annualised to{" "}
+                {formatMoney(setAside.estimatedAnnualIncomeCents)}.
+              </p>
+            </div>
+          </div>
+          <div className="grid gap-2 sm:grid-cols-3 lg:min-w-[34rem]">
+            <SnapshotMini label="Tax rate estimate" value={formatPercent(setAside.estimatedEffectiveTaxRate)} />
+            <SnapshotMini label="Tax this month" value={formatMoney(setAside.suggestedTaxMonthlyCents)} />
+            <SnapshotMini label="Super this week" value={formatMoney(setAside.suggestedSuperWeeklyCents)} />
+          </div>
         </div>
       </section>
 
@@ -226,7 +267,7 @@ export default async function DashboardPage() {
           actionLabel="Invoices"
           emptyIcon={FileClock}
           emptyText="No invoices yet."
-          accent="yolk"
+          accent="mint"
         >
           <InvoiceSnapshotGrid snapshots={invoiceSnapshots} />
         </DashboardWidget>
@@ -272,12 +313,11 @@ function HeroKpi({
   label: string;
   value: string;
   note: string;
-  tone: "mint" | "yolk" | "gum";
+  tone: "mint" | "gum";
   href?: string;
 }) {
   const tones = {
     mint: "from-mint/30 to-white/10 text-mint",
-    yolk: "from-yolk/30 to-white/10 text-yolk",
     gum: "from-gum/30 to-white/10 text-gum"
   };
   const card = (
@@ -340,13 +380,12 @@ function DashboardWidget({
   actionLabel: string;
   emptyIcon: LucideIcon;
   emptyText: string;
-  accent: "mint" | "yolk" | "gum" | "ink";
+  accent: "mint" | "gum" | "ink";
   children: ReactNode;
 }) {
   const hasChildren = Children.toArray(children).some(Boolean);
   const accents = {
     mint: "bg-mint",
-    yolk: "bg-yolk",
     gum: "bg-gum",
     ink: "bg-ink"
   };
