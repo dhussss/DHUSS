@@ -8,8 +8,20 @@ import { prisma } from "@/lib/prisma";
 
 export const dynamic = "force-dynamic";
 
-export default async function EditExpensePage({ params }: { params: Promise<{ id: string }> }) {
+function safeReturnTo(value: string | string[] | undefined) {
+  return typeof value === "string" && value.startsWith("/") ? value : "/expenses?saved=expense-updated";
+}
+
+export default async function EditExpensePage({
+  params,
+  searchParams
+}: {
+  params: Promise<{ id: string }>;
+  searchParams?: Promise<Record<string, string | string[] | undefined>>;
+}) {
   const { id } = await params;
+  const query = await searchParams;
+  const returnTo = safeReturnTo(query?.returnTo);
   const ownerId = await requireUserId();
   const [expense, projects] = await Promise.all([
     prisma.workExpense.findFirst({
@@ -24,11 +36,8 @@ export default async function EditExpensePage({ params }: { params: Promise<{ id
         amountCents: true,
         gstIncluded: true,
         gstAmountCents: true,
-        paymentMethod: true,
         receiptReference: true,
         notes: true,
-        billable: true,
-        status: true
       }
     }),
     prisma.project.findMany({
@@ -53,7 +62,7 @@ export default async function EditExpensePage({ params }: { params: Promise<{ id
       </header>
 
       <section className="mt-6 max-w-4xl">
-        <WorkExpenseForm action={updateWorkExpenseAction} projects={projects} expense={expense} returnTo="/expenses?saved=expense-updated" submitLabel="Save Expense" />
+        <WorkExpenseForm action={updateWorkExpenseAction} projects={projects} expense={expense} returnTo={returnTo} submitLabel="Save Expense" />
       </section>
     </main>
   );

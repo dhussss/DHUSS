@@ -519,6 +519,80 @@ export async function createExpenseItemAction(formData: FormData) {
   redirect(returnTo(formData));
 }
 
+function expenseItemDataFromForm(formData: FormData) {
+  const datePurchased = parseInputDate(formData.get("datePurchased"));
+  const description = text(formData, "description");
+  const quantity = Number.parseFloat(text(formData, "quantity"));
+  const unitCostCents = dollarsToCents(formData.get("unitCost"));
+  const notes = text(formData, "itemNotes") || null;
+
+  if (!description) throw new Error("Description is required.");
+  positive(quantity, "Quantity must be greater than zero.");
+  positive(unitCostCents, "Unit cost must be greater than zero.");
+
+  return {
+    datePurchased,
+    description,
+    quantity,
+    unitCostCents,
+    totalCostCents: Math.round(quantity * unitCostCents),
+    notes
+  };
+}
+
+export async function updateExpenseItemAction(formData: FormData) {
+  const ownerId = await requireUserId();
+  const itemId = text(formData, "itemId");
+  const projectId = text(formData, "projectId");
+  const item = await prisma.expenseItem.findUnique({
+    where: { id: itemId },
+    select: { id: true, projectId: true, billingStatus: true }
+  });
+
+  if (!item || item.projectId !== projectId) throw new Error("Expense item not found.");
+  const project = await prisma.project.findFirst({ where: { id: projectId, ownerId }, select: { id: true } });
+  if (!project) throw new Error("Expense item not found.");
+  if (item.billingStatus !== "UNBILLED") throw new Error("Billed expense items cannot be edited.");
+
+  await prisma.expenseItem.update({
+    where: { id: item.id },
+    data: expenseItemDataFromForm(formData)
+  });
+
+  await logAudit(ownerId, "expense_item.updated", "ExpenseItem", item.id, { projectId });
+  revalidatePath("/");
+  revalidatePath("/projects");
+  revalidatePath(`/projects/${projectId}`);
+  revalidatePath("/invoices");
+  revalidateAppData();
+  redirect(returnTo(formData));
+}
+
+export async function deleteExpenseItemAction(formData: FormData) {
+  const ownerId = await requireUserId();
+  const itemId = text(formData, "itemId");
+  const projectId = text(formData, "projectId");
+  const item = await prisma.expenseItem.findUnique({
+    where: { id: itemId },
+    select: { id: true, projectId: true, billingStatus: true }
+  });
+
+  if (!item || item.projectId !== projectId) throw new Error("Expense item not found.");
+  const project = await prisma.project.findFirst({ where: { id: projectId, ownerId }, select: { id: true } });
+  if (!project) throw new Error("Expense item not found.");
+  if (item.billingStatus !== "UNBILLED") throw new Error("Billed expense items cannot be deleted.");
+
+  await prisma.expenseItem.delete({ where: { id: item.id } });
+
+  await logAudit(ownerId, "expense_item.deleted", "ExpenseItem", item.id, { projectId });
+  revalidatePath("/");
+  revalidatePath("/projects");
+  revalidatePath(`/projects/${projectId}`);
+  revalidatePath("/invoices");
+  revalidateAppData();
+  redirect(returnTo(formData));
+}
+
 const expenseCategoryValues = new Set(expenseCategoryOptions.map((option) => option.value));
 const expenseStatusValues = new Set(expenseStatusOptions.map((option) => option.value));
 
@@ -526,10 +600,10 @@ function parseWorkExpenseData(formData: FormData) {
   const projectIdValue = text(formData, "projectId");
   const projectId = projectIdValue && projectIdValue !== "__none" ? projectIdValue : null;
   const category = text(formData, "category") as WorkExpenseCategory;
-  const status = text(formData, "status") as WorkExpenseStatus;
+  const status = (text(formData, "status") || "LOGGED") as WorkExpenseStatus;
   const description = text(formData, "description");
-  const amountCents = dollarsToCents(formData.get("amount"));
-  const gstIncluded = text(formData, "gstIncluded") === "on";
+  const amountCents = dollarsToCents(formData.get("amountPaid") ?? formData.get("amount"));
+  const gstIncluded = text(formData, "gstIncluded") === "on" || text(formData, "calculateGst") === "on";
   const submittedGstAmount = optionalPositiveCents(formData, "gstAmount");
   const gstAmountCents = gstIncluded ? (submittedGstAmount ?? Math.round(amountCents / 11)) : 0;
 
@@ -616,7 +690,7 @@ export async function updateWorkExpenseAction(formData: FormData) {
   if (existing.projectId) revalidatePath(`/projects/${existing.projectId}`);
   if (expense.projectId) revalidatePath(`/projects/${expense.projectId}`);
   revalidateAppData();
-  redirect("/expenses?saved=expense-updated");
+  redirect(returnTo(formData));
 }
 
 export async function archiveWorkExpenseAction(formData: FormData) {
@@ -656,17 +730,12 @@ export async function deleteWorkExpenseAction(formData: FormData) {
   const expenseId = text(formData, "expenseId");
   const expense = await prisma.workExpense.findFirst({
     where: { id: expenseId, ownerId },
-    select: { id: true, projectId: true, status: true }
+    select: { id: true, projectId: true }
   });
   if (!expense) throw new Error("Expense not found.");
 
-  if (expense.status === "INVOICED_REIMBURSED") {
-    await prisma.workExpense.update({ where: { id: expense.id }, data: { archivedAt: new Date() } });
-    await logAudit(ownerId, "work_expense.delete_blocked_archived", "WorkExpense", expense.id, { projectId: expense.projectId });
-  } else {
-    await prisma.workExpense.delete({ where: { id: expense.id } });
-    await logAudit(ownerId, "work_expense.deleted", "WorkExpense", expense.id, { projectId: expense.projectId });
-  }
+  await prisma.workExpense.delete({ where: { id: expense.id } });
+  await logAudit(ownerId, "work_expense.deleted", "WorkExpense", expense.id, { projectId: expense.projectId });
 
   revalidatePath("/");
   revalidatePath("/expenses");

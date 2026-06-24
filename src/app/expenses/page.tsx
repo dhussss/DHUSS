@@ -1,11 +1,11 @@
 import Link from "next/link";
-import { Archive, ArrowRight, CheckCircle2, Pencil, ReceiptText, RotateCcw, Trash2 } from "lucide-react";
+import { Archive, ArrowRight, CheckCircle2, Pencil, ReceiptText, RotateCcw } from "lucide-react";
 import { archiveWorkExpenseAction, createWorkExpenseAction, deleteWorkExpenseAction, restoreWorkExpenseAction } from "@/app/actions";
 import { ConfirmSubmitButton } from "@/components/ConfirmSubmitButton";
 import { WorkExpenseForm } from "@/components/WorkExpenseForm";
 import { requireUserId } from "@/lib/auth";
 import { dateInputValue, formatDateAU, todayInPerth } from "@/lib/dates";
-import { expenseCategoryLabel, expenseStatusLabel } from "@/lib/expenses";
+import { expenseCategoryLabel } from "@/lib/expenses";
 import { getExpensesPageData } from "@/lib/app-data";
 import { formatMoney } from "@/lib/money";
 import { prisma } from "@/lib/prisma";
@@ -42,7 +42,6 @@ export default async function ExpensesPage({
   const monthTotal = activeExpenses.filter((expense) => expense.date >= monthStart && expense.date <= today).reduce((sum, expense) => sum + expense.amountCents, 0);
   const fyTotal = activeExpenses.filter((expense) => expense.date >= fyStart && expense.date <= today).reduce((sum, expense) => sum + expense.amountCents, 0);
   const gstTotal = activeExpenses.reduce((sum, expense) => sum + expense.gstAmountCents, 0);
-  const billableTotal = activeExpenses.filter((expense) => expense.billable).reduce((sum, expense) => sum + expense.amountCents, 0);
 
   return (
     <main className="page-shell max-w-[92rem]">
@@ -59,11 +58,10 @@ export default async function ExpensesPage({
         </div>
       ) : null}
 
-      <section className="mt-5 grid gap-3 md:grid-cols-4">
+      <section className="mt-5 grid gap-3 md:grid-cols-3">
         <SummaryTile label="This month" value={formatMoney(monthTotal)} />
         <SummaryTile label="Financial year" value={formatMoney(fyTotal)} />
-        <SummaryTile label="GST recorded" value={formatMoney(gstTotal)} />
-        <SummaryTile label="Billable/reimbursable" value={formatMoney(billableTotal)} />
+        <SummaryTile label="GST estimate" value={formatMoney(gstTotal)} />
       </section>
 
       <section className="mt-5 grid gap-5 xl:grid-cols-[0.95fr_1.05fr]">
@@ -96,7 +94,7 @@ export default async function ExpensesPage({
                         {expense.archivedAt ? <span className="status-pill border-line bg-paper text-moss">archived</span> : null}
                       </div>
                       <p className="mt-1 text-sm font-bold text-moss">
-                        {formatDateAU(dateInputValue(expense.date))} · {expenseCategoryLabel(expense.category)} · {expenseStatusLabel(expense.status)}
+                        {formatDateAU(dateInputValue(expense.date))} · {expenseCategoryLabel(expense.category)}
                       </p>
                       {expense.vendor ? <p className="mt-1 text-sm font-bold text-moss">Supplier: {expense.vendor}</p> : null}
                     </div>
@@ -105,7 +103,6 @@ export default async function ExpensesPage({
 
                   <div className="mt-3 flex flex-wrap gap-2 text-xs font-black uppercase text-moss">
                     {expense.gstIncluded ? <span className="rounded-full bg-paper px-2 py-1">GST {formatMoney(expense.gstAmountCents)}</span> : null}
-                    {expense.billable ? <span className="rounded-full bg-mint/10 px-2 py-1 text-mint">billable</span> : null}
                     {expense.project ? (
                       <Link href={`/projects/${expense.project.id}`} className="inline-flex items-center gap-1 rounded-full bg-paper px-2 py-1 transition hover:text-mint">
                         {expense.project.title} <ArrowRight size={13} aria-hidden="true" />
@@ -117,7 +114,7 @@ export default async function ExpensesPage({
 
                   {expense.notes || expense.receiptReference || expense.paymentMethod ? (
                     <p className="mt-3 text-sm font-bold leading-6 text-moss">
-                      {[expense.paymentMethod ? `Paid by ${expense.paymentMethod}` : "", expense.receiptReference ? `Ref ${expense.receiptReference}` : "", expense.notes ?? ""]
+                      {[expense.receiptReference ? `Ref ${expense.receiptReference}` : "", expense.notes ?? ""]
                         .filter(Boolean)
                         .join(" · ")}
                     </p>
@@ -147,20 +144,13 @@ export default async function ExpensesPage({
                         </button>
                       </form>
                     )}
-                    {expense.status !== "INVOICED_REIMBURSED" ? (
-                      <form action={deleteWorkExpenseAction}>
-                        <input type="hidden" name="expenseId" value={expense.id} />
-                        <input type="hidden" name="returnTo" value="/expenses" />
-                        <ConfirmSubmitButton className="tap-danger px-3" message={`Delete expense "${expense.description}"? This permanently removes it from the register.`}>
-                          Delete
-                        </ConfirmSubmitButton>
-                      </form>
-                    ) : (
-                      <span className="inline-flex min-h-12 items-center gap-2 rounded-lg border border-line bg-paper px-4 py-3 text-sm font-bold text-moss">
-                        <Trash2 size={17} aria-hidden="true" />
-                        Archive only
-                      </span>
-                    )}
+                    <form action={deleteWorkExpenseAction}>
+                      <input type="hidden" name="expenseId" value={expense.id} />
+                      <input type="hidden" name="returnTo" value="/expenses" />
+                      <ConfirmSubmitButton className="tap-danger px-3" message={`Delete expense "${expense.description}"? This permanently removes it from the register.`}>
+                        Delete
+                      </ConfirmSubmitButton>
+                    </form>
                   </div>
                 </article>
               ))

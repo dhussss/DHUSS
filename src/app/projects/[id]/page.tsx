@@ -2,7 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { AlertTriangle, ArrowLeft, Banknote, CheckCircle2, Clock3, Edit, FilePlus, FileText, ReceiptText, RotateCcw } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
-import { deleteTimeEntryAction, unarchiveProjectAction } from "@/app/actions";
+import { deleteExpenseItemAction, deleteTimeEntryAction, deleteWorkExpenseAction, unarchiveProjectAction } from "@/app/actions";
 import { requireUserId } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { dateInputValue, formatDateAU } from "@/lib/dates";
@@ -11,7 +11,7 @@ import { formatHours, labourTotalCents } from "@/lib/time";
 import { ConfirmSubmitButton } from "@/components/ConfirmSubmitButton";
 import { InvoiceStatusPill, ProjectStatusPill } from "@/components/StatusPill";
 import { LogTimeSheet } from "@/components/LogTimeSheet";
-import { expenseCategoryLabel, expenseStatusLabel } from "@/lib/expenses";
+import { expenseCategoryLabel } from "@/lib/expenses";
 
 export const dynamic = "force-dynamic";
 
@@ -226,6 +226,27 @@ export default async function ProjectDetailPage({ params }: { params: Promise<{ 
                       Qty {Number(item.quantity)} at {formatMoney(item.unitCostCents)} - {item.billingStatus.toLowerCase()}
                     </p>
                     {item.notes ? <p className="mt-2 text-sm font-bold text-moss">{item.notes}</p> : null}
+                    {item.billingStatus === "UNBILLED" ? (
+                      <div className="mt-4 flex flex-col gap-2 sm:flex-row">
+                        <Link href={`/projects/${project.id}/expense-items/${item.id}/edit`} className="tap-secondary px-3">
+                          <Edit size={18} aria-hidden="true" />
+                          Edit
+                        </Link>
+                        <form action={deleteExpenseItemAction}>
+                          <input type="hidden" name="itemId" value={item.id} />
+                          <input type="hidden" name="projectId" value={project.id} />
+                          <input type="hidden" name="returnTo" value={`/projects/${project.id}`} />
+                          <ConfirmSubmitButton
+                            className="tap-danger px-3"
+                            message={`Delete expense item "${item.description}"? This permanently removes it from this project and any unbilled invoice draft range.`}
+                          >
+                            Delete
+                          </ConfirmSubmitButton>
+                        </form>
+                      </div>
+                    ) : (
+                      <p className="mt-3 text-xs font-black uppercase text-moss">Billed item locked</p>
+                    )}
                   </article>
                 ))
               ) : (
@@ -242,7 +263,7 @@ export default async function ProjectDetailPage({ params }: { params: Promise<{ 
             <div className="grid gap-3">
               {project.workExpenses.length ? (
                 project.workExpenses.map((expense) => (
-                  <Link href={`/expenses/${expense.id}/edit`} key={expense.id} className="card block transition hover:border-mint">
+                  <article key={expense.id} className="card">
                     <div className="flex items-start justify-between gap-3">
                       <div>
                         <p className="font-black">{expense.description}</p>
@@ -252,12 +273,25 @@ export default async function ProjectDetailPage({ params }: { params: Promise<{ 
                       </div>
                       <span className="text-lg font-black">{formatMoney(expense.amountCents)}</span>
                     </div>
-                    <p className="mt-2 text-sm font-bold text-moss">
-                      {expenseStatusLabel(expense.status)}
-                      {expense.billable ? " · billable/reimbursable" : ""}
-                    </p>
+                    {expense.gstIncluded ? <p className="mt-2 text-sm font-bold text-moss">GST estimate: {formatMoney(expense.gstAmountCents)}</p> : null}
                     {expense.notes ? <p className="mt-2 text-sm font-bold leading-6 text-moss">{expense.notes}</p> : null}
-                  </Link>
+                    <div className="mt-4 flex flex-col gap-2 sm:flex-row">
+                      <Link href={`/expenses/${expense.id}/edit?returnTo=${encodeURIComponent(`/projects/${project.id}`)}`} className="tap-secondary px-3">
+                        <Edit size={18} aria-hidden="true" />
+                        Edit
+                      </Link>
+                      <form action={deleteWorkExpenseAction}>
+                        <input type="hidden" name="expenseId" value={expense.id} />
+                        <input type="hidden" name="returnTo" value={`/projects/${project.id}`} />
+                        <ConfirmSubmitButton
+                          className="tap-danger px-3"
+                          message={`Delete work expense "${expense.description}"? This permanently removes it from the expense register.`}
+                        >
+                          Delete
+                        </ConfirmSubmitButton>
+                      </form>
+                    </div>
+                  </article>
                 ))
               ) : (
                 <EmptyPanel icon={ReceiptText} title="No linked work expenses" text="Project-allocated work expenses from the expense register will appear here." />
