@@ -10,8 +10,9 @@ type ClientOption = {
   businessName: string;
 };
 
-export function CreateProjectForm({ clients }: { clients: ClientOption[] }) {
-  const [clientId, setClientId] = useState(clients[0]?.id ?? "__new");
+export function CreateProjectForm({ clients, defaultClientId }: { clients: ClientOption[]; defaultClientId?: string }) {
+  const initialClientId = defaultClientId && clients.some((client) => client.id === defaultClientId) ? defaultClientId : clients[0]?.id ?? "__new";
+  const [clientId, setClientId] = useState(initialClientId);
 
   return (
     <form action={createProjectAction} className="grid gap-5">

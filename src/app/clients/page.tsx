@@ -1,30 +1,11 @@
 import Link from "next/link";
-import {
-  BadgeInfo,
-  Building2,
-  CheckCircle2,
-  FileText,
-  FolderKanban,
-  Mail,
-  MapPin,
-  PencilLine,
-  Phone,
-  Search,
-  StickyNote,
-  UsersRound
-} from "lucide-react";
+import { CheckCircle2, Eye, Mail, Phone, Plus, Search, Trash2, UsersRound } from "lucide-react";
 import { deleteClientAction } from "@/app/actions";
 import { requireUserId } from "@/lib/auth";
 import { getClientsPageData } from "@/lib/app-data";
-import { formatDateAU } from "@/lib/dates";
-import { formatMoney } from "@/lib/money";
 import { ConfirmSubmitButton } from "@/components/ConfirmSubmitButton";
 
 export const dynamic = "force-dynamic";
-
-function detail(value: string | null) {
-  return value?.trim() ? value : "Not recorded";
-}
 
 export default async function ClientsPage({
   searchParams
@@ -41,11 +22,19 @@ export default async function ClientsPage({
   return (
     <main className="page-shell">
       <header className="page-header">
-        <div className="flex items-center gap-2 text-moss">
-          <UsersRound size={20} aria-hidden="true" />
-          <p className="section-title">Clients</p>
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+          <div>
+            <div className="flex items-center gap-2 text-moss">
+              <UsersRound size={20} aria-hidden="true" />
+              <p className="section-title">Clients</p>
+            </div>
+            <h1 className="page-title">Client register</h1>
+          </div>
+          <Link href="/clients/new" className="tap-primary">
+            <Plus size={18} aria-hidden="true" />
+            Add Client
+          </Link>
         </div>
-        <h1 className="page-title">Client register</h1>
       </header>
 
       <form className="search-panel mt-5 flex items-center gap-2">
@@ -69,16 +58,31 @@ export default async function ClientsPage({
         {clients.length ? (
           clients.map((client) => {
             return (
-              <article key={client.id} className="card">
-                <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
-                  <div>
-                    <h2 className="text-2xl font-black tracking-normal">{client.businessName}</h2>
-                    <p className="mt-1 text-sm font-bold text-moss">Added {formatDateAU(client.createdAt)}</p>
+              <article key={client.id} className="rounded-lg border border-line bg-white/90 p-4 shadow-soft">
+                <div className="grid gap-4 md:grid-cols-[minmax(0,1fr)_auto] md:items-center">
+                  <div className="min-w-0">
+                    <h2 className="text-xl font-black tracking-normal text-ink">{client.businessName}</h2>
+                    {client.contactName ? <p className="mt-1 text-sm font-bold text-moss">{client.contactName}</p> : null}
+                    <div className="mt-3 flex flex-col gap-1 text-sm font-bold text-moss sm:flex-row sm:flex-wrap sm:gap-x-4">
+                      {client.email ? (
+                        <span className="inline-flex min-w-0 items-center gap-2">
+                          <Mail size={15} aria-hidden="true" />
+                          <span className="break-all">{client.email}</span>
+                        </span>
+                      ) : null}
+                      {client.phone ? (
+                        <span className="inline-flex items-center gap-2">
+                          <Phone size={15} aria-hidden="true" />
+                          {client.phone}
+                        </span>
+                      ) : null}
+                      {!client.email && !client.phone ? <span>No contact details recorded</span> : null}
+                    </div>
                   </div>
-                  <div className="grid gap-2 md:min-w-52">
-                    <Link href={`/clients/${client.id}/edit`} className="tap-secondary w-full">
-                      <PencilLine size={18} aria-hidden="true" />
-                      Edit Client
+                  <div className="grid gap-2 sm:grid-cols-2 md:min-w-48">
+                    <Link href={`/clients/${client.id}`} className="tap-secondary w-full">
+                      <Eye size={18} aria-hidden="true" />
+                      View
                     </Link>
                     <form action={deleteClientAction}>
                       <input type="hidden" name="clientId" value={client.id} />
@@ -86,87 +90,14 @@ export default async function ClientsPage({
                         className="tap-danger w-full"
                         message={`Remove ${client.businessName}? This only works when the client has no invoices or billed history. Projects with real history should be archived instead.`}
                         pendingLabel="Checking..."
+                        showDefaultIcon={false}
                       >
-                        Remove Client
+                        <Trash2 size={18} aria-hidden="true" />
+                        Remove
                       </ConfirmSubmitButton>
                     </form>
                   </div>
                 </div>
-
-                <dl className="mt-5 grid gap-x-5 md:grid-cols-2">
-                  <div className="border-t border-line py-3">
-                    <dt className="flex items-center gap-2 text-xs font-bold uppercase text-moss">
-                      <Building2 size={16} aria-hidden="true" />
-                      Contact
-                    </dt>
-                    <dd className="mt-2 text-sm font-bold">{detail(client.contactName)}</dd>
-                  </div>
-                  <div className="border-t border-line py-3">
-                    <dt className="flex items-center gap-2 text-xs font-bold uppercase text-moss">
-                      <Mail size={16} aria-hidden="true" />
-                      Email
-                    </dt>
-                    <dd className="mt-2 break-words text-sm font-bold">{detail(client.email)}</dd>
-                  </div>
-                  <div className="border-t border-line py-3">
-                    <dt className="flex items-center gap-2 text-xs font-bold uppercase text-moss">
-                      <Phone size={16} aria-hidden="true" />
-                      Phone
-                    </dt>
-                    <dd className="mt-2 text-sm font-bold">{detail(client.phone)}</dd>
-                  </div>
-                  <div className="border-t border-line py-3">
-                    <dt className="flex items-center gap-2 text-xs font-bold uppercase text-moss">
-                      <BadgeInfo size={16} aria-hidden="true" />
-                      ABN
-                    </dt>
-                    <dd className="mt-2 text-sm font-bold">{detail(client.abn)}</dd>
-                  </div>
-                  <div className="border-t border-line py-3 md:col-span-2">
-                    <dt className="flex items-center gap-2 text-xs font-bold uppercase text-moss">
-                      <MapPin size={16} aria-hidden="true" />
-                      Address
-                    </dt>
-                    <dd className="mt-2 whitespace-pre-wrap text-sm font-bold">{detail(client.address)}</dd>
-                  </div>
-                  <div className="border-t border-line py-3 md:col-span-2">
-                    <dt className="flex items-center gap-2 text-xs font-bold uppercase text-moss">
-                      <StickyNote size={16} aria-hidden="true" />
-                      Notes
-                    </dt>
-                    <dd className="mt-2 whitespace-pre-wrap text-sm font-bold">{detail(client.notes)}</dd>
-                  </div>
-                </dl>
-
-                <div className="mt-4 grid gap-4 border-y border-line py-4 md:grid-cols-3">
-                  <div>
-                    <p className="flex items-center gap-2 text-xs font-bold uppercase text-moss">
-                      <FolderKanban size={16} aria-hidden="true" />
-                      Projects
-                    </p>
-                    <p className="mt-2 text-xl font-black">
-                      {client.activeProjectCount} active, {client.archivedProjectCount} archived
-                    </p>
-                  </div>
-                  <div>
-                    <p className="flex items-center gap-2 text-xs font-bold uppercase text-moss">
-                      <FileText size={16} aria-hidden="true" />
-                      Invoices
-                    </p>
-                    <p className="mt-2 text-xl font-black">{client.invoiceCount}</p>
-                  </div>
-                  <div>
-                    <p className="text-xs font-bold uppercase text-moss">Invoice value</p>
-                    <p className="mt-2 text-xl font-black">{formatMoney(client.invoiceValueCents)}</p>
-                  </div>
-                </div>
-
-                {client.projectNames ? (
-                  <div className="mt-4">
-                    <p className="text-xs font-bold uppercase text-moss">Linked projects</p>
-                    <p className="mt-2 text-sm font-bold text-ink">{client.projectNames}</p>
-                  </div>
-                ) : null}
               </article>
             );
           })
@@ -174,11 +105,6 @@ export default async function ClientsPage({
           <article className="card text-sm font-bold text-moss">No clients found.</article>
         )}
       </section>
-
-      <Link className="tap-primary mt-5" href="/projects/new">
-        <FolderKanban size={20} aria-hidden="true" />
-        Add Project or Client
-      </Link>
     </main>
   );
 }

@@ -109,14 +109,14 @@ export default async function DashboardPage() {
           <div className="mt-6 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
             <HeroKpi
               icon={Clock3}
-              label="Weekly Hours"
+              label="This Week's Hours"
               value={`${formatHours(totalCurrentWeekMinutes)}h`}
               note={`${currentWeekEntryCount} logged entr${currentWeekEntryCount === 1 ? "y" : "ies"}`}
               tone="mint"
             />
             <HeroKpi
               icon={TrendingUp}
-              label="Weekly Billable Value"
+              label="Weekly Billable"
               value={formatMoney(totalCurrentWeekBillableCents)}
               note="Labour value logged this week"
               tone="mint"
@@ -147,7 +147,7 @@ export default async function DashboardPage() {
               <Calculator size={20} aria-hidden="true" />
             </span>
             <div>
-              <p className="section-title">Tax Set Aside</p>
+              <p className="section-title">Tax to set aside this week</p>
               <h2 className="mt-1 text-2xl font-black tracking-normal text-ink">{formatMoney(setAside.combinedWeeklyCents)} this week</h2>
               <p className="mt-2 max-w-3xl text-sm font-bold leading-6 text-moss">
                 Estimate only, not tax advice. Based on {formatMoney(setAside.currentWeekEarningsCents)} current-week billable value annualised to{" "}

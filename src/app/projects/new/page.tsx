@@ -6,10 +6,17 @@ import { CreateProjectForm } from "@/components/CreateProjectForm";
 
 export const dynamic = "force-dynamic";
 
-export default async function NewProjectPage() {
+export default async function NewProjectPage({
+  searchParams
+}: {
+  searchParams?: Promise<Record<string, string | string[] | undefined>>;
+}) {
+  const params = await searchParams;
   const ownerId = await requireUserId();
+  const defaultClientId = typeof params?.clientId === "string" ? params.clientId : undefined;
   const clients = await prisma.client.findMany({
     where: { ownerId },
+    select: { id: true, businessName: true },
     orderBy: { businessName: "asc" }
   });
 
@@ -25,7 +32,7 @@ export default async function NewProjectPage() {
       </header>
 
       <section className="card mt-6 max-w-2xl">
-        <CreateProjectForm clients={clients} />
+        <CreateProjectForm clients={clients} defaultClientId={defaultClientId} />
       </section>
     </main>
   );

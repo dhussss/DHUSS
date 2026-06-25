@@ -801,6 +801,39 @@ export async function createProjectAction(formData: FormData) {
   redirect(`/projects/${project.id}`);
 }
 
+export async function createClientAction(formData: FormData) {
+  const ownerId = await requireUserId();
+  const businessName = text(formData, "businessName");
+  const contactName = text(formData, "contactName") || null;
+  const email = text(formData, "email") || null;
+  const phone = text(formData, "phone") || null;
+  const abn = text(formData, "abn") || null;
+  const address = text(formData, "address") || null;
+  const notes = text(formData, "notes") || null;
+
+  if (!businessName) throw new Error("Business name is required.");
+  validateOptionalEmail(email ?? "");
+
+  const client = await prisma.client.create({
+    data: {
+      ownerId,
+      businessName,
+      contactName,
+      email,
+      phone,
+      abn,
+      address,
+      notes
+    }
+  });
+
+  revalidatePath("/");
+  revalidatePath("/clients");
+  revalidatePath("/projects");
+  revalidateAppData();
+  redirect(`/clients/${client.id}?saved=client-created`);
+}
+
 export async function updateClientAction(formData: FormData) {
   const ownerId = await requireUserId();
   const clientId = text(formData, "clientId");
@@ -1505,7 +1538,6 @@ export async function prepareInvoiceEmailAction(formData: FormData) {
   });
 
   if (!invoice) throw new Error("Invoice not found.");
-  if (invoice.status === "DRAFT") throw new Error("Mark the invoice as sent before emailing it.");
   if (invoice.status === "VOID") throw new Error("Void invoices cannot be emailed.");
 
   parseEmailList(text(formData, "to"), "To", true);

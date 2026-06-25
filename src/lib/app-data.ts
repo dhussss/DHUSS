@@ -546,80 +546,26 @@ export type ClientListRow = {
   contactName: string | null;
   email: string | null;
   phone: string | null;
-  abn: string | null;
-  address: string | null;
-  notes: string | null;
-  createdAt: Date;
-  activeProjectCount: number;
-  archivedProjectCount: number;
-  invoiceCount: number;
-  invoiceValueCents: number;
-  projectNames: string | null;
 };
 
 export const getClientsPageData = unstable_cache(
   async (ownerId: string, q: string): Promise<ClientListRow[]> => {
     const like = `%${q}%`;
     const search = q
-      ? Prisma.sql`AND (c."businessName" ILIKE ${like} OR c."contactName" ILIKE ${like} OR c.email ILIKE ${like} OR c.phone ILIKE ${like} OR c.abn ILIKE ${like} OR c.address ILIKE ${like} OR c.notes ILIKE ${like})`
+      ? Prisma.sql`AND (c."businessName" ILIKE ${like} OR c."contactName" ILIKE ${like} OR c.email ILIKE ${like} OR c.phone ILIKE ${like})`
       : Prisma.empty;
 
-    const rows = await prisma.$queryRaw<
-      (Omit<ClientListRow, "activeProjectCount" | "archivedProjectCount" | "invoiceCount" | "invoiceValueCents"> & {
-        activeProjectCount: bigint | number | null;
-        archivedProjectCount: bigint | number | null;
-        invoiceCount: bigint | number | null;
-        invoiceValueCents: bigint | number | null;
-      })[]
-    >`
-      WITH project_totals AS (
-        SELECT
-          "clientId",
-          COUNT(*) FILTER (WHERE status = 'ACTIVE') AS active_count,
-          COUNT(*) FILTER (WHERE status = 'ARCHIVED') AS archived_count,
-          STRING_AGG(title, ', ' ORDER BY title ASC) AS project_names
-        FROM "Project"
-        WHERE "ownerId" = ${ownerId}
-        GROUP BY "clientId"
-      ),
-      invoice_totals AS (
-        SELECT
-          "clientId",
-          COUNT(*) AS invoice_count,
-          COALESCE(SUM("grandTotalCents") FILTER (WHERE status <> 'VOID'), 0) AS invoice_value
-        FROM "Invoice"
-        WHERE "ownerId" = ${ownerId}
-        GROUP BY "clientId"
-      )
+    return prisma.$queryRaw<ClientListRow[]>`
       SELECT
         c.id,
         c."businessName",
         c."contactName",
         c.email,
-        c.phone,
-        c.abn,
-        c.address,
-        c.notes,
-        c."createdAt",
-        COALESCE(project_totals.active_count, 0) AS "activeProjectCount",
-        COALESCE(project_totals.archived_count, 0) AS "archivedProjectCount",
-        COALESCE(invoice_totals.invoice_count, 0) AS "invoiceCount",
-        COALESCE(invoice_totals.invoice_value, 0) AS "invoiceValueCents",
-        project_totals.project_names AS "projectNames"
+        c.phone
       FROM "Client" c
-      LEFT JOIN project_totals ON project_totals."clientId" = c.id
-      LEFT JOIN invoice_totals ON invoice_totals."clientId" = c.id
       WHERE c."ownerId" = ${ownerId} ${search}
       ORDER BY c."businessName" ASC
     `;
-
-    return rows.map((row) => ({
-      ...row,
-      activeProjectCount: numberValue(row.activeProjectCount),
-      archivedProjectCount: numberValue(row.archivedProjectCount),
-      invoiceCount: numberValue(row.invoiceCount),
-      invoiceValueCents: numberValue(row.invoiceValueCents)
-    }));
   },
   ["clients-page-data"],
   { revalidate: SHORT_REVALIDATE_SECONDS, tags: [CACHE_TAGS.clients] }

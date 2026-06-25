@@ -31,6 +31,7 @@ export function WeeklyPerformanceChart({
 }: WeeklyPerformanceChartProps) {
   const maxMinutes = weeklyPerformanceScale(days, rollingAverageDailyMinutes);
   const averagePercent = chartPercent(rollingAverageDailyMinutes, maxMinutes);
+  const averageTop = 100 - averagePercent;
   const deltaHours = Math.abs(averageDeltaMinutes) / 60;
   const deltaLabel = `${averageDeltaMinutes >= 0 ? "+" : "-"}${deltaHours.toFixed(1).replace(/\.0$/, "")}h/day`;
   const trackingCopy = `This week is tracking ${deltaLabel} ${averageDeltaMinutes >= 0 ? "above" : "below"} your 30-day average.`;
@@ -56,39 +57,35 @@ export function WeeklyPerformanceChart({
 
       <div className="overflow-x-auto p-4 sm:p-5">
         <div className="min-w-[68rem]">
-          <div className="relative rounded-lg border border-line bg-white p-4">
-            <div className="pointer-events-none absolute inset-x-4 bottom-4 top-4 z-10">
-              <div className="absolute left-0 right-0 border-t border-dashed border-mint/70" style={{ bottom: `${averagePercent}%` }}>
-                <span className="absolute -top-3 right-0 rounded-full border border-mint/40 bg-white px-2 py-0.5 text-[0.65rem] font-black uppercase text-mint">
-                  30-day avg
-                </span>
-              </div>
-            </div>
-            <div className="grid h-56 grid-cols-7 items-end gap-3">
+          <div className="rounded-lg border border-line bg-white p-4">
+            <div className="grid grid-cols-7 gap-3">
               {days.map((day) => {
                 const barPercent = chartPercent(day.totalMinutes, maxMinutes);
                 // The small zero-day bar is visual only; it is not included in scale calculation.
                 const visiblePercent = day.totalMinutes ? Math.max(8, barPercent) : 2;
 
                 return (
-                  <div key={day.date} className={`flex h-full flex-col justify-end rounded-lg border p-3 ${day.isToday ? "border-mint bg-mint/10 ring-2 ring-mint/20" : "border-line bg-paper/60"}`}>
-                    <div className="mb-auto">
-                      <div className="flex flex-wrap items-center justify-between gap-2">
-                        <p className="text-xs font-black uppercase tracking-[0.12em] text-moss">{day.dayShort}</p>
+                  <div key={day.date} className={`rounded-lg border p-3 ${day.isToday ? "border-mint bg-mint/10 ring-2 ring-mint/20" : "border-line bg-paper/60"}`}>
+                    <div className="flex min-h-14 flex-col gap-1">
+                      <p className="text-xs font-black uppercase tracking-[0.12em] text-moss">{day.dayShort}</p>
+                      <div className="flex items-center justify-between gap-2">
+                        <p className="text-lg font-black text-ink">{day.dateLabel}</p>
                         {day.isToday ? <span className="rounded-full bg-mint px-2 py-1 text-[0.62rem] font-black uppercase leading-none text-white">Today</span> : null}
                       </div>
-                      <p className="mt-1 text-lg font-black text-ink">{day.dateLabel}</p>
                     </div>
-                    <div className="flex h-36 items-end">
-                      <div
-                        className={`w-full rounded-t-lg ${day.isToday ? "bg-gradient-to-t from-mint to-white" : "bg-gradient-to-t from-ink to-mint"}`}
-                        style={{ height: `${visiblePercent}%` }}
-                        aria-label={`${day.dayName}: ${formatHours(day.totalMinutes)} hours`}
-                      />
+                    <div className="flex h-44 items-end" aria-label={`${day.dayName}: ${formatHours(day.totalMinutes)} hours`}>
+                      <div className={`w-full rounded-t-lg ${day.isToday ? "bg-gradient-to-t from-mint to-white" : "bg-gradient-to-t from-ink to-mint"}`} style={{ height: `${visiblePercent}%` }} />
                     </div>
                   </div>
                 );
               })}
+            </div>
+            <div className="relative -mt-44 ml-4 mr-4 h-44">
+              <div className="pointer-events-none absolute left-0 right-0 z-10 border-t border-dashed border-mint/70" style={{ top: `${averageTop}%` }}>
+                <span className="absolute -top-3 right-0 rounded-full border border-mint/40 bg-white px-2 py-0.5 text-[0.65rem] font-black uppercase text-mint">
+                  30-day avg
+                </span>
+              </div>
             </div>
           </div>
 
@@ -144,6 +141,7 @@ export function WeeklyPerformanceChart({
 }
 
 function weeklyPerformanceScale(days: WeekPerformanceDay[], rollingAverageDailyMinutes: number) {
+  // Bars and the average line must share this exact chart max; zero-day visual baselines never affect it.
   return Math.max(8 * 60, rollingAverageDailyMinutes, ...days.map((day) => day.totalMinutes));
 }
 
@@ -165,10 +163,10 @@ export function QuarterTrendChart({ points }: { points: QuarterTrendPoint[] }) {
   const [activeDate, setActiveDate] = useState<string | null>(null);
   const width = 760;
   const height = 320;
-  const padLeft = 86;
-  const padRight = 26;
-  const padTop = 32;
-  const padBottom = 62;
+  const padLeft = 104;
+  const padRight = 30;
+  const padTop = 38;
+  const padBottom = 72;
   const maxMinutes = Math.max(8 * 60, ...points.map((point) => Math.max(point.minutes, point.rollingAverageMinutes)));
   const usableWidth = width - padLeft - padRight;
   const usableHeight = height - padTop - padBottom;
@@ -262,10 +260,10 @@ export function FinancialYearChart({ points, start, end }: { points: FinancialYe
   const [activeMonth, setActiveMonth] = useState<string | null>(null);
   const width = 760;
   const height = 320;
-  const padLeft = 92;
-  const padRight = 28;
-  const padTop = 32;
-  const padBottom = 62;
+  const padLeft = 116;
+  const padRight = 32;
+  const padTop = 38;
+  const padBottom = 72;
   const maxCents = Math.max(100, ...points.map((point) => Math.max(point.paidCents, point.cumulativePaidCents)));
   const usableWidth = width - padLeft - padRight;
   const usableHeight = height - padTop - padBottom;

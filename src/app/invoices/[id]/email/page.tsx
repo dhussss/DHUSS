@@ -32,7 +32,6 @@ export default async function InvoiceEmailPage({ params }: { params: Promise<{ i
   const business = businessDetails(invoice, profile);
   const client = clientDetails(invoice);
   const dueDate = invoiceDueDate(invoice);
-  const canSend = invoice.status === "SENT" || invoice.status === "PAID";
   const fullPublicUrl = invoice.publicTokenEnabled && invoice.publicToken ? absoluteAppUrl(`/public/invoices/${invoice.publicToken}`) : null;
   const templateValues = {
     invoiceNumber: invoice.invoiceNumber,
@@ -62,11 +61,7 @@ export default async function InvoiceEmailPage({ params }: { params: Promise<{ i
     includeInvoiceSummary: profile?.includeInvoiceSummaryInEmail ?? false,
     includePublicInvoiceLink: profile?.includePublicInvoiceLinkInEmail ?? true
   });
-  const disabledReason = !canSend
-    ? "Mark this invoice as sent before emailing it."
-    : !client.email
-      ? "Add an email address to this client before preparing the email."
-      : "";
+  const disabledReason = !client.email ? "Add an email address to this client before preparing the email." : "";
 
   return (
     <main className="page-shell">
@@ -90,7 +85,14 @@ export default async function InvoiceEmailPage({ params }: { params: Promise<{ i
       </header>
 
       <section className="mt-5 grid gap-4 lg:grid-cols-[minmax(0,1fr)_20rem] lg:items-start">
-        <EmailComposer invoiceId={invoice.id} initialTo={client.email ?? ""} initialSubject={subject} initialBody={body} disabledReason={disabledReason} />
+        <EmailComposer
+          invoiceId={invoice.id}
+          invoiceHref={`/invoices/${invoice.id}`}
+          initialTo={client.email ?? ""}
+          initialSubject={subject}
+          initialBody={body}
+          disabledReason={disabledReason}
+        />
 
         <aside className="grid gap-4">
           <section className="card">

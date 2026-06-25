@@ -1,17 +1,20 @@
 "use client";
 
+import Link from "next/link";
 import { useState, useTransition } from "react";
-import { Clipboard, Mail } from "lucide-react";
+import { Clipboard, Mail, Printer } from "lucide-react";
 import { prepareInvoiceEmailAction } from "@/app/actions";
 
 export function EmailComposer({
   invoiceId,
+  invoiceHref,
   initialTo,
   initialSubject,
   initialBody,
   disabledReason
 }: {
   invoiceId: string;
+  invoiceHref: string;
   initialTo: string;
   initialSubject: string;
   initialBody: string;
@@ -71,7 +74,7 @@ export function EmailComposer({
           <p className="section-title">Prepare email</p>
           <h2 className="mt-1 text-2xl font-black tracking-normal text-ink">Review before opening your email app</h2>
           <p className="mt-2 text-sm font-bold leading-6 text-moss">
-            This will open in your email app as plain text.
+            This will open in your email app as plain text. Attach the saved PDF before sending if you need a PDF copy included.
           </p>
         </div>
 
@@ -90,7 +93,11 @@ export function EmailComposer({
           </label>
         </div>
 
-        <div className="grid gap-2 sm:grid-cols-2">
+        <div className="grid gap-2 lg:grid-cols-3">
+          <Link className="tap-secondary w-full" href={invoiceHref} target="_blank" rel="noreferrer">
+            <Printer size={20} aria-hidden="true" />
+            Print / Save PDF
+          </Link>
           <button className="tap-primary w-full" type="button" onClick={openEmailApp} disabled={Boolean(disabledReason) || isPending}>
             {isPending ? (
               "Preparing..."
@@ -108,7 +115,7 @@ export function EmailComposer({
         </div>
 
         <p className="text-xs font-bold leading-5 text-moss">
-          This opens your own email app. Trade Invoice Tracker records that the email was prepared, but it cannot confirm whether you send it.
+          Browser email links cannot reliably attach PDFs automatically. Save the PDF, open your email app, attach it manually, then mark the invoice as sent after sending.
         </p>
       </div>
 

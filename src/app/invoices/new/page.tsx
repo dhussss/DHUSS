@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { AlertTriangle, ArrowLeft, CalendarDays, Eye, FilePlus, FolderKanban, ListChecks, Rows3, WalletCards } from "lucide-react";
+import { AlertTriangle, ArrowLeft, FilePlus, RefreshCcw, WalletCards } from "lucide-react";
 import { createInvoiceDraftAction } from "@/app/actions";
 import { requireUserId } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
@@ -12,13 +12,6 @@ import { SubmitButton } from "@/components/SubmitButton";
 export const dynamic = "force-dynamic";
 
 type SearchParams = Record<string, string | string[] | undefined>;
-const invoiceSteps = [
-  { step: "1", label: "Project", icon: FolderKanban },
-  { step: "2", label: "Date range", icon: CalendarDays },
-  { step: "3", label: "Mode", icon: Rows3 },
-  { step: "4", label: "Review", icon: ListChecks },
-  { step: "5", label: "Draft", icon: FilePlus }
-];
 
 function paramValue(params: SearchParams | undefined, key: string) {
   const value = params?.[key];
@@ -121,22 +114,7 @@ export default async function NewInvoicePage({
       <header className="page-header">
         <p className="section-title">New invoice</p>
         <h1 className="page-title">Create invoice draft</h1>
-        <p className="page-subtitle">
-          Build a draft from unbilled work, review what will be included, then finalise it from the invoice preview.
-        </p>
       </header>
-
-      <section className="mt-5 grid gap-2 sm:grid-cols-5">
-        {invoiceSteps.map(({ step, label, icon: Icon }) => (
-          <div key={label} className="rounded-lg border border-line bg-white p-3">
-            <div className="flex items-center gap-2">
-              <span className="grid size-7 place-items-center rounded-full bg-mint text-xs font-black text-white">{step}</span>
-              <Icon size={16} aria-hidden="true" className="text-moss" />
-            </div>
-            <p className="mt-2 text-sm font-black">{label}</p>
-          </div>
-        ))}
-      </section>
 
       <form className="card mt-5 grid gap-4" method="get">
         <label>
@@ -144,12 +122,18 @@ export default async function NewInvoicePage({
           <select name="projectId" defaultValue={projectId} required>
             {projects.map((project) => (
               <option key={project.id} value={project.id}>
-                {project.title} - {project.client.businessName} - {formatHours(project.timeEntries.reduce((sum, entry) => sum + entry.durationMinutes, 0))}h /{" "}
-                {project.expenseItems.length} items unbilled
+                {project.title}
               </option>
             ))}
           </select>
         </label>
+        {selectedProject ? (
+          <div className="grid gap-2 rounded-lg border border-line bg-paper p-3 text-sm font-bold text-moss sm:grid-cols-3">
+            <span>{selectedProject.client.businessName}</span>
+            <span>{formatHours(selectedProject.timeEntries.reduce((sum, entry) => sum + entry.durationMinutes, 0))}h unbilled</span>
+            <span>{selectedProject.expenseItems.length} expense item{selectedProject.expenseItems.length === 1 ? "" : "s"}</span>
+          </div>
+        ) : null}
         <div className="grid grid-cols-2 gap-3">
           <label>
             Start date
@@ -167,21 +151,21 @@ export default async function NewInvoicePage({
               <input className="size-5 min-h-0 w-auto" type="radio" name="invoiceMode" value="SIMPLE" defaultChecked={invoiceMode === "SIMPLE"} />
               <span>
                 <span className="block font-black">Simple</span>
-                <span className="text-xs font-bold text-moss">One client-facing labour total. Expenses still show.</span>
+                <span className="text-xs font-bold text-moss">Only show the bill total.</span>
               </span>
             </label>
             <label className={`flex min-h-12 cursor-pointer grid-cols-none flex-row items-center gap-3 rounded-lg border px-3 ${invoiceMode === "DETAILED" ? "border-mint bg-mint/10" : "border-line bg-white"}`}>
               <input className="size-5 min-h-0 w-auto" type="radio" name="invoiceMode" value="DETAILED" defaultChecked={invoiceMode === "DETAILED"} />
               <span>
                 <span className="block font-black">Detailed</span>
-                <span className="text-xs font-bold text-moss">Shows each day, hours, rate, amount, and notes. Expenses still show.</span>
+                <span className="text-xs font-bold text-moss">Fully detailed breakdown.</span>
               </span>
             </label>
           </div>
         </fieldset>
         <button className="tap-secondary" type="submit">
-          <Eye size={20} aria-hidden="true" />
-          Review Unbilled Work
+          <RefreshCcw size={20} aria-hidden="true" />
+          Update Invoice
         </button>
       </form>
 

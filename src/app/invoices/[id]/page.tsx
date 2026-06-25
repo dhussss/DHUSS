@@ -281,13 +281,17 @@ export default async function InvoiceDetailPage({ params }: { params: Promise<{ 
           ) : null}
 
           <section className="card">
-            <p className="section-title">Actions</p>
+            <p className="section-title">Send workflow</p>
             <div className="mt-4 grid gap-2">
+              <p className="text-sm font-bold text-moss">1. Prepare the email and save the PDF if you want to attach it.</p>
               <Link href={`/invoices/${invoice.id}/email`} className="tap-primary w-full">
                 <Mail size={20} aria-hidden="true" />
                 Prepare Email
               </Link>
               <InvoiceExportActions invoiceText={invoiceText} />
+              <p className="rounded-lg border border-line bg-paper p-3 text-xs font-bold leading-5 text-moss">
+                After sending from your email app, mark this invoice as sent. The app cannot confirm whether your mail app sent it.
+              </p>
             </div>
           </section>
 
@@ -354,6 +358,7 @@ export default async function InvoiceDetailPage({ params }: { params: Promise<{ 
           </section>
 
           <section className="grid gap-2">
+            <p className="section-title">2. Mark status</p>
             <form action={markInvoiceSentAction}>
               <input type="hidden" name="invoiceId" value={invoice.id} />
               {finaliseWarnings.length ? <input type="hidden" name="confirmIncomplete" value="on" /> : null}
@@ -366,12 +371,12 @@ export default async function InvoiceDetailPage({ params }: { params: Promise<{ 
                   showDefaultIcon={false}
                 >
                   <Send size={20} aria-hidden="true" />
-                  Mark Sent
+                  Mark as Sent
                 </ConfirmSubmitButton>
               ) : (
                 <SubmitButton className="tap-primary w-full" pendingLabel="Marking sent..." disabled={invoice.status !== "DRAFT"}>
                   <Send size={20} aria-hidden="true" />
-                  Mark Sent
+                  Mark as Sent
                 </SubmitButton>
               )}
             </form>

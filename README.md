@@ -193,6 +193,10 @@ The diagnostics page helps choose the next fix: if TCP/TLS connect is fast but P
 
 No email provider is required for the normal workflow. `/invoices/<id>/email` prepares a short, editable plain-text email, then opens the user's default email app with a `mailto:` link so the invoice is sent from that user's own account.
 
+Draft invoices can open the email preparation page. Opening the email app does not mark the invoice as sent; after sending from the mail app, manually use `Mark as Sent` on the invoice page.
+
+Standard browser `mailto:` links cannot reliably attach generated PDF files. Use `Print / Save PDF` from the invoice preview, open the email app, then attach the saved PDF manually. Automatic PDF attachments require a server-side email provider such as Resend or Postmark with verified sending details.
+
 Set `APP_BASE_URL` in Vercel if you use public invoice links. When a public link exists, Business Profile controls whether that link is included in the prepared email.
 
 The default invoice email template can be customised in `/business-profile` with merge tags: `{{clientName}}`, `{{invoiceNumber}}`, `{{projectName}}`, `{{amountDue}}`, `{{dueDate}}`, `{{senderName}}`, and `{{businessName}}`. Payment details and a short invoice summary are optional and off by default.
@@ -234,6 +238,13 @@ Use `/diagnostics?token=<DIAGNOSTICS_TOKEN>` while logged in to open a private p
 - Invoice detail pages show the user's logo when available.
 - Business profile now includes an invoice prefix. The default is `INV-`.
 
+## Clients
+
+- `/clients` is a compact register showing client/entity name, contact name, email, and phone.
+- `/clients/new` creates a client without needing to create a project first.
+- `/clients/<id>` shows full client details plus linked project and invoice summaries.
+- `/clients/<id>/edit` updates client details for future projects and draft invoice usage. Sent and paid invoices keep their stored client snapshots.
+
 ## Invoice Workflow
 
 - `/invoices/new` lets a user select a project, date range, and invoice mode.
@@ -247,7 +258,7 @@ Use `/diagnostics?token=<DIAGNOSTICS_TOKEN>` while logged in to open a private p
 - The public invoice route `/public/invoices/<token>` uses the same print rules as the private invoice preview.
 - App navigation, action buttons, and app backgrounds are hidden in print.
 - Invoice preview supports Copy Invoice Text, browser Print / Save as PDF, and a prepare-email workflow at `/invoices/<id>/email`.
-- Email preparation requires the invoice to be sent or paid. It does not require `RESEND_API_KEY` or `RESEND_FROM_EMAIL`.
+- Email preparation works for draft, sent, and paid invoices. It does not require `RESEND_API_KEY` or `RESEND_FROM_EMAIL`.
 - The email composer opens the user's own email app with the recipient, subject, and professional plain-text body filled in. Copy Email Text is available as a fallback.
 - `APP_BASE_URL` is only needed when the prepared email includes an active public invoice link.
 - Sent and paid invoices can create a secure client invoice link at `/public/invoices/<token>`. Links can be revoked or regenerated from the invoice page.

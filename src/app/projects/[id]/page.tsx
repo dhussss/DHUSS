@@ -18,7 +18,12 @@ export const dynamic = "force-dynamic";
 export default async function ProjectDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const ownerId = await requireUserId();
-  const [project, activeProjects] = await Promise.all([
+  const today = todayInPerth();
+  const monthStart = new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), 1));
+  const monthEnd = new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth() + 1, 0));
+  const calendarStart = startOfWeekMonday(monthStart);
+  const calendarEnd = addDays(startOfWeekMonday(monthEnd), 6);
+  const [project, activeProjects, monthlyEntries, dayOffLogs] = await Promise.all([
     prisma.project.findFirst({
       where: { id, ownerId },
       include: {
@@ -33,6 +38,22 @@ export default async function ProjectDetailPage({ params }: { params: Promise<{ 
       where: { status: "ACTIVE", ownerId },
       include: { client: true },
       orderBy: { title: "asc" }
+    }),
+    prisma.timeEntry.findMany({
+      where: {
+        projectId: id,
+        ownerId,
+        date: { gte: calendarStart, lte: calendarEnd }
+      },
+      select: { date: true, durationMinutes: true }
+    }),
+    prisma.dayOffLog.findMany({
+      where: {
+        ownerId,
+        date: { gte: calendarStart, lte: calendarEnd },
+        plannedWorkDay: true
+      },
+      select: { date: true }
     })
   ]);
 
@@ -62,9 +83,8 @@ export default async function ProjectDetailPage({ params }: { params: Promise<{ 
   const unbilledTotalCents = unbilledTimeValueCents + unbilledExpenseValueCents;
   const hasUnbilledWork = unbilledTimeEntries.length > 0 || unbilledExpenseItems.length > 0;
   const activeInvoiceCount = project.invoices.filter((invoice) => invoice.status !== "VOID").length;
-  const today = todayInPerth();
   const monthLabel = new Intl.DateTimeFormat("en-AU", { month: "long", year: "numeric", timeZone: "UTC" }).format(today);
-  const monthlyActivityCells = buildMonthlyActivityCells(project.timeEntries, today);
+  const monthlyActivityCells = buildMonthlyActivityCells(monthlyEntries, dayOffLogs, today);
 
   return (
     <main className="page-shell">
@@ -373,17 +393,19 @@ type MonthlyActivityCell = {
   dayNumber: number;
   inCurrentMonth: boolean;
   isToday: boolean;
+  isDayOff: boolean;
   totalMinutes: number;
   entryCount: number;
 };
 
-function buildMonthlyActivityCells(entries: Array<{ date: Date; durationMinutes: number }>, anchor: Date): MonthlyActivityCell[] {
+function buildMonthlyActivityCells(entries: Array<{ date: Date; durationMinutes: number }>, dayOffLogs: Array<{ date: Date }>, anchor: Date): MonthlyActivityCell[] {
   const monthStart = new Date(Date.UTC(anchor.getUTCFullYear(), anchor.getUTCMonth(), 1));
   const monthEnd = new Date(Date.UTC(anchor.getUTCFullYear(), anchor.getUTCMonth() + 1, 0));
   const calendarStart = startOfWeekMonday(monthStart);
   const calendarEnd = addDays(startOfWeekMonday(monthEnd), 6);
   const todayKey = dateInputValue(anchor);
   const activity = new Map<string, { totalMinutes: number; entryCount: number }>();
+  const dayOffDates = new Set(dayOffLogs.map((log) => dateInputValue(log.date)));
 
   for (const entry of entries) {
     const key = dateInputValue(entry.date);
@@ -403,6 +425,7 @@ function buildMonthlyActivityCells(entries: Array<{ date: Date; durationMinutes:
       dayNumber: day.getUTCDate(),
       inCurrentMonth: day.getUTCMonth() === anchor.getUTCMonth(),
       isToday: key === todayKey,
+      isDayOff: dayOffDates.has(key),
       totalMinutes: summary.totalMinutes,
       entryCount: summary.entryCount
     });
@@ -413,7 +436,7 @@ function buildMonthlyActivityCells(entries: Array<{ date: Date; durationMinutes:
 
 function MonthlyActivityCalendar({ monthLabel, cells }: { monthLabel: string; cells: MonthlyActivityCell[] }) {
   const weekDays = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
-  const hasActivity = cells.some((cell) => cell.entryCount > 0);
+  const hasActivity = cells.some((cell) => cell.entryCount > 0 || cell.isDayOff);
 
   return (
     <section className="mt-5 overflow-hidden rounded-lg border border-line bg-white shadow-soft">
@@ -427,7 +450,7 @@ function MonthlyActivityCalendar({ monthLabel, cells }: { monthLabel: string; ce
             <h2 className="text-xl font-black tracking-normal">{monthLabel}</h2>
           </div>
         </div>
-        <p className="text-sm font-bold text-moss">{hasActivity ? "Dots show days with logged work" : "No logged work this month yet"}</p>
+        <p className="text-sm font-bold text-moss">{hasActivity ? "Theme dots show work. Red dots show days off." : "No logged work this month yet"}</p>
       </div>
       <div className="p-3 sm:p-5">
         <div className="grid grid-cols-7 gap-1.5 text-center text-xs font-black uppercase text-moss sm:gap-2">
@@ -439,9 +462,12 @@ function MonthlyActivityCalendar({ monthLabel, cells }: { monthLabel: string; ce
         </div>
         <div className="grid grid-cols-7 gap-1.5 sm:gap-2">
           {cells.map((cell) => {
-            const title = cell.entryCount
-              ? `${formatDateAU(cell.date)}: ${formatHours(cell.totalMinutes)}h across ${cell.entryCount} entr${cell.entryCount === 1 ? "y" : "ies"}`
-              : `${formatDateAU(cell.date)}: no work logged`;
+            const title = [
+              formatDateAU(cell.date),
+              cell.entryCount ? `${formatHours(cell.totalMinutes)}h across ${cell.entryCount} entr${cell.entryCount === 1 ? "y" : "ies"}` : "no work logged",
+              cell.isDayOff ? "day off logged" : ""
+            ].filter(Boolean).join(", ");
+            const hasWork = cell.totalMinutes > 0;
 
             return (
               <div
@@ -459,13 +485,10 @@ function MonthlyActivityCalendar({ monthLabel, cells }: { monthLabel: string; ce
                   <span className="text-sm font-black text-ink">{cell.dayNumber}</span>
                   {cell.isToday ? <span className="rounded-full bg-mint px-1.5 py-0.5 text-[0.58rem] font-black uppercase leading-none text-white">Today</span> : null}
                 </div>
-                {cell.entryCount ? (
+                {hasWork || cell.isDayOff ? (
                   <div className="mt-3 grid gap-1">
-                    <span className="size-2.5 rounded-full bg-mint" aria-hidden="true" />
-                    <span className="text-xs font-black text-ink">{formatHours(cell.totalMinutes)}h</span>
-                    <span className="text-[0.65rem] font-bold text-moss">
-                      {cell.entryCount} entr{cell.entryCount === 1 ? "y" : "ies"}
-                    </span>
+                    <span className={`size-2.5 rounded-full ${hasWork ? "bg-mint" : "bg-gum"}`} aria-hidden="true" />
+                    {hasWork ? <span className="text-xs font-black text-ink">{formatHours(cell.totalMinutes)}h</span> : null}
                   </div>
                 ) : null}
               </div>

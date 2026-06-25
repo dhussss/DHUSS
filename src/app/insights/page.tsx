@@ -83,7 +83,7 @@ export default async function InsightsPage() {
       </section>
 
       <section className="mt-5 grid gap-4 xl:grid-cols-[0.95fr_1.05fr]">
-        <Panel title="Tax Set Aside" icon={Calculator}>
+        <Panel title="Tax to set aside this week" icon={Calculator}>
           <InsightStat label="Current week earnings" value={formatMoney(insights.taxSetAside.currentWeekEarningsCents)} />
           <InsightStat label="Annualised income estimate" value={formatMoney(insights.taxSetAside.estimatedAnnualIncomeCents)} />
           <InsightStat label="Effective tax rate estimate" value={formatPercent(insights.taxSetAside.estimatedEffectiveTaxRate)} />
