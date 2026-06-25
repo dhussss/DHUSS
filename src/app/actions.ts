@@ -72,24 +72,6 @@ export async function logoutAction() {
   redirect("/login");
 }
 
-async function logAudit(
-  ownerId: string,
-  action: string,
-  entityType: string,
-  entityId?: string | null,
-  metadata?: Record<string, string | number | boolean | null>
-) {
-  await prisma.auditLog.create({
-    data: {
-      ownerId,
-      action,
-      entityType,
-      entityId: entityId ?? null,
-      metadata: metadata ?? undefined
-    }
-  });
-}
-
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 function parseEmailList(value: string, label: string, required = false) {
@@ -155,20 +137,7 @@ function validateBusinessProfileInput(formData: FormData, gstRegistered: boolean
   const gstRate = gstRegistered ? optionalDecimal(formData, "gstRate", 10) : 0;
   if (gstRate > 100) throw new Error("GST rate must be between 0 and 100.");
 
-  const themeAccent = text(formData, "themeAccent") || "emerald";
-  if (!["emerald", "blue", "slate", "amber", "purple"].includes(themeAccent)) {
-    throw new Error("Choose one of the available colour themes.");
-  }
-  const themeMode = text(formData, "themeMode") || "system";
-  if (!["system", "light", "dark"].includes(themeMode)) {
-    throw new Error("Choose a valid display mode.");
-  }
-
-  optionalPercentage(formData, "customTaxPercentageOverride");
-  const superContributionPercentage = optionalDecimal(formData, "superContributionPercentage", 11.5);
-  if (superContributionPercentage > 100) throw new Error("Super contribution percentage must be between 0 and 100.");
-
-  return { invoicePrefix, gstRate, themeAccent, themeMode };
+  return { invoicePrefix, gstRate };
 }
 
 export async function updateBusinessProfileAction(formData: FormData) {
@@ -177,18 +146,12 @@ export async function updateBusinessProfileAction(formData: FormData) {
   if (!tradingName) throw new Error("Trading/business name is required.");
 
   const gstRegistered = text(formData, "gstRegistered") === "on";
-  const { invoicePrefix, gstRate, themeAccent, themeMode } = validateBusinessProfileInput(formData, gstRegistered);
+  const { invoicePrefix, gstRate } = validateBusinessProfileInput(formData, gstRegistered);
   const defaultInvoiceEmailBody = text(formData, "defaultInvoiceEmailBody") || text(formData, "defaultInvoiceBody") || null;
   const defaultInvoiceBody = text(formData, "defaultInvoiceBody") || defaultInvoiceEmailBody;
   const includePaymentDetailsInEmail = text(formData, "includePaymentDetailsInEmail") === "on";
   const includeInvoiceSummaryInEmail = text(formData, "includeInvoiceSummaryInEmail") === "on";
   const includePublicInvoiceLinkInEmail = text(formData, "includePublicInvoiceLinkInEmail") === "on";
-  const taxSetAsideEnabled = text(formData, "taxSetAsideEnabled") === "on";
-  const includeGstInTaxEstimate = text(formData, "includeGstInTaxEstimate") === "on";
-  const includeSuperInSetAsidePlanning = text(formData, "includeSuperInSetAsidePlanning") === "on";
-  const superPlanningEnabled = text(formData, "superPlanningEnabled") === "on";
-  const customTaxPercentageOverride = optionalPercentage(formData, "customTaxPercentageOverride");
-  const superContributionPercentage = optionalDecimal(formData, "superContributionPercentage", 11.5);
 
   const existing = await prisma.businessProfile.findUnique({ where: { ownerId } });
   const legacyDefaultInvoiceEmailMessage = text(formData, "defaultInvoiceEmailMessage") || defaultInvoiceEmailBody || existing?.defaultInvoiceEmailMessage || null;
@@ -215,7 +178,7 @@ export async function updateBusinessProfileAction(formData: FormData) {
     logoPath = null;
   }
 
-  const profile = await prisma.businessProfile.upsert({
+  await prisma.businessProfile.upsert({
     where: { ownerId },
     create: {
       ownerId,
@@ -251,17 +214,7 @@ export async function updateBusinessProfileAction(formData: FormData) {
       includePaymentDetailsInEmail,
       includeInvoiceSummaryInEmail,
       includePublicInvoiceLinkInEmail,
-      taxSetAsideEnabled,
-      customTaxPercentageOverride,
-      includeGstInTaxEstimate,
-      includeSuperInSetAsidePlanning,
-      superPlanningEnabled,
-      superContributionPercentage,
-      superFundName: text(formData, "superFundName") || null,
-      superMemberNumber: text(formData, "superMemberNumber") || null,
       replyToEmail: text(formData, "replyToEmail") || null,
-      themeAccent,
-      themeMode,
       logoPath,
       signatureFooter: text(formData, "signatureFooter") || null
     },
@@ -298,17 +251,7 @@ export async function updateBusinessProfileAction(formData: FormData) {
       includePaymentDetailsInEmail,
       includeInvoiceSummaryInEmail,
       includePublicInvoiceLinkInEmail,
-      taxSetAsideEnabled,
-      customTaxPercentageOverride,
-      includeGstInTaxEstimate,
-      includeSuperInSetAsidePlanning,
-      superPlanningEnabled,
-      superContributionPercentage,
-      superFundName: text(formData, "superFundName") || null,
-      superMemberNumber: text(formData, "superMemberNumber") || null,
       replyToEmail: text(formData, "replyToEmail") || null,
-      themeAccent,
-      themeMode,
       logoPath,
       signatureFooter: text(formData, "signatureFooter") || null
     }
@@ -319,14 +262,67 @@ export async function updateBusinessProfileAction(formData: FormData) {
     await supabase.storage.from("business-logos").remove([existing.logoPath]);
   }
 
-  await logAudit(ownerId, existing ? "business_profile.updated" : "business_profile.created", "BusinessProfile", profile.id, {
-    logoChanged: Boolean(removeLogo || submittedLogoPath)
-  });
-  if (removeLogo) await logAudit(ownerId, "business_profile.logo_removed", "BusinessProfile", profile.id);
-  if (submittedLogoPath) await logAudit(ownerId, "business_profile.logo_uploaded", "BusinessProfile", profile.id);
-
   revalidatePath("/business-profile");
   revalidatePath("/invoices");
+  return { ok: true };
+}
+
+export async function updateSettingsAction(formData: FormData) {
+  const ownerId = await requireUserId();
+  const themeAccent = text(formData, "themeAccent") || "emerald";
+  if (!["emerald", "blue", "slate", "amber", "purple"].includes(themeAccent)) {
+    throw new Error("Choose one of the available colour themes.");
+  }
+
+  const themeMode = text(formData, "themeMode") || "system";
+  if (!["system", "light", "dark"].includes(themeMode)) {
+    throw new Error("Choose a valid display mode.");
+  }
+
+  const customTaxPercentageOverride = optionalPercentage(formData, "customTaxPercentageOverride");
+  const superContributionPercentage = optionalDecimal(formData, "superContributionPercentage", 11.5);
+  if (superContributionPercentage > 100) throw new Error("Super contribution percentage must be between 0 and 100.");
+
+  const existing = await prisma.businessProfile.findUnique({
+    where: { ownerId },
+    select: { tradingName: true, invoicePrefix: true }
+  });
+
+  await prisma.businessProfile.upsert({
+    where: { ownerId },
+    create: {
+      ownerId,
+      tradingName: existing?.tradingName || "My Business",
+      invoicePrefix: existing?.invoicePrefix || "INV-",
+      taxSetAsideEnabled: text(formData, "taxSetAsideEnabled") === "on",
+      customTaxPercentageOverride,
+      includeGstInTaxEstimate: text(formData, "includeGstInTaxEstimate") === "on",
+      includeSuperInSetAsidePlanning: text(formData, "includeSuperInSetAsidePlanning") === "on",
+      superPlanningEnabled: text(formData, "superPlanningEnabled") === "on",
+      superContributionPercentage,
+      superFundName: text(formData, "superFundName") || null,
+      superMemberNumber: text(formData, "superMemberNumber") || null,
+      themeAccent,
+      themeMode
+    },
+    update: {
+      taxSetAsideEnabled: text(formData, "taxSetAsideEnabled") === "on",
+      customTaxPercentageOverride,
+      includeGstInTaxEstimate: text(formData, "includeGstInTaxEstimate") === "on",
+      includeSuperInSetAsidePlanning: text(formData, "includeSuperInSetAsidePlanning") === "on",
+      superPlanningEnabled: text(formData, "superPlanningEnabled") === "on",
+      superContributionPercentage,
+      superFundName: text(formData, "superFundName") || null,
+      superMemberNumber: text(formData, "superMemberNumber") || null,
+      themeAccent,
+      themeMode
+    }
+  });
+
+  revalidatePath("/");
+  revalidatePath("/settings");
+  revalidatePath("/insights");
+  revalidateAppData();
   return { ok: true };
 }
 
@@ -336,10 +332,34 @@ export async function createTimeEntryAction(formData: FormData) {
   const date = parseInputDate(formData.get("date"));
   const notes = text(formData, "notes") || null;
   const mode = text(formData, "entryMode");
+  const logDayOff = text(formData, "logDayOff") === "on";
 
   const project = await prisma.project.findFirst({ where: { id: projectId, ownerId } });
   if (!project || project.status !== "ACTIVE") {
     throw new Error("Choose an active project.");
+  }
+
+  if (logDayOff) {
+    await prisma.dayOffLog.upsert({
+      where: { ownerId_date: { ownerId, date } },
+      create: {
+        ownerId,
+        date,
+        reason: "Day off",
+        plannedWorkDay: true,
+        notes
+      },
+      update: {
+        reason: "Day off",
+        plannedWorkDay: true,
+        notes
+      }
+    });
+
+    revalidatePath("/");
+    revalidatePath("/insights");
+    revalidateAppData();
+    redirect(returnTo(formData));
   }
 
   let durationMinutes = 0;
@@ -371,7 +391,7 @@ export async function createTimeEntryAction(formData: FormData) {
     }
   }
 
-  const entry = await prisma.timeEntry.create({
+  await prisma.timeEntry.create({
     data: {
       projectId,
       ownerId,
@@ -384,7 +404,6 @@ export async function createTimeEntryAction(formData: FormData) {
     }
   });
 
-  await logAudit(ownerId, "time_entry.created", "TimeEntry", entry.id, { projectId });
   revalidatePath("/");
   revalidatePath("/projects");
   revalidateAppData();
@@ -447,7 +466,6 @@ export async function updateTimeEntryAction(formData: FormData) {
     data: timeEntryDataFromForm(formData)
   });
 
-  await logAudit(ownerId, "time_entry.updated", "TimeEntry", entryId, { projectId });
   revalidatePath("/");
   revalidatePath("/projects");
   revalidatePath(`/projects/${projectId}`);
@@ -472,7 +490,6 @@ export async function deleteTimeEntryAction(formData: FormData) {
 
   await prisma.timeEntry.delete({ where: { id: entryId } });
 
-  await logAudit(ownerId, "time_entry.deleted", "TimeEntry", entryId, { projectId });
   revalidatePath("/");
   revalidatePath("/projects");
   revalidatePath(`/projects/${projectId}`);
@@ -499,7 +516,7 @@ export async function createExpenseItemAction(formData: FormData) {
     throw new Error("Choose an active project.");
   }
 
-  const expense = await prisma.expenseItem.create({
+  await prisma.expenseItem.create({
     data: {
       projectId,
       ownerId,
@@ -512,7 +529,6 @@ export async function createExpenseItemAction(formData: FormData) {
     }
   });
 
-  await logAudit(ownerId, "expense_item.created", "ExpenseItem", expense.id, { projectId });
   revalidatePath("/");
   revalidatePath("/projects");
   revalidateAppData();
@@ -559,7 +575,6 @@ export async function updateExpenseItemAction(formData: FormData) {
     data: expenseItemDataFromForm(formData)
   });
 
-  await logAudit(ownerId, "expense_item.updated", "ExpenseItem", item.id, { projectId });
   revalidatePath("/");
   revalidatePath("/projects");
   revalidatePath(`/projects/${projectId}`);
@@ -584,7 +599,6 @@ export async function deleteExpenseItemAction(formData: FormData) {
 
   await prisma.expenseItem.delete({ where: { id: item.id } });
 
-  await logAudit(ownerId, "expense_item.deleted", "ExpenseItem", item.id, { projectId });
   revalidatePath("/");
   revalidatePath("/projects");
   revalidatePath(`/projects/${projectId}`);
@@ -648,11 +662,6 @@ export async function createWorkExpenseAction(formData: FormData) {
     }
   });
 
-  await logAudit(ownerId, "work_expense.created", "WorkExpense", expense.id, {
-    category: expense.category,
-    status: expense.status,
-    projectId: expense.projectId
-  });
   revalidatePath("/");
   revalidatePath("/expenses");
   revalidatePath("/insights");
@@ -678,11 +687,6 @@ export async function updateWorkExpenseAction(formData: FormData) {
     data
   });
 
-  await logAudit(ownerId, "work_expense.updated", "WorkExpense", expense.id, {
-    category: expense.category,
-    status: expense.status,
-    projectChanged: existing.projectId !== expense.projectId
-  });
   revalidatePath("/");
   revalidatePath("/expenses");
   revalidatePath(`/expenses/${expense.id}/edit`);
@@ -700,7 +704,6 @@ export async function archiveWorkExpenseAction(formData: FormData) {
   if (!expense) throw new Error("Expense not found.");
 
   await prisma.workExpense.update({ where: { id: expense.id }, data: { archivedAt: new Date() } });
-  await logAudit(ownerId, "work_expense.archived", "WorkExpense", expense.id, { projectId: expense.projectId });
   revalidatePath("/");
   revalidatePath("/expenses");
   revalidatePath("/insights");
@@ -716,7 +719,6 @@ export async function restoreWorkExpenseAction(formData: FormData) {
   if (!expense) throw new Error("Expense not found.");
 
   await prisma.workExpense.update({ where: { id: expense.id }, data: { archivedAt: null } });
-  await logAudit(ownerId, "work_expense.restored", "WorkExpense", expense.id, { projectId: expense.projectId });
   revalidatePath("/");
   revalidatePath("/expenses");
   revalidatePath("/insights");
@@ -735,45 +737,11 @@ export async function deleteWorkExpenseAction(formData: FormData) {
   if (!expense) throw new Error("Expense not found.");
 
   await prisma.workExpense.delete({ where: { id: expense.id } });
-  await logAudit(ownerId, "work_expense.deleted", "WorkExpense", expense.id, { projectId: expense.projectId });
 
   revalidatePath("/");
   revalidatePath("/expenses");
   revalidatePath("/insights");
   if (expense.projectId) revalidatePath(`/projects/${expense.projectId}`);
-  revalidateAppData();
-  redirect(returnTo(formData));
-}
-
-export async function logDayOffAction(formData: FormData) {
-  const ownerId = await requireUserId();
-  const date = parseInputDate(formData.get("date"));
-  const plannedWorkDay = text(formData, "plannedWorkDay") === "on";
-  const existing = await prisma.dayOffLog.findUnique({
-    where: { ownerId_date: { ownerId, date } },
-    select: { id: true }
-  });
-
-  const dayOff = await prisma.dayOffLog.upsert({
-    where: { ownerId_date: { ownerId, date } },
-    create: {
-      ownerId,
-      date,
-      reason: text(formData, "reason") || null,
-      plannedWorkDay,
-      notes: text(formData, "notes") || null
-    },
-    update: {
-      reason: text(formData, "reason") || null,
-      plannedWorkDay,
-      notes: text(formData, "notes") || null
-    }
-  });
-
-  await logAudit(ownerId, existing ? "day_off.updated" : "day_off.created", "DayOffLog", dayOff.id, { plannedWorkDay });
-  revalidatePath("/");
-  revalidatePath("/day-off");
-  revalidatePath("/insights");
   revalidateAppData();
   redirect(returnTo(formData));
 }
@@ -804,7 +772,6 @@ export async function createProjectAction(formData: FormData) {
         notes: text(formData, "newClientNotes") || null
       }
     });
-    await logAudit(ownerId, "client.created", "Client", client.id);
     clientId = client.id;
   }
 
@@ -829,7 +796,6 @@ export async function createProjectAction(formData: FormData) {
     }
   });
 
-  await logAudit(ownerId, "project.created", "Project", project.id, { clientId });
   revalidatePath("/projects");
   revalidateAppData();
   redirect(`/projects/${project.id}`);
@@ -853,31 +819,15 @@ export async function updateClientAction(formData: FormData) {
     where: { id: clientId, ownerId },
     select: {
       id: true,
-      businessName: true,
-      contactName: true,
-      email: true,
-      phone: true,
-      abn: true,
-      address: true,
-      notes: true
+      businessName: true
     }
   });
 
   if (!existing) throw new Error("Client not found.");
 
-  const nextValues = { businessName, contactName, email, phone, abn, address, notes };
-  const changedFields = Object.entries(nextValues)
-    .filter(([key, value]) => existing[key as keyof typeof nextValues] !== value)
-    .map(([key]) => key);
-
   await prisma.client.update({
     where: { id: existing.id },
-    data: nextValues
-  });
-
-  await logAudit(ownerId, "client.updated", "Client", existing.id, {
-    changedFieldCount: changedFields.length,
-    changedFields: changedFields.join(",") || null
+    data: { businessName, contactName, email, phone, abn, address, notes }
   });
 
   revalidatePath("/");
@@ -932,7 +882,6 @@ export async function updateProjectAction(formData: FormData) {
     }
   });
 
-  await logAudit(ownerId, "project.updated", "Project", projectId, { status: status === "ARCHIVED" ? "ARCHIVED" : "ACTIVE" });
   revalidatePath("/projects");
   revalidateAppData();
   redirect(`/projects/${projectId}`);
@@ -948,7 +897,6 @@ export async function archiveProjectAction(formData: FormData) {
   });
   if (result.count === 0) throw new Error("Project not found.");
 
-  await logAudit(ownerId, "project.archived", "Project", projectId);
   revalidatePath("/projects");
   revalidateAppData();
   redirect("/projects");
@@ -964,7 +912,6 @@ export async function unarchiveProjectAction(formData: FormData) {
   });
   if (result.count === 0) throw new Error("Project not found.");
 
-  await logAudit(ownerId, "project.unarchived", "Project", projectId);
   revalidatePath("/");
   revalidatePath("/projects");
   revalidateAppData();
@@ -1038,15 +985,9 @@ export async function deleteProjectAction(formData: FormData) {
   }
 
   if (!deleteResult?.deleted) {
-    await logAudit(ownerId, "project.delete_blocked", "Project", projectId, {
-      invoiceCount: deleteResult?.invoiceCount ?? 0,
-      billedTimeCount: deleteResult?.billedTimeCount ?? 0,
-      billedExpenseCount: deleteResult?.billedExpenseCount ?? 0
-    });
     redirect(projectDeleteErrorUrl(projectId, deleteResult?.blockedMessage || "This project cannot be deleted safely. Archive it instead."));
   }
 
-  await logAudit(ownerId, "project.deleted", "Project", projectId);
   revalidatePath("/");
   revalidatePath("/projects");
   revalidatePath("/invoices");
@@ -1101,7 +1042,6 @@ export async function deleteClientAction(formData: FormData) {
     await tx.client.deleteMany({ where: { id: clientId, ownerId } });
   });
 
-  await logAudit(ownerId, "client.deleted", "Client", clientId);
   revalidatePath("/");
   revalidatePath("/clients");
   revalidatePath("/projects");
@@ -1233,10 +1173,6 @@ export async function createInvoiceDraftAction(formData: FormData) {
     }
   });
 
-  await logAudit(ownerId, "invoice.draft_created", "Invoice", invoice.id, {
-    invoiceNumber: invoice.invoiceNumber,
-    mode
-  });
   revalidatePath("/invoices");
   revalidateAppData();
   redirect(`/invoices/${invoice.id}`);
@@ -1262,7 +1198,6 @@ async function finaliseInvoice(ownerId: string, invoiceId: string, status: "SENT
       where: { id: invoiceId },
       data: { status: "PAID", paymentDate: new Date() }
     });
-    await logAudit(ownerId, "invoice.marked_paid", "Invoice", invoiceId, { fromStatus: "SENT" });
     return;
   }
 
@@ -1372,10 +1307,6 @@ async function finaliseInvoice(ownerId: string, invoiceId: string, status: "SENT
     })
   ]);
 
-  await logAudit(ownerId, status === "PAID" ? "invoice.marked_paid" : "invoice.finalised_sent", "Invoice", invoiceId, {
-    invoiceNumber: invoice.invoiceNumber,
-    mode: invoice.mode
-  });
 }
 
 export async function markInvoiceSentAction(formData: FormData) {
@@ -1430,7 +1361,6 @@ export async function voidInvoiceAction(formData: FormData) {
     })
   ]);
 
-  await logAudit(ownerId, "invoice.voided", "Invoice", invoiceId, { invoiceNumber: invoice.invoiceNumber });
   revalidatePath("/");
   revalidatePath("/projects");
   revalidatePath("/invoices");
@@ -1452,7 +1382,6 @@ export async function unvoidInvoiceAction(formData: FormData) {
     data: { status: "DRAFT", paymentDate: null }
   });
 
-  await logAudit(ownerId, "invoice.unvoided", "Invoice", invoiceId, { invoiceNumber: invoice.invoiceNumber });
   revalidatePath("/");
   revalidatePath("/invoices");
   revalidateAppData();
@@ -1489,7 +1418,6 @@ export async function deleteInvoiceAction(formData: FormData) {
     prisma.invoice.delete({ where: { id: invoiceId } })
   ]);
 
-  await logAudit(ownerId, "invoice.deleted", "Invoice", invoiceId, { invoiceNumber: invoice.invoiceNumber });
   revalidatePath("/");
   revalidatePath("/projects");
   revalidatePath("/invoices");
@@ -1530,10 +1458,6 @@ export async function enableInvoicePublicLinkAction(formData: FormData) {
     data: { publicToken: token, publicTokenEnabled: true }
   });
 
-  await logAudit(ownerId, "invoice.public_link_enabled", "Invoice", invoiceId, {
-    invoiceNumber: invoice.invoiceNumber,
-    regenerated: !invoice.publicToken
-  });
   revalidatePath(`/invoices/${invoiceId}`);
   revalidatePath(`/public/invoices/${token}`);
   redirect(`/invoices/${invoiceId}`);
@@ -1549,9 +1473,6 @@ export async function revokeInvoicePublicLinkAction(formData: FormData) {
     data: { publicTokenEnabled: false }
   });
 
-  await logAudit(ownerId, "invoice.public_link_revoked", "Invoice", invoiceId, {
-    invoiceNumber: invoice.invoiceNumber
-  });
   revalidatePath(`/invoices/${invoiceId}`);
   if (invoice.publicToken) revalidatePath(`/public/invoices/${invoice.publicToken}`);
   redirect(`/invoices/${invoiceId}`);
@@ -1569,9 +1490,6 @@ export async function regenerateInvoicePublicLinkAction(formData: FormData) {
     data: { publicToken: token, publicTokenEnabled: true }
   });
 
-  await logAudit(ownerId, "invoice.public_link_regenerated", "Invoice", invoiceId, {
-    invoiceNumber: invoice.invoiceNumber
-  });
   revalidatePath(`/invoices/${invoiceId}`);
   if (invoice.publicToken) revalidatePath(`/public/invoices/${invoice.publicToken}`);
   revalidatePath(`/public/invoices/${token}`);
@@ -1590,18 +1508,18 @@ export async function prepareInvoiceEmailAction(formData: FormData) {
   if (invoice.status === "DRAFT") throw new Error("Mark the invoice as sent before emailing it.");
   if (invoice.status === "VOID") throw new Error("Void invoices cannot be emailed.");
 
-  const to = parseEmailList(text(formData, "to"), "To", true);
+  parseEmailList(text(formData, "to"), "To", true);
   const subject = text(formData, "subject");
   const message = text(formData, "message");
   if (!subject) throw new Error("Email subject is required.");
   if (!message) throw new Error("Email message is required.");
 
-  await logAudit(ownerId, "invoice.email_prepared", "Invoice", invoiceId, {
-    invoiceNumber: invoice.invoiceNumber,
-    to: to.join(", "),
-    subjectLength: subject.length,
-    bodyLength: message.length,
-    hasPublicLink: message.includes("/public/invoices/")
+  await prisma.invoice.update({
+    where: { id: invoiceId },
+    data: {
+      lastEmailedAt: new Date(),
+      emailSendCount: { increment: 1 }
+    }
   });
 
   return { ok: true };

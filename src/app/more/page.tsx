@@ -1,11 +1,17 @@
 import Link from "next/link";
-import { BarChart3, Building2, CalendarX2, Clock3, DatabaseBackup, LogOut, ReceiptText, ScrollText, ShieldCheck } from "lucide-react";
+import { BarChart3, Building2, Clock3, LogOut, ReceiptText, Settings2 } from "lucide-react";
 import { logoutAction } from "@/app/actions";
 import { requireUserId } from "@/lib/auth";
 
 export const dynamic = "force-dynamic";
 
 const links = [
+  {
+    href: "/settings",
+    label: "Settings",
+    body: "Theme, tax planning, super estimates, and app preferences.",
+    icon: Settings2
+  },
   {
     href: "/insights",
     label: "Insights",
@@ -15,14 +21,8 @@ const links = [
   {
     href: "/expenses",
     label: "Expenses",
-    body: "Work-related expense register for tax, audit, and project allocation.",
+    body: "Work-related expense register for tax planning and project allocation.",
     icon: ReceiptText
-  },
-  {
-    href: "/day-off",
-    label: "Log Day Off",
-    body: "Record planned zero-hour days so rolling averages stay honest.",
-    icon: CalendarX2
   },
   {
     href: "/hours-export",
@@ -33,26 +33,8 @@ const links = [
   {
     href: "/business-profile",
     label: "Business Profile",
-    body: "Invoice settings, payment details, branding, and email defaults.",
+    body: "Business details, invoice identity, payment details, logo, and email wording.",
     icon: Building2
-  },
-  {
-    href: "/audit-log",
-    label: "Audit",
-    body: "Review important changes made inside your account.",
-    icon: ScrollText
-  },
-  {
-    href: "/backup",
-    label: "Backup",
-    body: "Export your account data when opened with the backup token.",
-    icon: DatabaseBackup
-  },
-  {
-    href: "/privacy",
-    label: "Privacy",
-    body: "How your private business data is handled in this app.",
-    icon: ShieldCheck
   }
 ];
 

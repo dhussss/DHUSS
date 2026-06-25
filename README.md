@@ -33,8 +33,8 @@ DATABASE_URL="postgresql://postgres.<PROJECT-REF>:<PASSWORD>@<REGION>.pooler.sup
 # Direct/session-mode connection used by Prisma migrations.
 DIRECT_URL="postgresql://postgres.<PROJECT-REF>:<PASSWORD>@<REGION>.pooler.supabase.com:5432/postgres"
 
-# Required in production to download database backups from /backup.
-BACKUP_EXPORT_TOKEN="change-this-long-random-token"
+# Required in production to open the private diagnostics page.
+DIAGNOSTICS_TOKEN="change-this-long-random-token"
 
 # Public app URL used for secure client invoice links.
 APP_BASE_URL="https://<your-vercel-domain>"
@@ -55,7 +55,7 @@ For this Supabase project, copy the current Supabase Prisma connection strings a
 ```bash
 DATABASE_URL="postgresql://postgres.<PROJECT-REF>:<PASSWORD>@aws-1-ap-southeast-2.pooler.supabase.com:6543/postgres?pgbouncer=true&connection_limit=1"
 DIRECT_URL="postgresql://postgres.<PROJECT-REF>:<PASSWORD>@aws-1-ap-southeast-2.pooler.supabase.com:5432/postgres"
-BACKUP_EXPORT_TOKEN="change-this-long-random-token"
+DIAGNOSTICS_TOKEN="change-this-long-random-token"
 APP_BASE_URL="https://<your-vercel-domain>"
 NEXT_PUBLIC_SUPABASE_URL="https://<PROJECT-REF>.supabase.co"
 NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY="<SUPABASE-PUBLISHABLE-KEY>"
@@ -163,7 +163,7 @@ pnpm run build
 ```bash
 DATABASE_URL="postgresql://postgres.<PROJECT-REF>:<PASSWORD>@aws-1-ap-southeast-2.pooler.supabase.com:6543/postgres?pgbouncer=true&connection_limit=1"
 DIRECT_URL="postgresql://postgres.<PROJECT-REF>:<PASSWORD>@aws-1-ap-southeast-2.pooler.supabase.com:5432/postgres"
-BACKUP_EXPORT_TOKEN="change-this-long-random-token"
+DIAGNOSTICS_TOKEN="change-this-long-random-token"
 APP_BASE_URL="https://<your-vercel-domain>"
 NEXT_PUBLIC_SUPABASE_URL="https://<PROJECT-REF>.supabase.co"
 NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY="<SUPABASE-PUBLISHABLE-KEY>"
@@ -183,9 +183,9 @@ After this pass, make sure production has applied:
 pnpm run db:migrate
 ```
 
-The new migration adds Business Profile tax/super planning settings, the work expense register, and day-off logs.
+The latest migration removes the retired audit-log table. This permanently deletes historical audit records when applied.
 
-6. Confirm Vercel deployments run near Supabase. This app sets `regions: ["syd1"]` in `vercel.json`. After deployment, open `/diagnostics?token=<BACKUP_EXPORT_TOKEN>` and check `x-vercel-id`. The first segment should be `syd1`.
+6. Confirm Vercel deployments run near Supabase. This app sets `regions: ["syd1"]` in `vercel.json`. After deployment, open `/diagnostics?token=<DIAGNOSTICS_TOKEN>` and check `x-vercel-id`. The first segment should be `syd1`.
 
 The diagnostics page helps choose the next fix: if TCP/TLS connect is fast but Prisma `SELECT 1` is high, Prisma engine/pooler overhead is the main problem; if both TCP/TLS and Prisma are high, network or Supabase pooler latency is the main problem; if `SELECT 1` is low but dashboard is high, query work is the main problem.
 
@@ -199,27 +199,9 @@ The default invoice email template can be customised in `/business-profile` with
 
 Resend/API-key based server sending is not part of the active workflow. Fully branded HTML invoice emails require a verified sending provider such as Resend, Postmark, or similar, and are a future option. If server-side sending is reintroduced later, treat `RESEND_API_KEY` and `RESEND_FROM_EMAIL` as optional future-only environment variables.
 
-## Backup Export
-
-Use `/backup` locally while logged in to download a JSON backup. In production, set `BACKUP_EXPORT_TOKEN` in Vercel, log in, and download with `/backup?token=<BACKUP_EXPORT_TOKEN>`. It exports only the logged-in user's data:
-
-- business profile
-- clients
-- projects
-- rate history
-- time entries
-- expense items
-- work expenses
-- day-off logs
-- invoices
-- invoice line items
-- audit logs
-
-Run a backup before production migrations or any manual database maintenance.
-
 ## Private Diagnostics
 
-Use `/diagnostics?token=<BACKUP_EXPORT_TOKEN>` while logged in to open a private performance diagnostics page. It shows the Vercel region signals available to the app plus server, TCP/TLS, Prisma first-query, Prisma second-query, count-query, and dashboard-query timings in milliseconds. It also explains whether slowness appears to be database/network latency, Prisma overhead, dashboard query work, or general server/frontend time. The page does not print secrets, profile details, or bank details.
+Use `/diagnostics?token=<DIAGNOSTICS_TOKEN>` while logged in to open a private performance diagnostics page. It shows the Vercel region signals available to the app plus server, TCP/TLS, Prisma first-query, Prisma second-query, count-query, and dashboard-query timings in milliseconds. It also explains whether slowness appears to be database/network latency, Prisma overhead, dashboard query work, or general server/frontend time. The page does not print secrets, profile details, or bank details.
 
 ## Dashboard And Insights
 
@@ -227,29 +209,26 @@ Use `/diagnostics?token=<BACKUP_EXPORT_TOKEN>` while logged in to open a private
 - The 30-day average is now an included-day average. It includes days with logged hours and explicit planned day-off records, but it does not punish normal quiet weekends with zero hours.
 - Invoice Snapshot includes Unbilled work across active projects, combining unbilled time entries and expense items.
 - `/insights` provides workload, revenue, tax set-aside estimates, optional super planning, work expense summaries, current-quarter trend, financial-year paid income, and concise insight cards.
-- The tax set-aside panel annualises current-week billable value and estimates tax using the configured bracket table. Users can switch the estimate off or set a custom percentage override in Business Profile.
+- The tax set-aside panel annualises current-week billable value and estimates tax using the configured bracket table. Users can switch the estimate off or set a custom percentage override in Settings.
 - Optional super planning is a planning estimate only. It does not record or assume any super contribution has been paid.
-- The bottom nav keeps five main items. Hours Export, Insights, Expenses, Day Off, Business Profile, Backup, Audit, Privacy, and Logout live under `/more`.
+- The bottom nav keeps five main items. Settings, Hours Export, Insights, Expenses, Business Profile, and Logout live under `/more`.
 
 ## Expenses And Day Offs
 
-- `/expenses` logs work-related expenses for tax/audit tracking.
+- `/expenses` logs work-related expenses for tax and project-cost tracking.
 - Expenses can be general or linked to a project. Linked expenses appear on the project detail page.
-- Expense fields include date, category, description, supplier/vendor, amount, GST included/amount, payment method, receipt/reference, notes, billable/reimbursable, and status.
-- Expense statuses are logged, allocated, invoiced/reimbursed, and tax record only.
-- Invoiced/reimbursed expenses should be archived instead of destructively deleted.
-- `/day-off` logs planned zero-hour work days. These records improve rolling averages without counting ordinary inactive weekends.
-- Backup exports include work expenses and day-off logs.
-- Audit log entries are written for expense create/update/archive/restore/delete and day-off create/update events.
+- Expense fields are intentionally simple: date, category, description, supplier/vendor, amount paid, GST calculation, project allocation, receipt/reference, and notes.
+- Expenses can be edited or deleted from the expense register or from the linked project page.
+- Planned zero-hour work days are logged from the Log Work modal using the `Log day off` checkbox. These records improve rolling averages without counting ordinary inactive weekends.
 
 ## Authentication And Business Profile
 
 - `/signup` creates a Supabase Auth account.
 - `/login` signs users in with Supabase Auth.
-- Dashboard, clients, projects, invoices, hours export, backup, diagnostics, and server actions require a logged-in user.
+- Dashboard, clients, projects, invoices, hours export, diagnostics, and server actions require a logged-in user.
 - `/business-profile` lets each user save their own trading name, legal details, ABN/ACN, contact details, GST defaults, bank details, invoice notes, email message, logo, and footer.
-- `/business-profile` also stores default invoice email subject, plain-text greeting, intro, payment line, sign-off, optional email include settings, reply-to email, and the app theme preset.
-- `/business-profile` stores tax set-aside preferences, custom tax percentage override, GST set-aside preference, optional super planning percentage, super fund name, and member number.
+- `/business-profile` also stores default invoice email subject, plain-text greeting, intro, payment line, sign-off, optional email include settings, and reply-to email.
+- `/settings` stores app theme, tax set-aside preferences, custom tax percentage override, GST set-aside preference, optional super planning percentage, super fund name, and member number.
 - Logo files are uploaded directly from the browser to the private `business-logos` Storage bucket under the user's own folder. The server action stores only the Storage path, which avoids Vercel's 1 MB Server Action body limit.
 - Logo validation allows PNG, JPG, WEBP, and SVG files up to 1 MB. 500 KB or smaller is recommended for fast invoice previews.
 - Invoice detail pages show the user's logo when available.
@@ -276,13 +255,6 @@ Use `/diagnostics?token=<BACKUP_EXPORT_TOKEN>` while logged in to open a private
 - Invoice list supports search plus filters for all, draft, sent, paid, and void invoices.
 - Sent invoices past their due date show an overdue indicator.
 - Future finalised invoices snapshot business contact, website, default notes, email message wording, and footer/signature wording so older sent/paid invoices do not drift when the business profile changes.
-
-## Audit Log And Privacy
-
-- `/audit-log` shows recent account-scoped activity for the logged-in user.
-- Audit metadata intentionally avoids passwords, auth tokens, full bank details, and secrets.
-- Invoice email audit events record when an email is prepared/opened, plus recipient summary and body/subject lengths only. The app cannot know whether the user sent the message from their mail app.
-- `/privacy` explains user isolation, stored data, backups, bank details, and the app's responsibility boundaries in plain English.
 
 ## Multi-User Data Migration Notes
 
@@ -316,7 +288,7 @@ If Prisma timings remain high while TCP/TLS is low, the cleanest options are:
 ## Production Safety
 
 - Keep `DATABASE_URL` and `DIRECT_URL` only in local `.env`, Vercel environment variables, and secure password storage.
-- Set `BACKUP_EXPORT_TOKEN` in Vercel before relying on `/backup`; production exports are blocked without it.
+- Set `DIAGNOSTICS_TOKEN` in Vercel before using `/diagnostics` in production.
 - Set `APP_BASE_URL` to the canonical production URL so emailed invoice links point to the right deployment.
 - Each user-owned table is scoped by Supabase Auth user ID in Prisma queries and server actions.
 - Prisma uses the database pooler directly, so isolation is enforced in application code. Consider adding database RLS later for defence in depth.
@@ -333,7 +305,7 @@ If Prisma timings remain high while TCP/TLS is low, the cleanest options are:
 - `Can't reach database server`: check the Supabase password, pooler host, and that `DATABASE_URL` uses port `6543` with `?pgbouncer=true&connection_limit=1`.
 - Migration fails in production: confirm `DIRECT_URL` is set to the session-mode pooler on port `5432`.
 - Slow first loads: check Vercel runtime logs for the executing region. Far-away regions add latency to every Supabase query.
-- Region mismatch: open `/diagnostics?token=<BACKUP_EXPORT_TOKEN>` after deploy. `x-vercel-id` should start with `syd1` when Vercel is running close to the current Supabase Sydney database.
+- Region mismatch: open `/diagnostics?token=<DIAGNOSTICS_TOKEN>` after deploy. `x-vercel-id` should start with `syd1` when Vercel is running close to the current Supabase Sydney database.
 - Build fails after schema changes: run `pnpm run db:migrate` or `pnpm exec prisma generate`, then rerun `pnpm run build`.
 - Logo upload fails: confirm the `business-logos` bucket exists and has authenticated per-user folder policies.
 - Login works locally but not in production: confirm the Vercel URL is allowed in Supabase Auth redirect URLs and that `NEXT_PUBLIC_SUPABASE_URL` / `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` are set in Vercel.
@@ -351,17 +323,16 @@ pnpm run db:seed
 pnpm run prisma:studio
 ```
 
-When deploying the invoice hardening/audit update to production, apply the committed migration:
+When deploying schema changes to production, apply the committed migrations:
 
 ```bash
 pnpm run db:migrate
 ```
 
-This applies:
+This includes the cleanup migration:
 
 ```text
-20260624000000_invoice_profile_audit_hardening
-20260625000000_invoice_document_snapshot_polish
+20260701000000_remove_audit_backup_privacy
 ```
 
 ## Data Model Notes

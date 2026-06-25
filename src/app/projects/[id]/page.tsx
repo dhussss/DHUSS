@@ -1,11 +1,11 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { AlertTriangle, ArrowLeft, Banknote, CheckCircle2, Clock3, Edit, FilePlus, FileText, ReceiptText, RotateCcw } from "lucide-react";
+import { AlertTriangle, ArrowLeft, Banknote, CalendarDays, CheckCircle2, Clock3, Edit, FilePlus, FileText, ReceiptText, RotateCcw } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { deleteExpenseItemAction, deleteTimeEntryAction, deleteWorkExpenseAction, unarchiveProjectAction } from "@/app/actions";
 import { requireUserId } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { dateInputValue, formatDateAU } from "@/lib/dates";
+import { addDays, dateInputValue, formatDateAU, startOfWeekMonday, todayInPerth } from "@/lib/dates";
 import { formatMoney } from "@/lib/money";
 import { formatHours, labourTotalCents } from "@/lib/time";
 import { ConfirmSubmitButton } from "@/components/ConfirmSubmitButton";
@@ -62,6 +62,9 @@ export default async function ProjectDetailPage({ params }: { params: Promise<{ 
   const unbilledTotalCents = unbilledTimeValueCents + unbilledExpenseValueCents;
   const hasUnbilledWork = unbilledTimeEntries.length > 0 || unbilledExpenseItems.length > 0;
   const activeInvoiceCount = project.invoices.filter((invoice) => invoice.status !== "VOID").length;
+  const today = todayInPerth();
+  const monthLabel = new Intl.DateTimeFormat("en-AU", { month: "long", year: "numeric", timeZone: "UTC" }).format(today);
+  const monthlyActivityCells = buildMonthlyActivityCells(project.timeEntries, today);
 
   return (
     <main className="page-shell">
@@ -157,6 +160,8 @@ export default async function ProjectDetailPage({ params }: { params: Promise<{ 
         <ProjectMetric label="Invoices" value={String(activeInvoiceCount)} icon={FileText} />
         <ProjectMetric label="Unbilled total" value={formatMoney(unbilledTotalCents)} icon={ReceiptText} highlight={hasUnbilledWork} />
       </section>
+
+      <MonthlyActivityCalendar monthLabel={monthLabel} cells={monthlyActivityCells} />
 
       <section className="mt-7 grid gap-6 lg:grid-cols-2">
         <div>
@@ -359,6 +364,116 @@ function UnbilledStat({ label, value, dark }: { label: string; value: string; da
       <p className={`text-xs font-black uppercase ${dark ? "text-white/60" : "text-moss"}`}>{label}</p>
       <p className={`mt-2 text-2xl font-black tracking-normal ${dark ? "text-white" : "text-ink"}`}>{value}</p>
     </div>
+  );
+}
+
+type MonthlyActivityCell = {
+  date: Date;
+  key: string;
+  dayNumber: number;
+  inCurrentMonth: boolean;
+  isToday: boolean;
+  totalMinutes: number;
+  entryCount: number;
+};
+
+function buildMonthlyActivityCells(entries: Array<{ date: Date; durationMinutes: number }>, anchor: Date): MonthlyActivityCell[] {
+  const monthStart = new Date(Date.UTC(anchor.getUTCFullYear(), anchor.getUTCMonth(), 1));
+  const monthEnd = new Date(Date.UTC(anchor.getUTCFullYear(), anchor.getUTCMonth() + 1, 0));
+  const calendarStart = startOfWeekMonday(monthStart);
+  const calendarEnd = addDays(startOfWeekMonday(monthEnd), 6);
+  const todayKey = dateInputValue(anchor);
+  const activity = new Map<string, { totalMinutes: number; entryCount: number }>();
+
+  for (const entry of entries) {
+    const key = dateInputValue(entry.date);
+    const current = activity.get(key) ?? { totalMinutes: 0, entryCount: 0 };
+    current.totalMinutes += entry.durationMinutes;
+    current.entryCount += 1;
+    activity.set(key, current);
+  }
+
+  const cells: MonthlyActivityCell[] = [];
+  for (let day = calendarStart; day <= calendarEnd; day = addDays(day, 1)) {
+    const key = dateInputValue(day);
+    const summary = activity.get(key) ?? { totalMinutes: 0, entryCount: 0 };
+    cells.push({
+      date: day,
+      key,
+      dayNumber: day.getUTCDate(),
+      inCurrentMonth: day.getUTCMonth() === anchor.getUTCMonth(),
+      isToday: key === todayKey,
+      totalMinutes: summary.totalMinutes,
+      entryCount: summary.entryCount
+    });
+  }
+
+  return cells;
+}
+
+function MonthlyActivityCalendar({ monthLabel, cells }: { monthLabel: string; cells: MonthlyActivityCell[] }) {
+  const weekDays = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+  const hasActivity = cells.some((cell) => cell.entryCount > 0);
+
+  return (
+    <section className="mt-5 overflow-hidden rounded-lg border border-line bg-white shadow-soft">
+      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-line bg-white p-4 sm:p-5">
+        <div className="flex items-center gap-3">
+          <span className="icon-tile">
+            <CalendarDays size={20} aria-hidden="true" />
+          </span>
+          <div>
+            <p className="section-title">Monthly activity</p>
+            <h2 className="text-xl font-black tracking-normal">{monthLabel}</h2>
+          </div>
+        </div>
+        <p className="text-sm font-bold text-moss">{hasActivity ? "Dots show days with logged work" : "No logged work this month yet"}</p>
+      </div>
+      <div className="p-3 sm:p-5">
+        <div className="grid grid-cols-7 gap-1.5 text-center text-xs font-black uppercase text-moss sm:gap-2">
+          {weekDays.map((day) => (
+            <div key={day} className="px-1 py-2">
+              {day}
+            </div>
+          ))}
+        </div>
+        <div className="grid grid-cols-7 gap-1.5 sm:gap-2">
+          {cells.map((cell) => {
+            const title = cell.entryCount
+              ? `${formatDateAU(cell.date)}: ${formatHours(cell.totalMinutes)}h across ${cell.entryCount} entr${cell.entryCount === 1 ? "y" : "ies"}`
+              : `${formatDateAU(cell.date)}: no work logged`;
+
+            return (
+              <div
+                key={cell.key}
+                title={title}
+                className={`min-h-16 rounded-lg border p-2 text-left transition sm:min-h-20 ${
+                  cell.isToday
+                    ? "border-mint bg-mint/10 ring-2 ring-mint/15"
+                    : cell.inCurrentMonth
+                      ? "border-line bg-paper/50"
+                      : "border-line/70 bg-white/60 opacity-55"
+                }`}
+              >
+                <div className="flex items-center justify-between gap-1">
+                  <span className="text-sm font-black text-ink">{cell.dayNumber}</span>
+                  {cell.isToday ? <span className="rounded-full bg-mint px-1.5 py-0.5 text-[0.58rem] font-black uppercase leading-none text-white">Today</span> : null}
+                </div>
+                {cell.entryCount ? (
+                  <div className="mt-3 grid gap-1">
+                    <span className="size-2.5 rounded-full bg-mint" aria-hidden="true" />
+                    <span className="text-xs font-black text-ink">{formatHours(cell.totalMinutes)}h</span>
+                    <span className="text-[0.65rem] font-bold text-moss">
+                      {cell.entryCount} entr{cell.entryCount === 1 ? "y" : "ies"}
+                    </span>
+                  </div>
+                ) : null}
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    </section>
   );
 }
 

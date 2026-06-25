@@ -19,7 +19,7 @@ type TimingResult<T> = {
 };
 
 function isAuthorised(token: string) {
-  const configuredToken = process.env.BACKUP_EXPORT_TOKEN;
+  const configuredToken = process.env.DIAGNOSTICS_TOKEN;
   if (!configuredToken && process.env.NODE_ENV === "production") return false;
   if (!configuredToken) return true;
 
@@ -150,7 +150,7 @@ export default async function DiagnosticsPage({
         <p className="section-title">Diagnostics</p>
         <h1 className="mt-2 text-3xl font-black tracking-normal">Not authorised</h1>
         <p className="mt-4 rounded-lg border border-line bg-white p-4 text-sm font-bold text-moss">
-          Open this page with /diagnostics?token=&lt;BACKUP_EXPORT_TOKEN&gt;.
+          Open this page with /diagnostics?token=&lt;DIAGNOSTICS_TOKEN&gt;.
         </p>
       </main>
     );

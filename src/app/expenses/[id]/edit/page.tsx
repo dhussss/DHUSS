@@ -58,7 +58,7 @@ export default async function EditExpensePage({
       <header className="page-header">
         <p className="section-title">Edit Expense</p>
         <h1 className="page-title">{expense.description}</h1>
-        <p className="page-subtitle">Update the expense record for future reporting. Existing audit history is kept separately.</p>
+        <p className="page-subtitle">Update the expense record for future reporting and project costing.</p>
       </header>
 
       <section className="mt-6 max-w-4xl">

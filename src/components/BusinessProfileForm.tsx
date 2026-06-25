@@ -2,10 +2,9 @@
 
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { AlertCircle, Building2, CheckCircle2, Mail, Palette, Save, Trash2, Upload } from "lucide-react";
+import { AlertCircle, Building2, CheckCircle2, Mail, Save, Trash2, Upload } from "lucide-react";
 import { updateBusinessProfileAction } from "@/app/actions";
 import { createClient } from "@/lib/supabase/browser";
-import { themePresets } from "@/lib/themes";
 
 type BusinessProfileFormValue = {
   tradingName: string;
@@ -40,17 +39,7 @@ type BusinessProfileFormValue = {
   includePaymentDetailsInEmail: boolean;
   includeInvoiceSummaryInEmail: boolean;
   includePublicInvoiceLinkInEmail: boolean;
-  taxSetAsideEnabled: boolean;
-  customTaxPercentageOverride: string;
-  includeGstInTaxEstimate: boolean;
-  includeSuperInSetAsidePlanning: boolean;
-  superPlanningEnabled: boolean;
-  superContributionPercentage: string;
-  superFundName: string;
-  superMemberNumber: string;
   replyToEmail: string;
-  themeAccent: string;
-  themeMode: string;
   signatureFooter: string;
 };
 
@@ -313,38 +302,6 @@ export function BusinessProfileForm({
       </section>
 
       <section className="card">
-        <div className="flex items-center gap-3">
-          <span className="grid size-10 place-items-center rounded-lg bg-mint/10 text-mint">
-            <Palette size={20} aria-hidden="true" />
-          </span>
-          <div>
-            <p className="section-title">App theme</p>
-            <h2 className="text-xl font-black tracking-normal">Professional colours</h2>
-          </div>
-        </div>
-        <div className="mt-5 grid gap-4 md:grid-cols-2">
-          <label>
-            Accent colour
-            <select name="themeAccent" defaultValue={profile.themeAccent || "emerald"}>
-              {Object.entries(themePresets).map(([value, preset]) => (
-                <option key={value} value={value}>
-                  {preset.label}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label>
-            Display mode
-            <select name="themeMode" defaultValue={profile.themeMode || "system"}>
-              <option value="system">System</option>
-              <option value="light">Light</option>
-              <option value="dark">Dark</option>
-            </select>
-          </label>
-        </div>
-      </section>
-
-      <section className="card">
         <p className="section-title">Payment details</p>
         <div className="mt-5 grid gap-4 md:grid-cols-3">
           <label>
@@ -360,72 +317,6 @@ export function BusinessProfileForm({
             <input name="accountNumber" inputMode="numeric" defaultValue={profile.accountNumber} />
           </label>
         </div>
-      </section>
-
-      <section className="card">
-        <div className="flex items-center gap-3">
-          <span className="grid size-10 place-items-center rounded-lg bg-mint/10 text-mint">
-            <CheckCircle2 size={20} aria-hidden="true" />
-          </span>
-          <div>
-            <p className="section-title">Tax and super planning</p>
-            <h2 className="text-xl font-black tracking-normal">Set-aside estimates</h2>
-          </div>
-        </div>
-        <div className="mt-5 grid gap-4 md:grid-cols-2">
-          <label className="flex min-h-12 grid-cols-none flex-row items-center gap-3 rounded-lg border border-line bg-white px-3">
-            <input className="size-5 min-h-0 w-auto" type="checkbox" name="taxSetAsideEnabled" defaultChecked={profile.taxSetAsideEnabled} />
-            Show tax set-aside estimate
-          </label>
-          <label>
-            Custom tax percentage override
-            <input
-              name="customTaxPercentageOverride"
-              type="number"
-              inputMode="decimal"
-              min="0"
-              max="100"
-              step="0.1"
-              placeholder="Use bracket estimate"
-              defaultValue={profile.customTaxPercentageOverride}
-            />
-          </label>
-          <label className="flex min-h-12 grid-cols-none flex-row items-center gap-3 rounded-lg border border-line bg-white px-3">
-            <input className="size-5 min-h-0 w-auto" type="checkbox" name="includeGstInTaxEstimate" defaultChecked={profile.includeGstInTaxEstimate} />
-            Include GST set-aside
-          </label>
-          <label className="flex min-h-12 grid-cols-none flex-row items-center gap-3 rounded-lg border border-line bg-white px-3">
-            <input className="size-5 min-h-0 w-auto" type="checkbox" name="includeSuperInSetAsidePlanning" defaultChecked={profile.includeSuperInSetAsidePlanning} />
-            Include super in combined set-aside
-          </label>
-          <label className="flex min-h-12 grid-cols-none flex-row items-center gap-3 rounded-lg border border-line bg-white px-3">
-            <input className="size-5 min-h-0 w-auto" type="checkbox" name="superPlanningEnabled" defaultChecked={profile.superPlanningEnabled} />
-            Show optional super planning
-          </label>
-          <label>
-            Super contribution percentage
-            <input
-              name="superContributionPercentage"
-              type="number"
-              inputMode="decimal"
-              min="0"
-              max="100"
-              step="0.1"
-              defaultValue={profile.superContributionPercentage || "11.5"}
-            />
-          </label>
-          <label>
-            Super fund name
-            <input name="superFundName" defaultValue={profile.superFundName} />
-          </label>
-          <label>
-            Member number
-            <input name="superMemberNumber" defaultValue={profile.superMemberNumber} />
-          </label>
-        </div>
-        <p className="mt-4 rounded-lg border border-line bg-paper p-3 text-xs font-bold leading-5 text-moss">
-          Estimates use your logged billable value and profile settings. This is planning guidance only, not tax advice.
-        </p>
       </section>
 
       <section className="card">
@@ -517,15 +408,6 @@ function validateBusinessProfile(formData: FormData, gstRegistered: boolean, log
     const gstRate = Number.parseFloat(String(formData.get("gstRate") ?? "10"));
     if (!Number.isFinite(gstRate) || gstRate < 0 || gstRate > 100) return "GST rate must be between 0 and 100.";
   }
-
-  const taxOverride = String(formData.get("customTaxPercentageOverride") ?? "").trim();
-  if (taxOverride) {
-    const parsed = Number.parseFloat(taxOverride);
-    if (!Number.isFinite(parsed) || parsed < 0 || parsed > 100) return "Custom tax percentage must be between 0 and 100.";
-  }
-
-  const superRate = Number.parseFloat(String(formData.get("superContributionPercentage") ?? "11.5"));
-  if (!Number.isFinite(superRate) || superRate < 0 || superRate > 100) return "Super contribution percentage must be between 0 and 100.";
 
   return logoFile ? validateLogo(logoFile) : "";
 }

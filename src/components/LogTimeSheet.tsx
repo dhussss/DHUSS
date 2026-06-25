@@ -30,6 +30,7 @@ export function LogTimeSheet({
   const [startTime, setStartTime] = useState("07:00");
   const [endTime, setEndTime] = useState("15:00");
   const [durationHours, setDurationHours] = useState("8");
+  const [logDayOff, setLogDayOff] = useState(false);
 
   const calculatedRange = useMemo(() => {
     const start = parseClockTime(startTime);
@@ -104,77 +105,96 @@ export function LogTimeSheet({
                   <input name="date" type="date" defaultValue={todayInputValue()} required />
                 </label>
 
-                <div className="grid grid-cols-2 gap-2 rounded-lg bg-white p-1">
-                  <button
-                    type="button"
-                    className={`min-h-11 rounded-md text-sm font-bold ${entryMode === "duration" ? "bg-mint text-white" : "text-moss"}`}
-                    onClick={() => setEntryMode("duration")}
-                  >
-                    Total hours
-                  </button>
-                  <button
-                    type="button"
-                    className={`min-h-11 rounded-md text-sm font-bold ${entryMode === "range" ? "bg-mint text-white" : "text-moss"}`}
-                    onClick={() => setEntryMode("range")}
-                  >
-                    Start/end
-                  </button>
-                </div>
+                <label className="flex min-h-12 grid-cols-none flex-row items-center gap-3 rounded-lg border border-line bg-white px-3">
+                  <input
+                    className="size-5 min-h-0 w-auto"
+                    type="checkbox"
+                    name="logDayOff"
+                    checked={logDayOff}
+                    onChange={(event) => setLogDayOff(event.target.checked)}
+                  />
+                  Log day off
+                </label>
 
-                <input type="hidden" name="entryMode" value={entryMode} />
-
-                {entryMode === "duration" ? (
-                  <label>
-                    Hours
-                    <input
-                      name="durationHours"
-                      type="number"
-                      inputMode="decimal"
-                      min="0.25"
-                      step="0.25"
-                      value={durationHours}
-                      onChange={(event) => setDurationHours(event.target.value)}
-                      required
-                    />
-                  </label>
-                ) : (
-                  <div className="grid grid-cols-2 gap-3">
-                    <label>
-                      Start
-                      <input
-                        name="startTime"
-                        type="time"
-                        step="900"
-                        value={startTime}
-                        onChange={(event) => setStartTime(event.target.value)}
-                        required
-                      />
-                    </label>
-                    <label>
-                      End
-                      <input
-                        name="endTime"
-                        type="time"
-                        step="900"
-                        value={endTime}
-                        onChange={(event) => setEndTime(event.target.value)}
-                        required
-                      />
-                    </label>
-                    <p className="col-span-2 rounded-lg bg-mint/10 px-3 py-2 text-sm font-bold text-mint">
-                      Calculated: {calculatedRange} hours
-                    </p>
+                {logDayOff ? (
+                  <div className="rounded-lg border border-mint/25 bg-mint/10 p-3 text-sm font-bold leading-6 text-moss">
+                    This records a planned zero-hour work day for averages. It will not create a billable time entry.
                   </div>
+                ) : (
+                  <>
+                    <div className="grid grid-cols-2 gap-2 rounded-lg bg-white p-1">
+                      <button
+                        type="button"
+                        className={`min-h-11 rounded-md text-sm font-bold ${entryMode === "duration" ? "bg-mint text-white" : "text-moss"}`}
+                        onClick={() => setEntryMode("duration")}
+                      >
+                        Total hours
+                      </button>
+                      <button
+                        type="button"
+                        className={`min-h-11 rounded-md text-sm font-bold ${entryMode === "range" ? "bg-mint text-white" : "text-moss"}`}
+                        onClick={() => setEntryMode("range")}
+                      >
+                        Start/end
+                      </button>
+                    </div>
+
+                    <input type="hidden" name="entryMode" value={entryMode} />
+
+                    {entryMode === "duration" ? (
+                      <label>
+                        Hours
+                        <input
+                          name="durationHours"
+                          type="number"
+                          inputMode="decimal"
+                          min="0.25"
+                          step="0.25"
+                          value={durationHours}
+                          onChange={(event) => setDurationHours(event.target.value)}
+                          required
+                        />
+                      </label>
+                    ) : (
+                      <div className="grid grid-cols-2 gap-3">
+                        <label>
+                          Start
+                          <input
+                            name="startTime"
+                            type="time"
+                            step="900"
+                            value={startTime}
+                            onChange={(event) => setStartTime(event.target.value)}
+                            required
+                          />
+                        </label>
+                        <label>
+                          End
+                          <input
+                            name="endTime"
+                            type="time"
+                            step="900"
+                            value={endTime}
+                            onChange={(event) => setEndTime(event.target.value)}
+                            required
+                          />
+                        </label>
+                        <p className="col-span-2 rounded-lg bg-mint/10 px-3 py-2 text-sm font-bold text-mint">
+                          Calculated: {calculatedRange} hours
+                        </p>
+                      </div>
+                    )}
+                  </>
                 )}
 
                 <label>
                   Notes
-                  <textarea name="notes" placeholder="Work completed, site notes, materials handled" />
+                  <textarea name="notes" placeholder={logDayOff ? "Optional note for the day off" : "Work completed, site notes, materials handled"} />
                 </label>
 
                 <SubmitButton className="tap-primary" pendingLabel="Saving time...">
                   <ClipboardPlus size={20} aria-hidden="true" />
-                  Save Time
+                  {logDayOff ? "Save Day Off" : "Save Time"}
                 </SubmitButton>
               </form>
             ) : (

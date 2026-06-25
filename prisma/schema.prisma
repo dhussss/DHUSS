@@ -367,16 +367,3 @@ model BusinessProfile {
 
   @@index([ownerId])
 }
-
-model AuditLog {
-  id         String   @id @default(cuid())
-  ownerId    String
-  action     String
-  entityType String
-  entityId   String?
-  metadata   Json?
-  createdAt  DateTime @default(now())
-
-  @@index([ownerId, createdAt])
-  @@index([ownerId, entityType])
-}

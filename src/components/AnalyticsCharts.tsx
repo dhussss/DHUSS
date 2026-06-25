@@ -29,8 +29,8 @@ export function WeeklyPerformanceChart({
   averageDeltaMinutes,
   hasEntries
 }: WeeklyPerformanceChartProps) {
-  const maxMinutes = Math.max(8 * 60, rollingAverageDailyMinutes, ...days.map((day) => day.totalMinutes));
-  const averagePercent = Math.min(100, (rollingAverageDailyMinutes / maxMinutes) * 100);
+  const maxMinutes = weeklyPerformanceScale(days, rollingAverageDailyMinutes);
+  const averagePercent = chartPercent(rollingAverageDailyMinutes, maxMinutes);
   const deltaHours = Math.abs(averageDeltaMinutes) / 60;
   const deltaLabel = `${averageDeltaMinutes >= 0 ? "+" : "-"}${deltaHours.toFixed(1).replace(/\.0$/, "")}h/day`;
   const trackingCopy = `This week is tracking ${deltaLabel} ${averageDeltaMinutes >= 0 ? "above" : "below"} your 30-day average.`;
@@ -66,7 +66,8 @@ export function WeeklyPerformanceChart({
             </div>
             <div className="grid h-56 grid-cols-7 items-end gap-3">
               {days.map((day) => {
-                const barPercent = maxMinutes ? Math.min(100, (day.totalMinutes / maxMinutes) * 100) : 0;
+                const barPercent = chartPercent(day.totalMinutes, maxMinutes);
+                // The small zero-day bar is visual only; it is not included in scale calculation.
                 const visiblePercent = day.totalMinutes ? Math.max(8, barPercent) : 2;
 
                 return (
@@ -142,6 +143,15 @@ export function WeeklyPerformanceChart({
   );
 }
 
+function weeklyPerformanceScale(days: WeekPerformanceDay[], rollingAverageDailyMinutes: number) {
+  return Math.max(8 * 60, rollingAverageDailyMinutes, ...days.map((day) => day.totalMinutes));
+}
+
+function chartPercent(value: number, max: number) {
+  if (!max) return 0;
+  return Math.max(0, Math.min(100, (value / max) * 100));
+}
+
 function WeekStat({ value, label }: { value: string; label: string }) {
   return (
     <div className="rounded-lg border border-line bg-paper p-3">
@@ -155,10 +165,10 @@ export function QuarterTrendChart({ points }: { points: QuarterTrendPoint[] }) {
   const [activeDate, setActiveDate] = useState<string | null>(null);
   const width = 760;
   const height = 320;
-  const padLeft = 58;
-  const padRight = 22;
-  const padTop = 24;
-  const padBottom = 48;
+  const padLeft = 86;
+  const padRight = 26;
+  const padTop = 32;
+  const padBottom = 62;
   const maxMinutes = Math.max(8 * 60, ...points.map((point) => Math.max(point.minutes, point.rollingAverageMinutes)));
   const usableWidth = width - padLeft - padRight;
   const usableHeight = height - padTop - padBottom;
@@ -200,7 +210,7 @@ export function QuarterTrendChart({ points }: { points: QuarterTrendPoint[] }) {
       ) : null}
 
       <svg className="mt-4 h-auto w-full" viewBox={`0 0 ${width} ${height}`} role="img" aria-label="Daily hours over the current quarter with rolling seven day average">
-        <text x="16" y={padTop + 10} className="fill-moss text-[0.72rem] font-black">
+        <text x={padLeft} y="16" textAnchor="start" className="fill-moss text-[0.72rem] font-black">
           Hours
         </text>
         {yTicks.map((tick) => (
@@ -236,11 +246,11 @@ export function QuarterTrendChart({ points }: { points: QuarterTrendPoint[] }) {
           point.date === active?.date ? <circle key={`${point.date}-active`} cx={x(index)} cy={y(point.rollingAverageMinutes)} r="6" fill="rgb(var(--color-accent-rgb))" stroke="#fff" strokeWidth="3" /> : null
         ))}
         {xLabels.map((index) => (
-          <text key={points[index].date} x={x(index)} y={height - 12} textAnchor="middle" className="fill-moss text-[0.78rem] font-black">
+          <text key={points[index].date} x={x(index)} y={height - 28} textAnchor="middle" className="fill-moss text-[0.78rem] font-black">
             {points[index].label}
           </text>
         ))}
-        <text x={(width + padLeft - padRight) / 2} y={height - 2} textAnchor="middle" className="fill-moss text-[0.72rem] font-black">
+        <text x={(width + padLeft - padRight) / 2} y={height - 8} textAnchor="middle" className="fill-moss text-[0.72rem] font-black">
           Current quarter dates
         </text>
       </svg>
@@ -252,10 +262,10 @@ export function FinancialYearChart({ points, start, end }: { points: FinancialYe
   const [activeMonth, setActiveMonth] = useState<string | null>(null);
   const width = 760;
   const height = 320;
-  const padLeft = 64;
-  const padRight = 24;
-  const padTop = 24;
-  const padBottom = 50;
+  const padLeft = 92;
+  const padRight = 28;
+  const padTop = 32;
+  const padBottom = 62;
   const maxCents = Math.max(100, ...points.map((point) => Math.max(point.paidCents, point.cumulativePaidCents)));
   const usableWidth = width - padLeft - padRight;
   const usableHeight = height - padTop - padBottom;
@@ -297,7 +307,7 @@ export function FinancialYearChart({ points, start, end }: { points: FinancialYe
       ) : null}
 
       <svg className="mt-4 h-auto w-full" viewBox={`0 0 ${width} ${height}`} role="img" aria-label="Monthly paid invoice income across the financial year">
-        <text x="12" y={padTop + 10} className="fill-moss text-[0.72rem] font-black">
+        <text x={padLeft} y="16" textAnchor="start" className="fill-moss text-[0.72rem] font-black">
           Dollars
         </text>
         {yTicks.map((tick) => (
@@ -333,11 +343,11 @@ export function FinancialYearChart({ points, start, end }: { points: FinancialYe
           <circle key={`${point.month}-dot`} cx={x(index)} cy={y(point.cumulativePaidCents)} r={point.month === active?.month ? 6 : 4} fill={point.month === active?.month ? "rgb(var(--color-accent-rgb))" : "#17211c"} stroke="#fff" strokeWidth="2" />
         ))}
         {points.map((point, index) => (
-          <text key={`${point.month}-label`} x={x(index)} y={height - 14} textAnchor="middle" className="fill-moss text-[0.78rem] font-black">
+          <text key={`${point.month}-label`} x={x(index)} y={height - 28} textAnchor="middle" className="fill-moss text-[0.78rem] font-black">
             {point.label}
           </text>
         ))}
-        <text x={(width + padLeft - padRight) / 2} y={height - 2} textAnchor="middle" className="fill-moss text-[0.72rem] font-black">
+        <text x={(width + padLeft - padRight) / 2} y={height - 8} textAnchor="middle" className="fill-moss text-[0.72rem] font-black">
           Australian financial year months
         </text>
       </svg>

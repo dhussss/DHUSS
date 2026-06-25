@@ -8,9 +8,7 @@ import {
   ClipboardList,
   Clock3,
   FileClock,
-  FilePlus2,
   FolderKanban,
-  LogOut,
   ReceiptText,
   Sparkles,
   Timer,
@@ -19,7 +17,6 @@ import {
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { Children, type ReactNode } from "react";
-import { logoutAction } from "@/app/actions";
 import { LogTimeSheet } from "@/components/LogTimeSheet";
 import { WeeklyPerformanceChart } from "@/components/AnalyticsCharts";
 import { requireUserId } from "@/lib/auth";
@@ -97,23 +94,15 @@ export default async function DashboardPage() {
             <div>
               <p className="inline-flex items-center gap-2 text-sm font-black uppercase text-mint">
                 <Sparkles size={17} aria-hidden="true" />
-                Command Centre
+                Dashboard
               </p>
               <h1 className="mt-2 text-4xl font-black tracking-normal sm:text-5xl">Morning, {displayName}</h1>
               <p className="mt-3 max-w-2xl text-sm font-bold leading-6 text-white/75">
                 {todayLabel}. This is the live cockpit for hours, invoices, and work ready to bill.
               </p>
             </div>
-            <div className="grid gap-2 sm:grid-cols-3 lg:w-[31rem]">
+            <div className="lg:w-[10rem]">
               <LogTimeSheet projects={projects} buttonLabel="Log Work" />
-              <Link className="tap-secondary border-white/20 bg-white/10 text-white hover:border-mint hover:text-white" href="/invoices/new">
-                <FilePlus2 size={20} aria-hidden="true" />
-                Invoice
-              </Link>
-              <Link className="tap-secondary border-white/20 bg-white/10 text-white hover:border-mint hover:text-white" href="/projects/new">
-                <FolderKanban size={20} aria-hidden="true" />
-                Project
-              </Link>
             </div>
           </div>
 
@@ -148,16 +137,6 @@ export default async function DashboardPage() {
               href="/invoices/new"
             />
           </div>
-        </div>
-
-        <div className="flex flex-wrap items-center gap-2 border-t border-white/10 bg-black/15 px-4 py-3 sm:px-6 lg:px-7">
-          <AdminLink href="/business-profile" icon={Building2} label="Profile" />
-          <form action={logoutAction}>
-            <button className="inline-flex min-h-9 items-center gap-2 rounded-lg px-3 text-xs font-bold text-white/75 transition hover:bg-white/10 hover:text-white" type="submit">
-              <LogOut size={16} aria-hidden="true" />
-              Logout
-            </button>
-          </form>
         </div>
       </section>
 
@@ -344,15 +323,6 @@ function HeroKpi({
     </Link>
   ) : (
     card
-  );
-}
-
-function AdminLink({ href, icon: Icon, label }: { href: string; icon: LucideIcon; label: string }) {
-  return (
-    <Link href={href} className="inline-flex min-h-9 items-center gap-2 rounded-lg px-3 text-xs font-bold text-white/75 transition hover:bg-white/10 hover:text-white">
-      <Icon size={16} aria-hidden="true" />
-      {label}
-    </Link>
   );
 }
 

@@ -733,13 +733,13 @@ export async function loadInsightsData(ownerId: string): Promise<InsightsData> {
       value: formatShortMoney(taxSetAside.suggestedTaxWeeklyCents),
       body: taxSetAside.taxEnabled
         ? `Estimate only for this week, using ${taxSetAside.customTaxRate ? "your custom rate" : `${taxSetAside.financialYear} resident brackets`}.`
-        : "Tax set-aside is switched off in Business Profile.",
+        : "Tax set-aside is switched off in Settings.",
       tone: taxSetAside.taxEnabled ? "mint" : "ink"
     },
     {
       title: "Super planning",
       value: formatShortMoney(taxSetAside.suggestedSuperWeeklyCents),
-      body: taxSetAside.superEnabled ? `Optional ${taxSetAside.superRate}% planning estimate for this week.` : "Super planning is switched off in Business Profile.",
+      body: taxSetAside.superEnabled ? `Optional ${taxSetAside.superRate}% planning estimate for this week.` : "Super planning is switched off in Settings.",
       tone: taxSetAside.superEnabled ? "mint" : "ink"
     },
     topUnbilledProject

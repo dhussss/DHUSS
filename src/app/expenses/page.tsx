@@ -48,7 +48,7 @@ export default async function ExpensesPage({
       <header className="page-header">
         <p className="section-title">Expenses</p>
         <h1 className="page-title">Work expense register</h1>
-        <p className="page-subtitle">Track work-related costs for tax, audit, and project allocation. Archived records stay out of the active totals.</p>
+        <p className="page-subtitle">Track work-related costs for tax planning and project allocation. Archived records stay out of the active totals.</p>
       </header>
 
       {params?.saved ? (
@@ -112,7 +112,7 @@ export default async function ExpensesPage({
                     )}
                   </div>
 
-                  {expense.notes || expense.receiptReference || expense.paymentMethod ? (
+                  {expense.notes || expense.receiptReference ? (
                     <p className="mt-3 text-sm font-bold leading-6 text-moss">
                       {[expense.receiptReference ? `Ref ${expense.receiptReference}` : "", expense.notes ?? ""]
                         .filter(Boolean)
