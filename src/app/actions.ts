@@ -11,6 +11,7 @@ import { dollarsToCents } from "@/lib/money";
 import { addDays, endOfDay, parseInputDate } from "@/lib/dates";
 import { expenseCategoryOptions, expenseStatusOptions } from "@/lib/expenses";
 import { buildInvoiceLineData, invoiceTotals, summaryText } from "@/lib/invoices";
+import { sendInvoiceEmailWithPdf, sendInvoiceMmsWithPdf } from "@/lib/invoice-delivery";
 import { isQuarterHour, isQuarterHourClock, parseClockTime } from "@/lib/time";
 import { createClient } from "@/lib/supabase/server";
 
@@ -1575,4 +1576,24 @@ export async function prepareInvoiceSmsAction(formData: FormData) {
   if (!message) throw new Error("SMS message is required.");
 
   return { ok: true };
+}
+
+export async function sendInvoiceEmailAction(formData: FormData) {
+  const ownerId = await requireUserId();
+  const invoiceId = text(formData, "invoiceId");
+  const result = await sendInvoiceEmailWithPdf(ownerId, invoiceId);
+  revalidatePath(`/invoices/${invoiceId}`);
+  revalidatePath("/invoices");
+  revalidateAppData();
+  return result;
+}
+
+export async function sendInvoiceSmsAction(formData: FormData) {
+  const ownerId = await requireUserId();
+  const invoiceId = text(formData, "invoiceId");
+  const result = await sendInvoiceMmsWithPdf(ownerId, invoiceId);
+  revalidatePath(`/invoices/${invoiceId}`);
+  revalidatePath("/invoices");
+  revalidateAppData();
+  return result;
 }

@@ -8,7 +8,8 @@ Mobile-first PWA for a sole trader/subcontractor to track clients, projects, log
 - Tailwind CSS
 - Prisma ORM
 - Supabase Postgres
-- User-owned email sending through the device's default mail app (`mailto:`)
+- One-step SMTP invoice email delivery with PDF attachment
+- Optional Twilio MMS invoice delivery with PDF attachment
 - PWA manifest and service worker for Add to Home Screen
 
 ## Architecture Notes
@@ -36,11 +37,25 @@ DIRECT_URL="postgresql://postgres.<PROJECT-REF>:<PASSWORD>@<REGION>.pooler.supab
 # Required in production to open the private diagnostics page.
 DIAGNOSTICS_TOKEN="change-this-long-random-token"
 
-# Public app URL used for secure client invoice links.
+# Public app URL used for secure client invoice links and MMS PDF delivery.
 APP_BASE_URL="https://<your-vercel-domain>"
 
-# Optional future server-side email delivery. The normal workflow opens the
-# user's own email app and does not require these.
+# Optional one-step invoice email delivery with PDF attachment.
+# SMTP_HOST="smtp.example.com"
+# SMTP_PORT="587"
+# SMTP_SECURE="false"
+# SMTP_USER="you@example.com"
+# SMTP_PASSWORD="<app-password-or-smtp-password>"
+# SMTP_FROM_EMAIL="you@example.com"
+# SMTP_FROM_NAME="Your Business Name"
+
+# Optional one-step invoice SMS/MMS delivery with PDF attachment.
+# TWILIO_ACCOUNT_SID=""
+# TWILIO_AUTH_TOKEN=""
+# TWILIO_FROM_NUMBER=""
+# TWILIO_MESSAGING_SERVICE_SID=""
+
+# Optional future HTML/provider email delivery.
 # RESEND_API_KEY=""
 # RESEND_FROM_EMAIL=""
 
@@ -189,19 +204,45 @@ The latest migration removes the retired audit-log table. This permanently delet
 
 The diagnostics page helps choose the next fix: if TCP/TLS connect is fast but Prisma `SELECT 1` is high, Prisma engine/pooler overhead is the main problem; if both TCP/TLS and Prisma are high, network or Supabase pooler latency is the main problem; if `SELECT 1` is low but dashboard is high, query work is the main problem.
 
-## Invoice Email Setup
+## Invoice Delivery Setup
 
-No email provider is required for the normal workflow. `/invoices/<id>/email` prepares a short, editable plain-text email, then opens the user's default email app with a `mailto:` link so the invoice is sent from that user's own account.
+The invoice page supports one-step delivery:
 
-Draft invoices can open the email preparation page. Opening the email app does not mark the invoice as sent; after sending from the mail app, manually use `Mark as Sent` on the invoice page.
+- `Email Invoice` sends the generated PDF as an email attachment through a configured SMTP account.
+- `SMS Invoice` sends the generated PDF as MMS through Twilio.
 
-Standard browser `mailto:` links cannot reliably attach generated PDF files. The invoice page uses `Email Invoice` as the normal workflow: supported iPhone/Safari browsers open the share sheet with the generated PDF attached, while unsupported browsers download the PDF and open a prefilled email so the user can attach it manually. Automatic background sending with guaranteed attachments requires a server-side email provider such as Resend or Postmark with verified sending details.
+This is intentionally server-side delivery. Browser `mailto:` and `sms:` links cannot attach generated files, and the Web Share sheet can attach files but cannot reliably prefill recipient, subject, and body. One-step attachment delivery therefore requires either server-side sending or a native iOS app wrapper.
 
-Set `APP_BASE_URL` in Vercel if you use public invoice links. When a public link exists, Business Profile controls whether that link is included in the prepared email.
+For email delivery, add SMTP settings locally and in Vercel:
+
+```env
+SMTP_HOST="smtp.example.com"
+SMTP_PORT="587"
+SMTP_SECURE="false"
+SMTP_USER="you@example.com"
+SMTP_PASSWORD="<app-password-or-smtp-password>"
+SMTP_FROM_EMAIL="you@example.com"
+SMTP_FROM_NAME="Your Business Name"
+```
+
+For SMS/MMS delivery, add Twilio settings locally and in Vercel:
+
+```env
+TWILIO_ACCOUNT_SID=""
+TWILIO_AUTH_TOKEN=""
+TWILIO_FROM_NUMBER=""
+# or use TWILIO_MESSAGING_SERVICE_SID instead of TWILIO_FROM_NUMBER
+```
+
+`APP_BASE_URL` must be set to the public production URL for MMS delivery because Twilio needs to fetch the generated invoice PDF from `/public/invoices/<token>/pdf`. That PDF endpoint uses the same long unguessable invoice token and is enabled automatically when sending an invoice by SMS/MMS.
+
+Draft, sent, and paid invoices can be delivered. Void invoices cannot be delivered. Email delivery updates the invoice email count and last emailed time.
+
+Set `APP_BASE_URL` in Vercel if you use public invoice links or SMS/MMS PDF delivery. When a public link exists, Business Profile controls whether that link is included in the prepared email.
 
 The default invoice email template can be customised in `/business-profile` with merge tags: `{{clientName}}`, `{{invoiceNumber}}`, `{{projectName}}`, `{{amountDue}}`, `{{dueDate}}`, `{{senderName}}`, and `{{businessName}}`. Payment details and a short invoice summary are optional and off by default.
 
-Resend/API-key based server sending is not part of the active workflow. Fully branded HTML invoice emails require a verified sending provider such as Resend, Postmark, or similar, and are a future option. If server-side sending is reintroduced later, treat `RESEND_API_KEY` and `RESEND_FROM_EMAIL` as optional future-only environment variables.
+Resend/API-key based HTML sending is not part of the active workflow. Fully branded HTML emails require a verified sending provider such as Resend, Postmark, or similar, and are a future option. The current one-step email workflow uses SMTP plain-text email with the generated PDF attached.
 
 ## Private Diagnostics
 
@@ -253,17 +294,18 @@ Use `/diagnostics?token=<DIAGNOSTICS_TOKEN>` while logged in to open a private p
 - Draft invoices do not mark time entries or expense items as billed.
 - Marking a draft invoice sent or paid finalises it, marks linked entries/items billed, calculates GST from the current business profile, and stores business/client snapshots on the invoice.
 - Sent and paid invoices do not silently mutate if the business profile or client changes later.
-- Invoice preview at `/invoices/<id>` has an `Email Invoice` action that generates the PDF and opens the best available email/share workflow.
+- Invoice preview at `/invoices/<id>` has an `Email Invoice` action that sends the generated PDF as an SMTP email attachment when SMTP is configured.
+- Invoice preview also has an `SMS Invoice` action that sends the generated PDF as MMS when Twilio is configured.
 - Browser Print Preview remains available as a fallback, but the normal workflow does not rely on print-to-PDF.
 - Invoice preview uses a centred A4 print layout with `@page` margins and print-specific invoice containers so the saved PDF uses the printable page width instead of inheriting app/dashboard layout constraints.
 - The public invoice route `/public/invoices/<token>` uses the same print rules as the private invoice preview.
 - App navigation, action buttons, and app backgrounds are hidden in print.
-- Invoice preview supports the one-tap Email Invoice workflow, plus an editable email workflow at `/invoices/<id>/email` for manual adjustments.
-- Email preparation works for draft, sent, and paid invoices. It does not require `RESEND_API_KEY` or `RESEND_FROM_EMAIL`.
-- The email composer opens the user's own email app with the recipient, subject, and professional plain-text body filled in. Copy Email Text is available as a fallback.
-- `APP_BASE_URL` is only needed when the prepared email includes an active public invoice link.
+- Invoice preview supports one-step Email Invoice and SMS Invoice delivery. The editable email workflow at `/invoices/<id>/email` remains available for manual copy/review.
+- One-step email delivery works for draft, sent, and paid invoices when SMTP is configured. It does not require `RESEND_API_KEY` or `RESEND_FROM_EMAIL`.
+- One-step SMS delivery works for draft, sent, and paid invoices when Twilio MMS is configured.
+- `APP_BASE_URL` is required for SMS/MMS PDF delivery and public invoice links.
 - Sent and paid invoices can create a secure client invoice link at `/public/invoices/<token>`. Links can be revoked or regenerated from the invoice page.
-- Public invoice links are token-based, unlisted, and only work while enabled on sent or paid invoices. Void invoices automatically disable their public link.
+- Public invoice web links are token-based, unlisted, and only work while enabled on sent or paid invoices. Void invoices automatically disable their public link. The public PDF endpoint is also token-based and is used for SMS/MMS attachment delivery.
 - Invoice list supports search plus filters for all, draft, sent, paid, and void invoices.
 - Sent invoices past their due date show an overdue indicator.
 - Future finalised invoices snapshot business contact, website, default notes, email message wording, and footer/signature wording so older sent/paid invoices do not drift when the business profile changes.

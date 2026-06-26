@@ -17,9 +17,7 @@ import { InvoiceDocumentView } from "@/components/InvoiceDocumentView";
 import { CopyTextButton } from "@/components/InvoiceExportActions";
 import { SubmitButton } from "@/components/SubmitButton";
 import { requireUserId } from "@/lib/auth";
-import { invoiceBusinessDetails, invoiceClientDetails, invoicePdfFileName } from "@/lib/invoice-data";
-import { buildPreparedInvoiceEmailBody, invoiceDueDate, renderTemplate } from "@/lib/invoice-documents";
-import { formatMoney } from "@/lib/money";
+import { invoiceBusinessDetails, invoiceClientDetails } from "@/lib/invoice-data";
 import { prisma } from "@/lib/prisma";
 import { createClient } from "@/lib/supabase/server";
 
@@ -59,47 +57,16 @@ export default async function InvoiceDetailPage({ params }: { params: Promise<{ 
   const publicInvoicePath = invoice.publicToken ? `/public/invoices/${invoice.publicToken}` : null;
   const publicInvoiceUrl = invoice.publicTokenEnabled && publicInvoicePath ? absoluteAppUrl(publicInvoicePath) : null;
   const canSharePublicLink = invoice.status === "SENT" || invoice.status === "PAID";
-  const pdfHref = `/invoices/${invoice.id}/pdf`;
-  const pdfFileName = invoicePdfFileName(invoice.invoiceNumber);
-  const dueDate = invoiceDueDate(invoice);
-  const templateValues = {
-    invoiceNumber: invoice.invoiceNumber,
-    businessName: business.name,
-    clientName: client.contactName || client.businessName,
-    clientBusinessName: client.businessName,
-    projectTitle: invoice.project.title,
-    projectName: invoice.project.title,
-    total: formatMoney(invoice.grandTotalCents),
-    totalDue: formatMoney(invoice.grandTotalCents),
-    amountDue: formatMoney(invoice.grandTotalCents),
-    dueDate: formatEmailDate(dueDate),
-    senderName: business.contactName || business.name
-  };
-  const subjectTemplate = profile?.defaultInvoiceEmailSubjectTemplate || "Invoice {{invoiceNumber}} from {{businessName}}";
-  const emailSubject = renderTemplate(subjectTemplate, templateValues);
-  const emailBody = buildPreparedInvoiceEmailBody({
-    invoice,
-    business,
-    client,
-    publicUrl: publicInvoiceUrl,
-    greeting: profile?.defaultEmailGreeting,
-    intro: profile?.defaultEmailIntro,
-    paymentLine: profile?.defaultEmailPaymentLine,
-    signOff: profile?.defaultEmailSignOff,
-    includePaymentDetails: profile?.includePaymentDetailsInEmail ?? false,
-    includeInvoiceSummary: profile?.includeInvoiceSummaryInEmail ?? false,
-    includePublicInvoiceLink: profile?.includePublicInvoiceLinkInEmail ?? true
-  });
-  const emailDisabledReason = !client.email ? "Add an email address to this client before emailing the invoice." : "";
-  const smsBody = buildInvoiceSmsBody({
-    invoiceNumber: invoice.invoiceNumber,
-    projectName: invoice.project.title,
-    amountDue: formatMoney(invoice.grandTotalCents),
-    dueDate: formatEmailDate(dueDate),
-    businessName: business.name,
-    publicInvoiceUrl
-  });
-  const smsDisabledReason = !client.phone ? "Add a phone number to this client before texting the invoice." : "";
+  const emailDisabledReason = !client.email
+    ? "Add an email address to this client before emailing the invoice."
+    : !emailDeliveryConfigured()
+      ? "Configure SMTP delivery before one-step invoice email can send."
+      : "";
+  const smsDisabledReason = !client.phone
+    ? "Add a phone number to this client before texting the invoice."
+    : !mmsDeliveryConfigured()
+      ? "Configure Twilio MMS delivery before one-step invoice SMS can send."
+      : "";
 
   return (
     <main className="page-shell invoice-workspace">
@@ -131,21 +98,14 @@ export default async function InvoiceDetailPage({ params }: { params: Promise<{ 
           <section className="card">
             <p className="section-title">Send workflow</p>
             <div className="mt-4 grid gap-2">
-              <p className="text-sm font-bold text-moss">Open a prefilled email or SMS addressed to this client.</p>
+              <p className="text-sm font-bold text-moss">Send the invoice PDF in one step.</p>
               <EmailInvoiceButton
                 invoiceId={invoice.id}
-                pdfHref={pdfHref}
-                pdfFileName={pdfFileName}
-                to={client.email ?? ""}
-                phone={client.phone ?? ""}
-                subject={emailSubject}
-                body={emailBody}
-                smsBody={smsBody}
                 disabledReason={emailDisabledReason}
                 smsDisabledReason={smsDisabledReason}
               />
               <p className="rounded-lg border border-line bg-paper p-3 text-xs font-bold leading-5 text-moss">
-                Email opens with To, Subject and Message filled in. Browsers cannot attach a PDF through mail links, so the PDF downloads for attaching if your mail app needs it.
+                Email sends through your configured SMTP account with the invoice PDF attached. SMS sends as MMS through Twilio with the invoice PDF attached.
               </p>
             </div>
           </section>
@@ -298,38 +258,6 @@ function absoluteAppUrl(path: string) {
   return baseUrl ? `${baseUrl}${path}` : path;
 }
 
-function formatEmailDate(date: Date | string | number) {
-  const value = date instanceof Date ? date : new Date(date);
-  return new Intl.DateTimeFormat("en-AU", {
-    day: "numeric",
-    month: "long",
-    year: "numeric",
-    timeZone: "UTC"
-  }).format(value);
-}
-
-function buildInvoiceSmsBody({
-  invoiceNumber,
-  projectName,
-  amountDue,
-  dueDate,
-  businessName,
-  publicInvoiceUrl
-}: {
-  invoiceNumber: string;
-  projectName: string;
-  amountDue: string;
-  dueDate: string;
-  businessName: string;
-  publicInvoiceUrl: string | null;
-}) {
-  return [
-    `${businessName}: Invoice ${invoiceNumber} for ${projectName}.`,
-    `Amount due: ${amountDue}. Due date: ${dueDate}.`,
-    publicInvoiceUrl ? `View invoice: ${publicInvoiceUrl}` : "Please refer to the invoice PDF for details."
-  ].join(" ");
-}
-
 function invoiceWarnings(
   profile: {
     tradingName: string;
@@ -349,4 +277,17 @@ function invoiceWarnings(
     !profile.bankAccountName || !profile.bsb || !profile.accountNumber ? "Bank payment details are incomplete." : "",
     !client.email ? "Client email is missing." : ""
   ].filter(Boolean);
+}
+
+function emailDeliveryConfigured() {
+  return Boolean(process.env.SMTP_HOST && process.env.SMTP_USER && process.env.SMTP_PASSWORD && (process.env.SMTP_FROM_EMAIL || process.env.SMTP_USER));
+}
+
+function mmsDeliveryConfigured() {
+  return Boolean(
+    process.env.TWILIO_ACCOUNT_SID &&
+      process.env.TWILIO_AUTH_TOKEN &&
+      (process.env.TWILIO_FROM_NUMBER || process.env.TWILIO_MESSAGING_SERVICE_SID) &&
+      (process.env.APP_BASE_URL || process.env.VERCEL_URL)
+  );
 }
