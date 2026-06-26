@@ -1,6 +1,5 @@
 "use client";
 
-import Link from "next/link";
 import { useState, useTransition } from "react";
 import { Clipboard, Download, Mail } from "lucide-react";
 import { prepareInvoiceEmailAction } from "@/app/actions";
@@ -8,6 +7,7 @@ import { prepareInvoiceEmailAction } from "@/app/actions";
 export function EmailComposer({
   invoiceId,
   pdfHref,
+  pdfFileName,
   initialTo,
   initialSubject,
   initialBody,
@@ -15,6 +15,7 @@ export function EmailComposer({
 }: {
   invoiceId: string;
   pdfHref: string;
+  pdfFileName: string;
   initialTo: string;
   initialSubject: string;
   initialBody: string;
@@ -25,6 +26,7 @@ export function EmailComposer({
   const [body, setBody] = useState(initialBody);
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
+  const [isDownloading, setIsDownloading] = useState(false);
   const [isPending, startTransition] = useTransition();
 
   function openEmailApp() {
@@ -55,6 +57,48 @@ export function EmailComposer({
       setMessage("Email text copied.");
     } catch {
       setError("Copy failed. Select the text and copy it manually.");
+    }
+  }
+
+  async function downloadPdf() {
+    setError("");
+    setMessage("");
+    setIsDownloading(true);
+
+    try {
+      const response = await fetch(pdfHref, {
+        credentials: "same-origin",
+        headers: { Accept: "application/pdf" }
+      });
+
+      if (!response.ok) {
+        throw new Error("PDF download failed.");
+      }
+
+      const contentType = response.headers.get("content-type") ?? "";
+      if (!contentType.includes("application/pdf")) {
+        throw new Error("PDF response was not a PDF.");
+      }
+
+      const blob = await response.blob();
+      if (!blob.size) {
+        throw new Error("PDF download was empty.");
+      }
+
+      const url = URL.createObjectURL(blob);
+      const anchor = document.createElement("a");
+      anchor.href = url;
+      anchor.download = pdfFileName;
+      anchor.style.display = "none";
+      document.body.appendChild(anchor);
+      anchor.click();
+      anchor.remove();
+      URL.revokeObjectURL(url);
+      setMessage("PDF downloaded. Attach it to your email before sending.");
+    } catch {
+      setError("PDF download failed. Go back to the invoice and use Print Preview as a fallback.");
+    } finally {
+      setIsDownloading(false);
     }
   }
 
@@ -94,10 +138,10 @@ export function EmailComposer({
         </div>
 
         <div className="grid gap-2 lg:grid-cols-3">
-          <Link className="tap-primary w-full" href={pdfHref}>
+          <button className="tap-primary w-full" type="button" onClick={downloadPdf} disabled={isDownloading}>
             <Download size={20} aria-hidden="true" />
-            Create PDF
-          </Link>
+            {isDownloading ? "Creating PDF..." : "Create PDF"}
+          </button>
           <button className="tap-secondary w-full" type="button" onClick={openEmailApp} disabled={Boolean(disabledReason) || isPending}>
             {isPending ? (
               "Preparing..."

@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import { ArrowLeft, ExternalLink, Mail } from "lucide-react";
 import { requireUserId } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { invoicePdfFileName } from "@/lib/invoice-data";
 import { buildPreparedInvoiceEmailBody, invoiceDueDate, renderTemplate } from "@/lib/invoice-documents";
 import type { InvoiceBusinessDetails, InvoiceClientDetails, InvoiceDocumentData } from "@/lib/invoice-documents";
 import { formatDateAU } from "@/lib/dates";
@@ -88,6 +89,7 @@ export default async function InvoiceEmailPage({ params }: { params: Promise<{ i
         <EmailComposer
           invoiceId={invoice.id}
           pdfHref={`/invoices/${invoice.id}/pdf`}
+          pdfFileName={invoicePdfFileName(invoice.invoiceNumber)}
           initialTo={client.email ?? ""}
           initialSubject={subject}
           initialBody={body}

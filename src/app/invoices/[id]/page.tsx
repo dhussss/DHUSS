@@ -16,7 +16,7 @@ import { InvoiceDocumentView } from "@/components/InvoiceDocumentView";
 import { CopyTextButton, InvoiceExportActions } from "@/components/InvoiceExportActions";
 import { SubmitButton } from "@/components/SubmitButton";
 import { requireUserId } from "@/lib/auth";
-import { invoiceBusinessDetails, invoiceClientDetails } from "@/lib/invoice-data";
+import { invoiceBusinessDetails, invoiceClientDetails, invoicePdfFileName } from "@/lib/invoice-data";
 import { buildInvoicePlainText } from "@/lib/invoice-documents";
 import { prisma } from "@/lib/prisma";
 import { createClient } from "@/lib/supabase/server";
@@ -58,6 +58,7 @@ export default async function InvoiceDetailPage({ params }: { params: Promise<{ 
   const publicInvoiceUrl = invoice.publicTokenEnabled && publicInvoicePath ? absoluteAppUrl(publicInvoicePath) : null;
   const canSharePublicLink = invoice.status === "SENT" || invoice.status === "PAID";
   const pdfHref = `/invoices/${invoice.id}/pdf`;
+  const pdfFileName = invoicePdfFileName(invoice.invoiceNumber);
   const invoiceText = buildInvoicePlainText({
     invoice,
     business,
@@ -96,7 +97,7 @@ export default async function InvoiceDetailPage({ params }: { params: Promise<{ 
             <p className="section-title">Send workflow</p>
             <div className="mt-4 grid gap-2">
               <p className="text-sm font-bold text-moss">1. Create the PDF you will send or attach.</p>
-              <InvoiceExportActions invoiceText={invoiceText} pdfHref={pdfHref} />
+              <InvoiceExportActions invoiceText={invoiceText} pdfHref={pdfHref} pdfFileName={pdfFileName} />
               <p className="rounded-lg border border-line bg-paper p-3 text-xs font-bold leading-5 text-moss">
                 Create PDF downloads a proper PDF file directly. Print Preview is only a fallback for checking the browser print view.
               </p>
