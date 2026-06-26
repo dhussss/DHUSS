@@ -87,7 +87,7 @@ export default async function InvoiceEmailPage({ params }: { params: Promise<{ i
       <section className="mt-5 grid gap-4 lg:grid-cols-[minmax(0,1fr)_20rem] lg:items-start">
         <EmailComposer
           invoiceId={invoice.id}
-          invoiceHref={`/invoices/${invoice.id}`}
+          pdfHref={`/invoices/${invoice.id}/pdf`}
           initialTo={client.email ?? ""}
           initialSubject={subject}
           initialBody={body}

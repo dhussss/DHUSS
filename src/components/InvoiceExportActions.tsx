@@ -1,10 +1,11 @@
 "use client";
 
+import Link from "next/link";
 import { useState } from "react";
 import type { ReactNode } from "react";
-import { Clipboard, Printer } from "lucide-react";
+import { Clipboard, Download, Printer } from "lucide-react";
 
-export function InvoiceExportActions({ invoiceText }: { invoiceText: string }) {
+export function InvoiceExportActions({ invoiceText, pdfHref }: { invoiceText: string; pdfHref: string }) {
   const [message, setMessage] = useState("");
 
   async function copy(label: string, value: string) {
@@ -19,9 +20,13 @@ export function InvoiceExportActions({ invoiceText }: { invoiceText: string }) {
   return (
     <div className="grid gap-2">
       {message ? <p className="rounded-lg border border-mint/30 bg-mint/10 p-2 text-xs font-bold text-moss">{message}</p> : null}
+      <Link className="tap-primary w-full" href={pdfHref}>
+        <Download size={20} aria-hidden="true" />
+        Create PDF
+      </Link>
       <button className="tap-secondary w-full" type="button" onClick={() => window.print()}>
         <Printer size={20} aria-hidden="true" />
-        Print / Save PDF
+        Print Preview
       </button>
       <button className="tap-secondary w-full" type="button" onClick={() => copy("Invoice text", invoiceText)}>
         <Clipboard size={20} aria-hidden="true" />

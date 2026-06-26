@@ -195,7 +195,7 @@ No email provider is required for the normal workflow. `/invoices/<id>/email` pr
 
 Draft invoices can open the email preparation page. Opening the email app does not mark the invoice as sent; after sending from the mail app, manually use `Mark as Sent` on the invoice page.
 
-Standard browser `mailto:` links cannot reliably attach generated PDF files. Use `Print / Save PDF` from the invoice preview, open the email app, then attach the saved PDF manually. Automatic PDF attachments require a server-side email provider such as Resend or Postmark with verified sending details.
+Standard browser `mailto:` links cannot reliably attach generated PDF files. Use `Create PDF` from the invoice preview or email-preparation page, open the email app, then attach the downloaded PDF manually. Automatic PDF attachments require a server-side email provider such as Resend or Postmark with verified sending details.
 
 Set `APP_BASE_URL` in Vercel if you use public invoice links. When a public link exists, Business Profile controls whether that link is included in the prepared email.
 
@@ -253,7 +253,8 @@ Use `/diagnostics?token=<DIAGNOSTICS_TOKEN>` while logged in to open a private p
 - Draft invoices do not mark time entries or expense items as billed.
 - Marking a draft invoice sent or paid finalises it, marks linked entries/items billed, calculates GST from the current business profile, and stores business/client snapshots on the invoice.
 - Sent and paid invoices do not silently mutate if the business profile or client changes later.
-- Invoice preview at `/invoices/<id>` is printable and supports browser Print / Save as PDF.
+- Invoice preview at `/invoices/<id>` has a `Create PDF` action that downloads a generated PDF from `/invoices/<id>/pdf`.
+- Browser Print Preview remains available as a fallback, but the normal workflow does not rely on print-to-PDF.
 - Invoice preview uses a centred A4 print layout with `@page` margins and print-specific invoice containers so the saved PDF uses the printable page width instead of inheriting app/dashboard layout constraints.
 - The public invoice route `/public/invoices/<token>` uses the same print rules as the private invoice preview.
 - App navigation, action buttons, and app backgrounds are hidden in print.
@@ -307,7 +308,7 @@ If Prisma timings remain high while TCP/TLS is low, the cleanest options are:
 - Project/client deletion is intended only for test or unbilled setup data. If a record has invoices or billed entries, the server action blocks deletion.
 - Billed time entries cannot be edited or deleted. Void/delete invoice flows release linked entries/items back to unbilled before changing invoice state.
 - Supabase Postgres indexes are included for the common dashboard, invoice, project, and hours export filters.
-- Browser print-to-PDF is the current stable PDF export method. Server-side PDF generation is not implemented yet.
+- PDF export is generated server-side at `/invoices/<id>/pdf` for the signed-in invoice owner.
 - Public invoice links are bearer links. Anyone with the active token can view that invoice, so revoke or regenerate links if they are shared with the wrong person.
 
 ## Troubleshooting
