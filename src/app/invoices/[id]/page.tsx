@@ -91,6 +91,15 @@ export default async function InvoiceDetailPage({ params }: { params: Promise<{ 
     includePublicInvoiceLink: profile?.includePublicInvoiceLinkInEmail ?? true
   });
   const emailDisabledReason = !client.email ? "Add an email address to this client before emailing the invoice." : "";
+  const smsBody = buildInvoiceSmsBody({
+    invoiceNumber: invoice.invoiceNumber,
+    projectName: invoice.project.title,
+    amountDue: formatMoney(invoice.grandTotalCents),
+    dueDate: formatEmailDate(dueDate),
+    businessName: business.name,
+    publicInvoiceUrl
+  });
+  const smsDisabledReason = !client.phone ? "Add a phone number to this client before texting the invoice." : "";
 
   return (
     <main className="page-shell invoice-workspace">
@@ -122,18 +131,21 @@ export default async function InvoiceDetailPage({ params }: { params: Promise<{ 
           <section className="card">
             <p className="section-title">Send workflow</p>
             <div className="mt-4 grid gap-2">
-              <p className="text-sm font-bold text-moss">Create the PDF and open your email app in one step.</p>
+              <p className="text-sm font-bold text-moss">Open a prefilled email or SMS addressed to this client.</p>
               <EmailInvoiceButton
                 invoiceId={invoice.id}
                 pdfHref={pdfHref}
                 pdfFileName={pdfFileName}
                 to={client.email ?? ""}
+                phone={client.phone ?? ""}
                 subject={emailSubject}
                 body={emailBody}
+                smsBody={smsBody}
                 disabledReason={emailDisabledReason}
+                smsDisabledReason={smsDisabledReason}
               />
               <p className="rounded-lg border border-line bg-paper p-3 text-xs font-bold leading-5 text-moss">
-                On supported iPhones this opens the share sheet with the invoice PDF attached. If attachments are blocked by the browser, the PDF downloads and a prefilled email opens.
+                Email opens with To, Subject and Message filled in. Browsers cannot attach a PDF through mail links, so the PDF downloads for attaching if your mail app needs it.
               </p>
             </div>
           </section>
@@ -294,6 +306,28 @@ function formatEmailDate(date: Date | string | number) {
     year: "numeric",
     timeZone: "UTC"
   }).format(value);
+}
+
+function buildInvoiceSmsBody({
+  invoiceNumber,
+  projectName,
+  amountDue,
+  dueDate,
+  businessName,
+  publicInvoiceUrl
+}: {
+  invoiceNumber: string;
+  projectName: string;
+  amountDue: string;
+  dueDate: string;
+  businessName: string;
+  publicInvoiceUrl: string | null;
+}) {
+  return [
+    `${businessName}: Invoice ${invoiceNumber} for ${projectName}.`,
+    `Amount due: ${amountDue}. Due date: ${dueDate}.`,
+    publicInvoiceUrl ? `View invoice: ${publicInvoiceUrl}` : "Please refer to the invoice PDF for details."
+  ].join(" ");
 }
 
 function invoiceWarnings(

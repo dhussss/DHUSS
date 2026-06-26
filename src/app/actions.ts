@@ -1556,3 +1556,23 @@ export async function prepareInvoiceEmailAction(formData: FormData) {
 
   return { ok: true };
 }
+
+export async function prepareInvoiceSmsAction(formData: FormData) {
+  const ownerId = await requireUserId();
+  const invoiceId = text(formData, "invoiceId");
+  const invoice = await prisma.invoice.findFirst({
+    where: { id: invoiceId, ownerId },
+    select: { id: true, invoiceNumber: true, status: true }
+  });
+
+  if (!invoice) throw new Error("Invoice not found.");
+  if (invoice.status === "VOID") throw new Error("Void invoices cannot be sent.");
+
+  const phone = text(formData, "phone");
+  if (digitsOnly(phone).length < 8) throw new Error("Client phone number is required.");
+
+  const message = text(formData, "message");
+  if (!message) throw new Error("SMS message is required.");
+
+  return { ok: true };
+}
