@@ -1,4 +1,4 @@
-import PDFDocument from "pdfkit";
+import PDFDocument from "pdfkit/js/pdfkit.standalone.js";
 import { formatDateAU } from "@/lib/dates";
 import { invoiceDueDate, invoiceSubtotals } from "@/lib/invoice-documents";
 import type { InvoiceBusinessDetails, InvoiceClientDetails, InvoiceDocumentData } from "@/lib/invoice-documents";
@@ -135,8 +135,13 @@ function drawHeader(
 
   const rightX = margin + contentWidth - rightWidth;
   doc.fillColor(MOSS).font("Helvetica-Bold").fontSize(8).text("INVOICE NUMBER", rightX, top + 2, { width: rightWidth, align: "right" });
-  doc.fillColor(INK).font("Helvetica-Bold").fontSize(22).text(invoice.invoiceNumber, rightX, top + 18, { width: rightWidth, align: "right" });
-  doc.fillColor(MOSS).font("Helvetica-Bold").fontSize(9).text(`Issued ${formatDateAU(invoice.invoiceDate)}`, rightX, top + 47, {
+  const invoiceNumberFontSize = fittedFontSize(doc, invoice.invoiceNumber, rightWidth, 22, 13);
+  doc
+    .fillColor(INK)
+    .font("Helvetica-Bold")
+    .fontSize(invoiceNumberFontSize)
+    .text(invoice.invoiceNumber, rightX, top + 18, { width: rightWidth, align: "right", lineBreak: false });
+  doc.fillColor(MOSS).font("Helvetica-Bold").fontSize(9).text(`Issued ${formatDateAU(invoice.invoiceDate)}`, rightX, top + 48, {
     width: rightWidth,
     align: "right"
   });
@@ -150,6 +155,15 @@ function drawInitialBadge(doc: PDFKit.PDFDocument, businessName: string, x: numb
     width: size,
     align: "center"
   });
+}
+
+function fittedFontSize(doc: PDFKit.PDFDocument, text: string, width: number, maxSize: number, minSize: number) {
+  for (let size = maxSize; size >= minSize; size -= 1) {
+    doc.font("Helvetica-Bold").fontSize(size);
+    if (doc.widthOfString(text) <= width) return size;
+  }
+
+  return minSize;
 }
 
 function drawAddressBlocks(state: DrawState, business: InvoiceBusinessDetails, client: InvoiceClientDetails) {
