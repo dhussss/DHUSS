@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { AlertTriangle, ArrowLeft, Banknote, ExternalLink, Link2, Mail, RefreshCcw, RotateCcw, Send, Trash2, XCircle } from "lucide-react";
+import { AlertTriangle, ArrowLeft, Banknote, ExternalLink, Link2, RefreshCcw, RotateCcw, Send, Trash2, XCircle } from "lucide-react";
 import {
   deleteInvoiceAction,
   enableInvoicePublicLinkAction,
@@ -12,12 +12,14 @@ import {
   voidInvoiceAction
 } from "@/app/actions";
 import { ConfirmSubmitButton } from "@/components/ConfirmSubmitButton";
+import { EmailInvoiceButton } from "@/components/EmailInvoiceButton";
 import { InvoiceDocumentView } from "@/components/InvoiceDocumentView";
-import { CopyTextButton, InvoiceExportActions } from "@/components/InvoiceExportActions";
+import { CopyTextButton } from "@/components/InvoiceExportActions";
 import { SubmitButton } from "@/components/SubmitButton";
 import { requireUserId } from "@/lib/auth";
 import { invoiceBusinessDetails, invoiceClientDetails, invoicePdfFileName } from "@/lib/invoice-data";
-import { buildInvoicePlainText } from "@/lib/invoice-documents";
+import { buildPreparedInvoiceEmailBody, invoiceDueDate, renderTemplate } from "@/lib/invoice-documents";
+import { formatMoney } from "@/lib/money";
 import { prisma } from "@/lib/prisma";
 import { createClient } from "@/lib/supabase/server";
 
@@ -59,12 +61,36 @@ export default async function InvoiceDetailPage({ params }: { params: Promise<{ 
   const canSharePublicLink = invoice.status === "SENT" || invoice.status === "PAID";
   const pdfHref = `/invoices/${invoice.id}/pdf`;
   const pdfFileName = invoicePdfFileName(invoice.invoiceNumber);
-  const invoiceText = buildInvoicePlainText({
+  const dueDate = invoiceDueDate(invoice);
+  const templateValues = {
+    invoiceNumber: invoice.invoiceNumber,
+    businessName: business.name,
+    clientName: client.contactName || client.businessName,
+    clientBusinessName: client.businessName,
+    projectTitle: invoice.project.title,
+    projectName: invoice.project.title,
+    total: formatMoney(invoice.grandTotalCents),
+    totalDue: formatMoney(invoice.grandTotalCents),
+    amountDue: formatMoney(invoice.grandTotalCents),
+    dueDate: formatEmailDate(dueDate),
+    senderName: business.contactName || business.name
+  };
+  const subjectTemplate = profile?.defaultInvoiceEmailSubjectTemplate || "Invoice {{invoiceNumber}} from {{businessName}}";
+  const emailSubject = renderTemplate(subjectTemplate, templateValues);
+  const emailBody = buildPreparedInvoiceEmailBody({
     invoice,
     business,
     client,
-    publicUrl: publicInvoiceUrl
+    publicUrl: publicInvoiceUrl,
+    greeting: profile?.defaultEmailGreeting,
+    intro: profile?.defaultEmailIntro,
+    paymentLine: profile?.defaultEmailPaymentLine,
+    signOff: profile?.defaultEmailSignOff,
+    includePaymentDetails: profile?.includePaymentDetailsInEmail ?? false,
+    includeInvoiceSummary: profile?.includeInvoiceSummaryInEmail ?? false,
+    includePublicInvoiceLink: profile?.includePublicInvoiceLinkInEmail ?? true
   });
+  const emailDisabledReason = !client.email ? "Add an email address to this client before emailing the invoice." : "";
 
   return (
     <main className="page-shell invoice-workspace">
@@ -96,18 +122,18 @@ export default async function InvoiceDetailPage({ params }: { params: Promise<{ 
           <section className="card">
             <p className="section-title">Send workflow</p>
             <div className="mt-4 grid gap-2">
-              <p className="text-sm font-bold text-moss">1. Create the PDF you will send or attach.</p>
-              <InvoiceExportActions invoiceText={invoiceText} pdfHref={pdfHref} pdfFileName={pdfFileName} />
+              <p className="text-sm font-bold text-moss">Create the PDF and open your email app in one step.</p>
+              <EmailInvoiceButton
+                invoiceId={invoice.id}
+                pdfHref={pdfHref}
+                pdfFileName={pdfFileName}
+                to={client.email ?? ""}
+                subject={emailSubject}
+                body={emailBody}
+                disabledReason={emailDisabledReason}
+              />
               <p className="rounded-lg border border-line bg-paper p-3 text-xs font-bold leading-5 text-moss">
-                Create PDF downloads a proper PDF file directly. Print Preview is only a fallback for checking the browser print view.
-              </p>
-              <p className="pt-2 text-sm font-bold text-moss">2. Prepare the email when the PDF is ready.</p>
-              <Link href={`/invoices/${invoice.id}/email`} className="tap-primary w-full">
-                <Mail size={20} aria-hidden="true" />
-                Prepare Email
-              </Link>
-              <p className="rounded-lg border border-line bg-paper p-3 text-xs font-bold leading-5 text-moss">
-                After sending from your email app, mark this invoice as sent. The app cannot confirm whether your mail app sent it.
+                On supported iPhones this opens the share sheet with the invoice PDF attached. If attachments are blocked by the browser, the PDF downloads and a prefilled email opens.
               </p>
             </div>
           </section>
@@ -175,7 +201,7 @@ export default async function InvoiceDetailPage({ params }: { params: Promise<{ 
           </section>
 
           <section className="grid gap-2">
-            <p className="section-title">3. Mark status</p>
+            <p className="section-title">2. Mark status</p>
             <form action={markInvoiceSentAction}>
               <input type="hidden" name="invoiceId" value={invoice.id} />
               {finaliseWarnings.length ? <input type="hidden" name="confirmIncomplete" value="on" /> : null}
@@ -258,6 +284,16 @@ export default async function InvoiceDetailPage({ params }: { params: Promise<{ 
 function absoluteAppUrl(path: string) {
   const baseUrl = process.env.APP_BASE_URL?.replace(/\/$/, "") || (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL.replace(/\/$/, "")}` : "");
   return baseUrl ? `${baseUrl}${path}` : path;
+}
+
+function formatEmailDate(date: Date | string | number) {
+  const value = date instanceof Date ? date : new Date(date);
+  return new Intl.DateTimeFormat("en-AU", {
+    day: "numeric",
+    month: "long",
+    year: "numeric",
+    timeZone: "UTC"
+  }).format(value);
 }
 
 function invoiceWarnings(

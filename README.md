@@ -195,7 +195,7 @@ No email provider is required for the normal workflow. `/invoices/<id>/email` pr
 
 Draft invoices can open the email preparation page. Opening the email app does not mark the invoice as sent; after sending from the mail app, manually use `Mark as Sent` on the invoice page.
 
-Standard browser `mailto:` links cannot reliably attach generated PDF files. Use `Create PDF` from the invoice preview or email-preparation page, open the email app, then attach the downloaded PDF manually. Automatic PDF attachments require a server-side email provider such as Resend or Postmark with verified sending details.
+Standard browser `mailto:` links cannot reliably attach generated PDF files. The invoice page uses `Email Invoice` as the normal workflow: supported iPhone/Safari browsers open the share sheet with the generated PDF attached, while unsupported browsers download the PDF and open a prefilled email so the user can attach it manually. Automatic background sending with guaranteed attachments requires a server-side email provider such as Resend or Postmark with verified sending details.
 
 Set `APP_BASE_URL` in Vercel if you use public invoice links. When a public link exists, Business Profile controls whether that link is included in the prepared email.
 
@@ -253,12 +253,12 @@ Use `/diagnostics?token=<DIAGNOSTICS_TOKEN>` while logged in to open a private p
 - Draft invoices do not mark time entries or expense items as billed.
 - Marking a draft invoice sent or paid finalises it, marks linked entries/items billed, calculates GST from the current business profile, and stores business/client snapshots on the invoice.
 - Sent and paid invoices do not silently mutate if the business profile or client changes later.
-- Invoice preview at `/invoices/<id>` has a `Create PDF` action that downloads a generated PDF from `/invoices/<id>/pdf`.
+- Invoice preview at `/invoices/<id>` has an `Email Invoice` action that generates the PDF and opens the best available email/share workflow.
 - Browser Print Preview remains available as a fallback, but the normal workflow does not rely on print-to-PDF.
 - Invoice preview uses a centred A4 print layout with `@page` margins and print-specific invoice containers so the saved PDF uses the printable page width instead of inheriting app/dashboard layout constraints.
 - The public invoice route `/public/invoices/<token>` uses the same print rules as the private invoice preview.
 - App navigation, action buttons, and app backgrounds are hidden in print.
-- Invoice preview supports Copy Invoice Text, browser Print / Save as PDF, and a prepare-email workflow at `/invoices/<id>/email`.
+- Invoice preview supports the one-tap Email Invoice workflow, plus an editable email workflow at `/invoices/<id>/email` for manual adjustments.
 - Email preparation works for draft, sent, and paid invoices. It does not require `RESEND_API_KEY` or `RESEND_FROM_EMAIL`.
 - The email composer opens the user's own email app with the recipient, subject, and professional plain-text body filled in. Copy Email Text is available as a fallback.
 - `APP_BASE_URL` is only needed when the prepared email includes an active public invoice link.

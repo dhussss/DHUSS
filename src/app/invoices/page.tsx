@@ -123,7 +123,7 @@ export default async function InvoicesPage({
               </Link>
               <Link href={`/invoices/${invoice.id}/email`} className="tap-secondary flex-1">
                 <Mail size={18} aria-hidden="true" />
-                Prepare Email
+                Email Invoice
               </Link>
               <form action={markInvoicePaidAction} className="flex-1">
                 <input type="hidden" name="invoiceId" value={invoice.id} />
