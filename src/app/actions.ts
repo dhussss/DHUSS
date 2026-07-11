@@ -265,6 +265,7 @@ export async function updateBusinessProfileAction(formData: FormData) {
 
   revalidatePath("/business-profile");
   revalidatePath("/invoices");
+  revalidateAppData();
   return { ok: true };
 }
 

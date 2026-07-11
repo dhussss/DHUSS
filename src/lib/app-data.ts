@@ -10,7 +10,8 @@ export const CACHE_TAGS = {
   invoices: "invoices-data",
   hoursExport: "hours-export-data",
   insights: "insights-data",
-  expenses: "expenses-data"
+  expenses: "expenses-data",
+  profile: "profile-data"
 } as const;
 
 const SHORT_REVALIDATE_SECONDS = 20;

@@ -18,7 +18,7 @@ import {
 import type { LucideIcon } from "lucide-react";
 import { Children, type ReactNode } from "react";
 import { LogTimeSheet } from "@/components/LogTimeSheet";
-import { WeeklyPerformanceChart } from "@/components/AnalyticsCharts";
+import { WeeklyPerformanceChart } from "@/components/WeeklyPerformanceChart";
 import { requireUserId } from "@/lib/auth";
 import { getDashboardData, type DashboardData } from "@/lib/app-data";
 import { dateInputValue, formatDateAU, previousWeekMondayToSunday, todayInPerth } from "@/lib/dates";
@@ -88,7 +88,7 @@ export default async function DashboardPage() {
 
   return (
     <main className="page-shell max-w-[92rem]">
-      <section className="overflow-hidden rounded-lg border border-ink/10 bg-ink text-white shadow-soft">
+      <section className="overflow-hidden rounded-lg border border-ink/15 bg-ink text-white shadow-soft">
         <div className="command-hero-bg p-4 sm:p-6 lg:p-7">
           <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-start">
             <div>
@@ -140,7 +140,7 @@ export default async function DashboardPage() {
         </div>
       </section>
 
-      <section className="mt-5 rounded-lg border border-line bg-white shadow-soft">
+      <section className="mt-5 rounded-lg border border-line/80 bg-white/80 shadow-soft backdrop-blur">
         <div className="grid gap-4 p-4 sm:p-5 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-center">
           <div className="flex items-start gap-3">
             <span className="icon-tile">
@@ -184,8 +184,8 @@ export default async function DashboardPage() {
         </section>
       ) : null}
 
-      <section className="mt-5 rounded-lg border border-ink/10 bg-white shadow-soft">
-        <div className="rounded-t-lg bg-ink p-5 text-white sm:p-6">
+      <section className="mt-5 rounded-lg border border-line/80 bg-white/[0.82] shadow-soft backdrop-blur">
+        <div className="rounded-t-lg border-b border-white/10 bg-ink p-5 text-white sm:p-6">
           <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-end">
             <div>
               <p className="inline-flex items-center gap-2 text-sm font-black uppercase text-mint">
@@ -300,7 +300,7 @@ function HeroKpi({
     gum: "from-gum/30 to-white/10 text-gum"
   };
   const card = (
-    <article className={`min-h-40 rounded-lg border border-white/15 bg-gradient-to-br ${tones[tone]} p-4 shadow-soft`}>
+    <article className={`min-h-40 rounded-lg border border-white/15 bg-gradient-to-br ${tones[tone]} p-4 shadow-soft backdrop-blur`}>
       <div className="flex items-start justify-between gap-3">
         <p className="text-xs font-black uppercase tracking-[0.12em] text-white/65">{label}</p>
         <span className="grid size-10 place-items-center rounded-lg bg-white/12">
@@ -361,8 +361,8 @@ function DashboardWidget({
   };
 
   return (
-    <section className="overflow-hidden rounded-lg border border-line bg-white/80 shadow-soft">
-      <div className="flex items-center justify-between gap-3 border-b border-line bg-white p-4">
+    <section className="overflow-hidden rounded-lg border border-line/80 bg-white/80 shadow-soft backdrop-blur">
+      <div className="flex items-center justify-between gap-3 border-b border-line/80 bg-white/70 p-4">
         <div className="flex items-center gap-3">
           <span className={`h-9 w-1.5 rounded-full ${accents[accent]}`} aria-hidden="true" />
           <h2 className="text-xl font-black tracking-normal">{title}</h2>
@@ -375,7 +375,7 @@ function DashboardWidget({
         {hasChildren ? (
           children
         ) : (
-          <article className="rounded-lg border border-line bg-white p-4 text-sm font-bold text-moss">
+          <article className="rounded-lg border border-line/80 bg-white/70 p-4 text-sm font-bold text-moss">
             <span className="inline-flex items-center gap-3">
               <EmptyIcon size={20} aria-hidden="true" />
               {emptyText}
