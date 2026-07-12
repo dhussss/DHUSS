@@ -215,6 +215,14 @@ pnpm run db:migrate
 
 `db:migrate` runs `prisma migrate deploy`, which applies committed Prisma migration files without creating new ones.
 
+After migrations, run the read-only dashboard smoke test against the same environment before deploying:
+
+```bash
+pnpm run smoke:dashboard
+```
+
+This executes the real consolidated dashboard query and catches database/query drift that a compile-only build cannot detect.
+
 ## Team and subcontractors
 
 The Team workflow lets an account owner invite hourly subcontractors who use their own login:

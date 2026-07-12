@@ -13,7 +13,7 @@ type AssignmentOption = {
   project: { title: string; client: { businessName: string } };
 };
 
-export function SubcontractorTimeForm({ assignments }: { assignments: AssignmentOption[] }) {
+export function SubcontractorTimeForm({ assignments, returnTo = "/team/work?saved=1", hideProjectSelector = false }: { assignments: AssignmentOption[]; returnTo?: string; hideProjectSelector?: boolean }) {
   const [entryMode, setEntryMode] = useState<"duration" | "range">("duration");
   const [startTime, setStartTime] = useState("07:00");
   const [endTime, setEndTime] = useState("15:00");
@@ -27,17 +27,19 @@ export function SubcontractorTimeForm({ assignments }: { assignments: Assignment
 
   return (
     <form action={createSubcontractorTimeEntryAction} className="card mt-4 grid gap-4">
-      <input type="hidden" name="returnTo" value="/team/work?saved=1" />
-      <label>
-        Assigned project
-        <select name="assignmentId" defaultValue={assignments[0].id} required>
+      <input type="hidden" name="returnTo" value={returnTo} />
+      {hideProjectSelector ? <input type="hidden" name="assignmentId" value={assignments[0].id} /> : (
+        <label>
+          Assigned project
+          <select name="assignmentId" defaultValue={assignments[0].id} required>
           {assignments.map((assignment) => (
             <option key={assignment.id} value={assignment.id}>
               {assignment.project.title} - {assignment.project.client.businessName}
             </option>
           ))}
-        </select>
-      </label>
+          </select>
+        </label>
+      )}
       <label>
         Date
         <input name="date" type="date" defaultValue={todayInputValue()} required />

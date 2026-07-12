@@ -2,6 +2,7 @@ import Link from "next/link";
 import { ArrowRight, CheckCircle2, UserPlus, UsersRound, WalletCards, XCircle } from "lucide-react";
 import { createTeamInvitationAction, reviewSubcontractorTimeEntryAction, revokeTeamInvitationAction } from "@/app/team/actions";
 import { TeamInviteLink } from "@/components/TeamInviteLink";
+import { LiveTeamRefresh } from "@/components/LiveTeamRefresh";
 import { requireUser } from "@/lib/auth";
 import { formatDateAU } from "@/lib/dates";
 import { formatMoney } from "@/lib/money";
@@ -32,6 +33,7 @@ export default async function TeamPage({ searchParams }: { searchParams?: Promis
 
   return (
     <main className="page-shell">
+      <LiveTeamRefresh />
       <header className="page-header">
         <p className="section-title">Team</p>
         <h1 className="page-title">Subcontractors</h1>

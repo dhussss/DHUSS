@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { ArrowLeft, BriefcaseBusiness, CheckCircle2, Clock3 } from "lucide-react";
 import { SubcontractorTimeForm } from "@/components/SubcontractorTimeForm";
+import { LiveTeamRefresh } from "@/components/LiveTeamRefresh";
 import { requireUser } from "@/lib/auth";
 import { formatDateAU } from "@/lib/dates";
 import { formatMoney } from "@/lib/money";
@@ -29,6 +30,7 @@ export default async function AssignedWorkPage() {
 
   return (
     <main className="page-shell">
+      <LiveTeamRefresh />
       <Link href="/team" className="mb-4 inline-flex items-center gap-2 text-sm font-bold text-mint"><ArrowLeft size={18} aria-hidden="true" />Team</Link>
       <header className="page-header"><p className="section-title">Assigned work</p><h1 className="page-title">Log subcontractor hours</h1><p className="page-subtitle">Hours are sent to the project owner for review. Your agreed pay rate is shown; their client rate remains private.</p></header>
 

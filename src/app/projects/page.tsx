@@ -1,11 +1,13 @@
 import Link from "next/link";
-import { Archive, Plus, RotateCcw, Search } from "lucide-react";
+import { Archive, BriefcaseBusiness, Plus, RotateCcw, Search } from "lucide-react";
 import { unarchiveProjectAction } from "@/app/actions";
 import { requireUserId } from "@/lib/auth";
 import { getProjectsPageData } from "@/lib/app-data";
 import { formatMoney } from "@/lib/money";
 import { formatHours } from "@/lib/time";
 import { ProjectStatusPill } from "@/components/StatusPill";
+import { LiveTeamRefresh } from "@/components/LiveTeamRefresh";
+import { prisma } from "@/lib/prisma";
 
 export const dynamic = "force-dynamic";
 
@@ -18,12 +20,41 @@ export default async function ProjectsPage({
   const ownerId = await requireUserId();
   const q = typeof params?.q === "string" ? params.q.trim() : "";
 
-  const rows = await getProjectsPageData(ownerId, q);
+  const [rows, assignedRows] = await Promise.all([
+    getProjectsPageData(ownerId, q),
+    prisma.projectAssignment.findMany({
+      where: {
+        active: true,
+        teamMember: { userId: ownerId, status: "ACTIVE" },
+        project: {
+          status: "ACTIVE",
+          ...(q
+            ? { OR: [{ title: { contains: q, mode: "insensitive" } }, { client: { businessName: { contains: q, mode: "insensitive" } } }] }
+            : {})
+        }
+      },
+      select: {
+        id: true,
+        ownerId: true,
+        payRateCents: true,
+        project: { select: { id: true, title: true, client: { select: { businessName: true } } } }
+      },
+      orderBy: { project: { title: "asc" } }
+    })
+  ]);
+  const employerProfiles = assignedRows.length
+    ? await prisma.businessProfile.findMany({
+        where: { ownerId: { in: [...new Set(assignedRows.map((assignment) => assignment.ownerId))] } },
+        select: { ownerId: true, tradingName: true }
+      })
+    : [];
+  const employerNames = new Map(employerProfiles.map((profile) => [profile.ownerId, profile.tradingName]));
   const projects = rows.filter((project) => project.status === "ACTIVE");
   const archivedProjects = rows.filter((project) => project.status === "ARCHIVED");
 
   return (
     <main className="page-shell">
+      <LiveTeamRefresh />
       <header className="page-header flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
         <div>
           <p className="section-title">Projects</p>
@@ -75,6 +106,33 @@ export default async function ProjectsPage({
           );
         })}
       </section>
+
+      {assignedRows.length ? (
+        <section className="mt-9">
+          <div className="mb-3 flex items-center gap-2">
+            <BriefcaseBusiness size={20} className="text-mint" aria-hidden="true" />
+            <h2 className="text-xl font-black tracking-normal">Assigned projects</h2>
+          </div>
+          <div className="grid gap-3 md:grid-cols-2">
+            {assignedRows.map((assignment) => (
+              <Link key={assignment.id} href={`/projects/${assignment.project.id}`} className="card block border-mint/25 transition hover:border-mint">
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <h3 className="text-xl font-black tracking-normal">{assignment.project.title}</h3>
+                    <p className="mt-1 text-sm font-bold text-moss">{assignment.project.client.businessName}</p>
+                  </div>
+                  <span className="status-pill border-mint/30 bg-mint/10 text-mint">Assigned</span>
+                </div>
+                <p className="mt-4 rounded-lg bg-paper p-3 text-sm font-semibold text-moss">
+                  Assigned by <strong className="text-ink">{employerNames.get(assignment.ownerId) || "Employer"}</strong>
+                </p>
+                <p className="mt-3 text-sm font-bold text-moss">Your pay rate</p>
+                <p className="mt-1 text-2xl font-black">{formatMoney(assignment.payRateCents)}/h</p>
+              </Link>
+            ))}
+          </div>
+        </section>
+      ) : null}
 
       <section className="mt-9">
         <div className="mb-3 flex items-center gap-2">

@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import { ArrowLeft, BriefcaseBusiness, Clock3, PauseCircle, WalletCards } from "lucide-react";
 import { createProjectAssignmentAction, markTeamMemberPaidAction, stopProjectAssignmentAction } from "@/app/team/actions";
 import { ConfirmSubmitButton } from "@/components/ConfirmSubmitButton";
+import { LiveTeamRefresh } from "@/components/LiveTeamRefresh";
 import { requireUserId } from "@/lib/auth";
 import { formatDateAU } from "@/lib/dates";
 import { centsToDollars, formatMoney } from "@/lib/money";
@@ -33,6 +34,7 @@ export default async function TeamMemberPage({ params }: { params: Promise<{ id:
 
   return (
     <main className="page-shell">
+      <LiveTeamRefresh />
       <Link href="/team" className="mb-4 inline-flex items-center gap-2 text-sm font-bold text-mint"><ArrowLeft size={18} aria-hidden="true" />Team</Link>
       <header className="page-header">
         <p className="section-title">Subcontractor</p>

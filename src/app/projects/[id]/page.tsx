@@ -2,6 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { AlertTriangle, ArrowLeft, Banknote, CalendarDays, CheckCircle2, Clock3, Edit, FilePlus, FileText, ReceiptText, RotateCcw } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
+import type { Prisma } from "@prisma/client";
 import { deleteExpenseItemAction, deleteTimeEntryAction, deleteWorkExpenseAction, unarchiveProjectAction } from "@/app/actions";
 import { requireUserId } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
@@ -11,6 +12,8 @@ import { formatHours, labourTotalCents } from "@/lib/time";
 import { ConfirmSubmitButton } from "@/components/ConfirmSubmitButton";
 import { InvoiceStatusPill, ProjectStatusPill } from "@/components/StatusPill";
 import { LogTimeSheet } from "@/components/LogTimeSheet";
+import { SubcontractorTimeForm } from "@/components/SubcontractorTimeForm";
+import { LiveTeamRefresh } from "@/components/LiveTeamRefresh";
 import { expenseCategoryLabel } from "@/lib/expenses";
 
 export const dynamic = "force-dynamic";
@@ -18,6 +21,32 @@ export const dynamic = "force-dynamic";
 export default async function ProjectDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const ownerId = await requireUserId();
+  const projectOwner = await prisma.project.findUnique({ where: { id }, select: { ownerId: true } });
+  if (!projectOwner) notFound();
+
+  if (projectOwner.ownerId !== ownerId) {
+    const assignment = await prisma.projectAssignment.findFirst({
+      where: { projectId: id, active: true, teamMember: { userId: ownerId, status: "ACTIVE" }, project: { status: "ACTIVE" } },
+      select: {
+        id: true,
+        ownerId: true,
+        payRateCents: true,
+        project: { select: { id: true, title: true, notes: true, client: { select: { businessName: true } } } },
+        teamMember: {
+          select: {
+            id: true,
+            timeEntries: {
+              where: { projectId: id, createdByUserId: ownerId },
+              orderBy: [{ date: "desc" }, { createdAt: "desc" }]
+            }
+          }
+        }
+      }
+    });
+    if (!assignment) notFound();
+    const employer = await prisma.businessProfile.findUnique({ where: { ownerId: assignment.ownerId }, select: { tradingName: true } });
+    return <AssignedProjectView assignment={assignment} employerName={employer?.tradingName || "Employer"} />;
+  }
   const today = todayInPerth();
   const monthStart = new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), 1));
   const monthEnd = new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth() + 1, 0));
@@ -359,6 +388,66 @@ export default async function ProjectDetailPage({ params }: { params: Promise<{ 
               )}
             </div>
           </section>
+        </div>
+      </section>
+    </main>
+  );
+}
+
+type AssignedProject = Prisma.ProjectAssignmentGetPayload<{
+  select: {
+    id: true;
+    ownerId: true;
+    payRateCents: true;
+    project: { select: { id: true; title: true; notes: true; client: { select: { businessName: true } } } };
+    teamMember: { select: { id: true; timeEntries: true } };
+  };
+}>;
+
+function AssignedProjectView({ assignment, employerName }: { assignment: AssignedProject; employerName: string }) {
+  const entries = assignment.teamMember.timeEntries;
+  const totalMinutes = entries.reduce((sum, entry) => sum + entry.durationMinutes, 0);
+  const approvedMinutes = entries.filter((entry) => entry.approvalStatus === "APPROVED").reduce((sum, entry) => sum + entry.durationMinutes, 0);
+  const approvedPay = entries
+    .filter((entry) => entry.approvalStatus === "APPROVED")
+    .reduce((sum, entry) => sum + labourTotalCents(entry.durationMinutes, entry.payRateCentsSnapshot || assignment.payRateCents), 0);
+  const formAssignment = {
+    id: assignment.id,
+    payRateCents: assignment.payRateCents,
+    project: { title: assignment.project.title, client: { businessName: assignment.project.client.businessName } }
+  };
+
+  return (
+    <main className="page-shell">
+      <LiveTeamRefresh />
+      <Link href="/projects" className="mb-4 inline-flex items-center gap-2 text-sm font-bold text-mint"><ArrowLeft size={18} aria-hidden="true" />Projects</Link>
+      <header className="overflow-hidden rounded-xl border border-mint/25 bg-white shadow-soft">
+        <div className="p-5 sm:p-6">
+          <div className="flex flex-wrap items-center gap-2"><p className="section-title">Assigned project</p><span className="status-pill border-mint/30 bg-mint/10 text-mint">Read only</span></div>
+          <h1 className="mt-3 text-4xl font-black tracking-normal">{assignment.project.title}</h1>
+          <p className="mt-2 text-base font-semibold text-moss">{assignment.project.client.businessName}</p>
+          <p className="mt-4 rounded-lg bg-paper p-3 text-sm font-semibold text-moss">Assigned by <strong className="text-ink">{employerName}</strong>. Project details are managed by your employer.</p>
+          {assignment.project.notes ? <p className="mt-4 max-w-3xl text-sm font-medium leading-6 text-moss">{assignment.project.notes}</p> : null}
+        </div>
+      </header>
+
+      <section className="mt-4 grid gap-3 sm:grid-cols-3">
+        <ProjectMetric label="Your pay rate" value={`${formatMoney(assignment.payRateCents)}/h`} icon={Banknote} />
+        <ProjectMetric label="Hours submitted" value={`${formatHours(totalMinutes)}h`} icon={Clock3} />
+        <ProjectMetric label="Approved earnings" value={formatMoney(approvedPay)} icon={CheckCircle2} highlight={approvedMinutes > 0} />
+      </section>
+
+      <SubcontractorTimeForm assignments={[formAssignment]} returnTo={`/projects/${assignment.project.id}?saved=1`} hideProjectSelector />
+
+      <section className="mt-7">
+        <h2 className="text-xl font-black">My hours on this project</h2>
+        <div className="mt-3 grid gap-3">
+          {entries.length ? entries.map((entry) => (
+            <article key={entry.id} className="card flex items-start justify-between gap-4">
+              <div><p className="font-black">{formatDateAU(entry.date)}</p><p className="mt-1 text-sm font-medium text-moss">{entry.notes || "No notes"}</p><p className="mt-2 text-xs font-black uppercase text-moss">{entry.approvalStatus?.toLowerCase()} · {entry.paymentStatus?.toLowerCase()}</p></div>
+              <div className="text-right"><p className="text-lg font-black">{formatHours(entry.durationMinutes)}h</p><p className="text-sm font-semibold text-moss">{formatMoney(labourTotalCents(entry.durationMinutes, entry.payRateCentsSnapshot || assignment.payRateCents))}</p></div>
+            </article>
+          )) : <EmptyPanel icon={Clock3} title="No hours submitted" text="Log your first shift for this assigned project." />}
         </div>
       </section>
     </main>
