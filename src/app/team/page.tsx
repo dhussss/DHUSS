@@ -1,6 +1,7 @@
 import Link from "next/link";
-import { ArrowRight, UserPlus, UsersRound, WalletCards } from "lucide-react";
-import { createTeamInvitationAction, revokeTeamInvitationAction } from "@/app/team/actions";
+import { ArrowRight, CheckCircle2, RotateCcw, UserPlus, UsersRound, WalletCards } from "lucide-react";
+import { createTeamInvitationAction, restoreTeamMemberAction, revokeTeamInvitationAction } from "@/app/team/actions";
+import { ConfirmSubmitButton } from "@/components/ConfirmSubmitButton";
 import { TeamInviteLink } from "@/components/TeamInviteLink";
 import { LiveTeamRefresh } from "@/components/LiveTeamRefresh";
 import { requireUser } from "@/lib/auth";
@@ -15,10 +16,15 @@ export default async function TeamPage({ searchParams }: { searchParams?: Promis
   const user = await requireUser();
   const params = await searchParams;
   const inviteCode = typeof params?.invite === "string" ? params.invite : "";
-  const [members, invitations, workerAssignments] = await Promise.all([
+  const [members, archivedMembers, invitations, workerAssignments] = await Promise.all([
     prisma.teamMember.findMany({
       where: { ownerId: user.id, status: "ACTIVE" },
       include: { timeEntries: { where: { approvalStatus: "APPROVED", paymentStatus: "UNPAID" }, select: { durationMinutes: true, payRateCentsSnapshot: true } }, assignments: { where: { active: true }, select: { id: true } } },
+      orderBy: { displayName: "asc" }
+    }),
+    prisma.teamMember.findMany({
+      where: { ownerId: user.id, status: "ARCHIVED" },
+      select: { id: true, displayName: true },
       orderBy: { displayName: "asc" }
     }),
     prisma.teamInvitation.findMany({ where: { ownerId: user.id, status: "PENDING", expiresAt: { gt: new Date() } }, orderBy: { createdAt: "desc" } }),
@@ -34,6 +40,13 @@ export default async function TeamPage({ searchParams }: { searchParams?: Promis
         <h1 className="page-title">Subcontractors</h1>
         <p className="page-subtitle">Invite your team, assign projects, and track billable labour and wages automatically.</p>
       </header>
+
+      {params?.archived ? (
+        <div className="mt-4 flex items-center gap-2 rounded-lg border border-mint/30 bg-mint/10 p-3 text-sm font-bold text-moss">
+          <CheckCircle2 size={18} aria-hidden="true" />
+          Subcontractor removed from your team. Their history stays intact.
+        </div>
+      ) : null}
 
       {workerAssignments ? (
         <Link href="/team/work" className="mt-4 flex items-center justify-between gap-4 rounded-2xl border border-mint/25 bg-mint/10 p-4 text-ink">
@@ -78,6 +91,26 @@ export default async function TeamPage({ searchParams }: { searchParams?: Promis
       ) : null}
 
       {!members.length ? <div className="mt-6 flex items-center gap-3 rounded-2xl border border-line bg-white p-4 text-sm font-medium text-moss"><WalletCards size={20} aria-hidden="true" />Team payments appear automatically after employees log hours.</div> : null}
+
+      {archivedMembers.length ? (
+        <section className="mt-6">
+          <h2 className="text-xl font-black">Removed from team</h2>
+          <div className="mt-3 grid gap-3">
+            {archivedMembers.map((member) => (
+              <article key={member.id} className="card flex items-center justify-between gap-4">
+                <Link href={`/team/${member.id}`} className="font-black text-ink hover:text-mint">{member.displayName}</Link>
+                <form action={restoreTeamMemberAction}>
+                  <input type="hidden" name="teamMemberId" value={member.id} />
+                  <ConfirmSubmitButton className="tap-secondary" message={`Restore ${member.displayName} to your active team?`} showDefaultIcon={false}>
+                    <RotateCcw size={17} aria-hidden="true" />
+                    Restore
+                  </ConfirmSubmitButton>
+                </form>
+              </article>
+            ))}
+          </div>
+        </section>
+      ) : null}
     </main>
   );
 }

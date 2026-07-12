@@ -85,13 +85,16 @@ export default async function ExpensesPage({
           </div>
           <div className="grid gap-3 p-3">
             {expenses.length ? (
-              expenses.map((expense) => (
+              expenses.map((expense) => {
+                const wageLinked = Boolean(expense.wagePayment);
+                return (
                 <article key={expense.id} className={`rounded-2xl border bg-white p-4 shadow-soft ${expense.archivedAt ? "border-line opacity-70" : "border-line"}`}>
                   <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                     <div>
                       <div className="flex flex-wrap items-center gap-2">
                         <p className="text-lg font-black text-ink">{expense.description}</p>
                         {expense.archivedAt ? <span className="status-pill border-line bg-paper text-moss">archived</span> : null}
+                        {wageLinked ? <span className="status-pill border-mint/30 bg-mint/10 text-mint">wage payment</span> : null}
                       </div>
                       <p className="mt-1 text-sm font-medium text-moss">
                         {formatDateAU(dateInputValue(expense.date))} · {expenseCategoryLabel(expense.category)}
@@ -120,40 +123,51 @@ export default async function ExpensesPage({
                     </p>
                   ) : null}
 
-                  <div className="mt-4 flex flex-col gap-2 sm:flex-row">
-                    <Link href={`/expenses/${expense.id}/edit`} className="tap-secondary px-3">
-                      <Pencil size={17} aria-hidden="true" />
-                      Edit
-                    </Link>
-                    {expense.archivedAt ? (
-                      <form action={restoreWorkExpenseAction}>
+                  {wageLinked ? (
+                    <div className="mt-4 rounded-lg border border-line bg-paper p-3 text-sm font-bold text-moss">
+                      Generated from a wage payment.{" "}
+                      <Link href={`/team/${expense.wagePayment?.teamMemberId}`} className="text-mint">
+                        Manage it from Team
+                      </Link>
+                      .
+                    </div>
+                  ) : (
+                    <div className="mt-4 flex flex-col gap-2 sm:flex-row">
+                      <Link href={`/expenses/${expense.id}/edit`} className="tap-secondary px-3">
+                        <Pencil size={17} aria-hidden="true" />
+                        Edit
+                      </Link>
+                      {expense.archivedAt ? (
+                        <form action={restoreWorkExpenseAction}>
+                          <input type="hidden" name="expenseId" value={expense.id} />
+                          <input type="hidden" name="returnTo" value="/expenses" />
+                          <button className="tap-secondary w-full px-3" type="submit">
+                            <RotateCcw size={17} aria-hidden="true" />
+                            Restore
+                          </button>
+                        </form>
+                      ) : (
+                        <form action={archiveWorkExpenseAction}>
+                          <input type="hidden" name="expenseId" value={expense.id} />
+                          <input type="hidden" name="returnTo" value="/expenses" />
+                          <button className="tap-secondary w-full px-3" type="submit">
+                            <Archive size={17} aria-hidden="true" />
+                            Archive
+                          </button>
+                        </form>
+                      )}
+                      <form action={deleteWorkExpenseAction}>
                         <input type="hidden" name="expenseId" value={expense.id} />
                         <input type="hidden" name="returnTo" value="/expenses" />
-                        <button className="tap-secondary w-full px-3" type="submit">
-                          <RotateCcw size={17} aria-hidden="true" />
-                          Restore
-                        </button>
+                        <ConfirmSubmitButton className="tap-danger px-3" message={`Delete expense "${expense.description}"? This permanently removes it from the register.`}>
+                          Delete
+                        </ConfirmSubmitButton>
                       </form>
-                    ) : (
-                      <form action={archiveWorkExpenseAction}>
-                        <input type="hidden" name="expenseId" value={expense.id} />
-                        <input type="hidden" name="returnTo" value="/expenses" />
-                        <button className="tap-secondary w-full px-3" type="submit">
-                          <Archive size={17} aria-hidden="true" />
-                          Archive
-                        </button>
-                      </form>
-                    )}
-                    <form action={deleteWorkExpenseAction}>
-                      <input type="hidden" name="expenseId" value={expense.id} />
-                      <input type="hidden" name="returnTo" value="/expenses" />
-                      <ConfirmSubmitButton className="tap-danger px-3" message={`Delete expense "${expense.description}"? This permanently removes it from the register.`}>
-                        Delete
-                      </ConfirmSubmitButton>
-                    </form>
-                  </div>
+                    </div>
+                  )}
                 </article>
-              ))
+                );
+              })
             ) : (
               <div className="rounded-lg border border-line bg-white p-5 text-sm font-bold text-moss">No work expenses logged yet.</div>
             )}

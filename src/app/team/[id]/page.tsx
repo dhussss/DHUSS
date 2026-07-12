@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { ArrowLeft, BriefcaseBusiness, Clock3, PauseCircle, Trash2, WalletCards } from "lucide-react";
-import { createProjectAssignmentAction, deleteTeamTimeEntryAction, markTeamMemberPaidAction, reverseWagePaymentAction, stopProjectAssignmentAction, updateWagePaymentAction } from "@/app/team/actions";
+import { ArrowLeft, BriefcaseBusiness, Clock3, PauseCircle, RotateCcw, Trash2, UserX, WalletCards } from "lucide-react";
+import { archiveTeamMemberAction, createProjectAssignmentAction, deleteTeamTimeEntryAction, markTeamMemberPaidAction, restoreTeamMemberAction, reverseWagePaymentAction, stopProjectAssignmentAction, updateWagePaymentAction } from "@/app/team/actions";
 import { ConfirmSubmitButton } from "@/components/ConfirmSubmitButton";
 import { LiveTeamRefresh } from "@/components/LiveTeamRefresh";
 import { requireUserId } from "@/lib/auth";
@@ -41,11 +41,40 @@ export default async function TeamMemberPage({ params }: { params: Promise<{ id:
     <main className="page-shell">
       <LiveTeamRefresh />
       <Link href="/team" className="mb-4 inline-flex items-center gap-2 text-sm font-bold text-mint"><ArrowLeft size={18} aria-hidden="true" />Team</Link>
-      <header className="page-header">
-        <p className="section-title">Subcontractor</p>
-        <h1 className="page-title">{member.displayName}</h1>
-        <p className="page-subtitle">{member.email || "Linked account"}</p>
+      <header className="page-header flex flex-wrap items-start justify-between gap-4">
+        <div>
+          <p className="section-title">Subcontractor</p>
+          <h1 className="page-title">{member.displayName}</h1>
+          <p className="page-subtitle">{member.email || "Linked account"}</p>
+        </div>
+        {member.status === "ARCHIVED" ? (
+          <form action={restoreTeamMemberAction}>
+            <input type="hidden" name="teamMemberId" value={member.id} />
+            <ConfirmSubmitButton className="tap-secondary" message={`Restore ${member.displayName} to your active team? They'll be able to log hours again once reassigned to a project.`} showDefaultIcon={false}>
+              <RotateCcw size={18} aria-hidden="true" />
+              Restore to team
+            </ConfirmSubmitButton>
+          </form>
+        ) : (
+          <form action={archiveTeamMemberAction}>
+            <input type="hidden" name="teamMemberId" value={member.id} />
+            <ConfirmSubmitButton
+              className="tap-danger"
+              message={`Remove ${member.displayName} from your team? Their active project assignments will end and they'll lose the ability to log new hours. Existing history and payment records stay intact.`}
+              showDefaultIcon={false}
+            >
+              <UserX size={18} aria-hidden="true" />
+              Remove from team
+            </ConfirmSubmitButton>
+          </form>
+        )}
       </header>
+
+      {member.status === "ARCHIVED" ? (
+        <div className="mt-4 rounded-lg border border-gum/30 bg-gum/10 p-3 text-sm font-bold text-gum">
+          This subcontractor has been removed from your team. They can no longer log new hours or see new assignments. Their history stays intact.
+        </div>
+      ) : null}
 
       <section className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
         <Metric label="Total hours logged" value={`${formatHours(totalLoggedMinutes)}h`} />

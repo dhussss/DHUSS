@@ -5,7 +5,7 @@ import { revalidatePath, revalidateTag } from "next/cache";
 import { redirect } from "next/navigation";
 import { requireUser } from "@/lib/auth";
 import { CACHE_TAGS } from "@/lib/app-data";
-import { parseInputDate } from "@/lib/dates";
+import { parseInputDate, todayInPerth } from "@/lib/dates";
 import { dollarsToCents } from "@/lib/money";
 import { prisma } from "@/lib/prisma";
 import { isQuarterHour, isQuarterHourClock, parseClockTime } from "@/lib/time";
@@ -163,6 +163,32 @@ export async function stopProjectAssignmentAction(formData: FormData) {
   redirect(`/team/${assignment.teamMemberId}`);
 }
 
+export async function archiveTeamMemberAction(formData: FormData) {
+  const user = await requireUser();
+  const teamMemberId = value(formData, "teamMemberId");
+  const member = await prisma.teamMember.findFirst({ where: { id: teamMemberId, ownerId: user.id }, select: { id: true } });
+  if (!member) throw new Error("Subcontractor not found.");
+
+  await prisma.$transaction([
+    prisma.teamMember.update({ where: { id: member.id }, data: { status: "ARCHIVED" } }),
+    prisma.projectAssignment.updateMany({ where: { teamMemberId: member.id, ownerId: user.id, active: true }, data: { active: false, endsAt: new Date() } })
+  ]);
+
+  revalidateTeam();
+  redirect("/team?archived=1");
+}
+
+export async function restoreTeamMemberAction(formData: FormData) {
+  const user = await requireUser();
+  const teamMemberId = value(formData, "teamMemberId");
+  const member = await prisma.teamMember.findFirst({ where: { id: teamMemberId, ownerId: user.id }, select: { id: true } });
+  if (!member) throw new Error("Subcontractor not found.");
+
+  await prisma.teamMember.update({ where: { id: member.id }, data: { status: "ACTIVE" } });
+  revalidateTeam();
+  redirect(`/team/${member.id}?restored=1`);
+}
+
 export async function createSubcontractorTimeEntryAction(formData: FormData) {
   const user = await requireUser();
   const assignmentId = value(formData, "assignmentId");
@@ -235,15 +261,16 @@ export async function markTeamMemberPaidAction(formData: FormData) {
   const projectId = value(formData, "projectId") || null;
   const member = await prisma.teamMember.findFirst({ where: { id: teamMemberId, ownerId: user.id }, select: { id: true, displayName: true } });
   if (!member) throw new Error("Subcontractor not found.");
-  const entries = await prisma.timeEntry.findMany({
-    where: { ownerId: user.id, teamMemberId, approvalStatus: "APPROVED", paymentStatus: "UNPAID", ...(projectId ? { projectId } : {}) },
-    select: { id: true, projectId: true, durationMinutes: true, payRateCentsSnapshot: true, project: { select: { title: true } } }
-  });
-  if (!entries.length) throw new Error("There are no unpaid hours for this employee and project.");
-  const paidAt = new Date();
-  const byProject = new Map<string, typeof entries>();
-  for (const entry of entries) byProject.set(entry.projectId, [...(byProject.get(entry.projectId) || []), entry]);
+  const paidAt = todayInPerth();
+
   await prisma.$transaction(async (tx) => {
+    const entries = await tx.timeEntry.findMany({
+      where: { ownerId: user.id, teamMemberId, approvalStatus: "APPROVED", paymentStatus: "UNPAID", ...(projectId ? { projectId } : {}) },
+      select: { id: true, projectId: true, durationMinutes: true, payRateCentsSnapshot: true, project: { select: { title: true } } }
+    });
+    if (!entries.length) throw new Error("There are no unpaid hours for this employee and project.");
+    const byProject = new Map<string, typeof entries>();
+    for (const entry of entries) byProject.set(entry.projectId, [...(byProject.get(entry.projectId) || []), entry]);
     for (const [entryProjectId, projectEntries] of byProject) {
       const amountCents = projectEntries.reduce((sum, entry) => sum + Math.round((entry.durationMinutes / 60) * (entry.payRateCentsSnapshot || 0)), 0);
       const minutes = projectEntries.reduce((sum, entry) => sum + entry.durationMinutes, 0);

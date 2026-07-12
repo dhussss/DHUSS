@@ -680,7 +680,8 @@ export const getExpensesPageData = unstable_cache(
         billable: true,
         status: true,
         archivedAt: true,
-        project: { select: { id: true, title: true, client: { select: { businessName: true } } } }
+        project: { select: { id: true, title: true, client: { select: { businessName: true } } } },
+        wagePayment: { select: { id: true, teamMemberId: true } }
       },
       orderBy: [{ archivedAt: "asc" }, { date: "desc" }, { createdAt: "desc" }]
     }),

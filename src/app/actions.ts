@@ -1,6 +1,7 @@
 "use server";
 
 import crypto from "node:crypto";
+import { Prisma } from "@prisma/client";
 import type { InvoiceMode, ProjectStatus, WorkExpenseCategory, WorkExpenseStatus } from "@prisma/client";
 import { revalidatePath, revalidateTag } from "next/cache";
 import { redirect } from "next/navigation";
@@ -614,7 +615,7 @@ export async function deleteExpenseItemAction(formData: FormData) {
 const expenseCategoryValues = new Set(expenseCategoryOptions.map((option) => option.value));
 const expenseStatusValues = new Set(expenseStatusOptions.map((option) => option.value));
 
-function parseWorkExpenseData(formData: FormData) {
+function parseWorkExpenseData(formData: FormData, gstRate = 10) {
   const projectIdValue = text(formData, "projectId");
   const projectId = projectIdValue && projectIdValue !== "__none" ? projectIdValue : null;
   const category = text(formData, "category") as WorkExpenseCategory;
@@ -623,7 +624,9 @@ function parseWorkExpenseData(formData: FormData) {
   const amountCents = dollarsToCents(formData.get("amountPaid") ?? formData.get("amount"));
   const gstIncluded = text(formData, "gstIncluded") === "on" || text(formData, "calculateGst") === "on";
   const submittedGstAmount = optionalPositiveCents(formData, "gstAmount");
-  const gstAmountCents = gstIncluded ? (submittedGstAmount ?? Math.round(amountCents / 11)) : 0;
+  // GST-inclusive extraction: gst = amount * rate / (100 + rate). Falls back to the
+  // business's configured GST rate rather than assuming 10% for everyone.
+  const gstAmountCents = gstIncluded ? (submittedGstAmount ?? Math.round((amountCents * gstRate) / (100 + gstRate))) : 0;
 
   if (!expenseCategoryValues.has(category)) throw new Error("Choose a valid expense category.");
   if (!expenseStatusValues.has(status)) throw new Error("Choose a valid expense status.");
@@ -654,9 +657,14 @@ async function assertOwnedProject(ownerId: string, projectId: string | null) {
   if (!project) throw new Error("Choose one of your projects.");
 }
 
+async function ownerGstRate(ownerId: string) {
+  const profile = await prisma.businessProfile.findUnique({ where: { ownerId }, select: { gstRegistered: true, gstRate: true } });
+  return profile?.gstRegistered ? Number(profile.gstRate) || 10 : 10;
+}
+
 export async function createWorkExpenseAction(formData: FormData) {
   const ownerId = await requireUserId();
-  const data = parseWorkExpenseData(formData);
+  const data = parseWorkExpenseData(formData, await ownerGstRate(ownerId));
   await assertOwnedProject(ownerId, data.projectId);
 
   const expense = await prisma.workExpense.create({
@@ -674,6 +682,11 @@ export async function createWorkExpenseAction(formData: FormData) {
   redirect(returnTo(formData));
 }
 
+async function assertNotWageLinkedExpense(ownerId: string, expenseId: string) {
+  const wagePayment = await prisma.wagePayment.findFirst({ where: { workExpenseId: expenseId, ownerId }, select: { id: true, teamMemberId: true } });
+  if (wagePayment) throw new Error("This expense was generated from a wage payment. Manage it from the subcontractor's Team page instead.");
+}
+
 export async function updateWorkExpenseAction(formData: FormData) {
   const ownerId = await requireUserId();
   const expenseId = text(formData, "expenseId");
@@ -682,8 +695,9 @@ export async function updateWorkExpenseAction(formData: FormData) {
     select: { id: true, projectId: true, status: true }
   });
   if (!existing) throw new Error("Expense not found.");
+  await assertNotWageLinkedExpense(ownerId, expenseId);
 
-  const data = parseWorkExpenseData(formData);
+  const data = parseWorkExpenseData(formData, await ownerGstRate(ownerId));
   await assertOwnedProject(ownerId, data.projectId);
 
   const expense = await prisma.workExpense.update({
@@ -706,6 +720,7 @@ export async function archiveWorkExpenseAction(formData: FormData) {
   const expenseId = text(formData, "expenseId");
   const expense = await prisma.workExpense.findFirst({ where: { id: expenseId, ownerId }, select: { id: true, projectId: true } });
   if (!expense) throw new Error("Expense not found.");
+  await assertNotWageLinkedExpense(ownerId, expenseId);
 
   await prisma.workExpense.update({ where: { id: expense.id }, data: { archivedAt: new Date() } });
   revalidatePath("/");
@@ -739,6 +754,7 @@ export async function deleteWorkExpenseAction(formData: FormData) {
     select: { id: true, projectId: true }
   });
   if (!expense) throw new Error("Expense not found.");
+  await assertNotWageLinkedExpense(ownerId, expenseId);
 
   await prisma.workExpense.delete({ where: { id: expense.id } });
 
@@ -1098,13 +1114,22 @@ export async function deleteClientAction(formData: FormData) {
   redirect("/clients");
 }
 
-async function nextInvoiceNumber(ownerId: string, prefix: string) {
+async function nextInvoiceNumber(ownerId: string, prefix: string, attempt = 0) {
   const year = new Date().getUTCFullYear();
   const count = await prisma.invoice.count({
     where: { ownerId, invoiceNumber: { startsWith: `${prefix}${year}-` } }
   });
 
-  return `${prefix}${year}-${String(count + 1).padStart(4, "0")}`;
+  return `${prefix}${year}-${String(count + 1 + attempt).padStart(4, "0")}`;
+}
+
+function isUniqueInvoiceNumberViolation(error: unknown) {
+  return (
+    error instanceof Prisma.PrismaClientKnownRequestError &&
+    error.code === "P2002" &&
+    Array.isArray(error.meta?.target) &&
+    (error.meta.target as string[]).includes("invoiceNumber")
+  );
 }
 
 function invoiceModeFromForm(formData: FormData): InvoiceMode {
@@ -1193,33 +1218,48 @@ export async function createInvoiceDraftAction(formData: FormData) {
     rate: gstRate
   });
   const invoiceDate = new Date();
-  const invoice = await prisma.invoice.create({
-    data: {
-      invoiceNumber: await nextInvoiceNumber(ownerId, profile?.invoicePrefix || "INV-"),
-      projectId,
-      clientId: project.clientId,
-      ownerId,
-      invoiceDate,
-      dueDate: addDays(invoiceDate, paymentTermsDays),
-      paymentTermsDays,
-      dateRangeStart: start,
-      dateRangeEnd: parseInputDate(formData.get("dateRangeEnd")),
-      status: "DRAFT",
-      mode,
-      totalHours: totals.totalHours,
-      totalDurationMinutes: totals.totalDurationMinutes,
-      subtotalCents: totals.subtotalCents,
-      expensesSubtotalCents: totals.expensesSubtotalCents,
-      gstCents: totals.gstCents,
-      labourTotalCents: totals.labourTotalCents,
-      itemTotalCents: totals.itemTotalCents,
-      grandTotalCents: totals.grandTotalCents,
-      summary: summaryText(entries, expenses),
-      lineItems: {
-        create: buildInvoiceLineData(entries, expenses).map((line) => ({ ...line, ownerId }))
-      }
+  const invoicePrefix = profile?.invoicePrefix || "INV-";
+  const maxAttempts = 5;
+  let invoice: Awaited<ReturnType<typeof prisma.invoice.create>> | null = null;
+
+  for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
+    try {
+      invoice = await prisma.invoice.create({
+        data: {
+          invoiceNumber: await nextInvoiceNumber(ownerId, invoicePrefix, attempt),
+          projectId,
+          clientId: project.clientId,
+          ownerId,
+          invoiceDate,
+          dueDate: addDays(invoiceDate, paymentTermsDays),
+          paymentTermsDays,
+          dateRangeStart: start,
+          dateRangeEnd: parseInputDate(formData.get("dateRangeEnd")),
+          status: "DRAFT",
+          mode,
+          totalHours: totals.totalHours,
+          totalDurationMinutes: totals.totalDurationMinutes,
+          subtotalCents: totals.subtotalCents,
+          expensesSubtotalCents: totals.expensesSubtotalCents,
+          gstCents: totals.gstCents,
+          labourTotalCents: totals.labourTotalCents,
+          itemTotalCents: totals.itemTotalCents,
+          grandTotalCents: totals.grandTotalCents,
+          summary: summaryText(entries, expenses),
+          lineItems: {
+            create: buildInvoiceLineData(entries, expenses).map((line) => ({ ...line, ownerId }))
+          }
+        }
+      });
+      break;
+    } catch (error) {
+      // Two concurrent draft creations can both compute the same next invoice number;
+      // retry with an incremented number rather than surfacing a raw constraint error.
+      if (!isUniqueInvoiceNumberViolation(error) || attempt === maxAttempts - 1) throw error;
     }
-  });
+  }
+
+  if (!invoice) throw new Error("Could not create the invoice. Please try again.");
 
   revalidatePath("/invoices");
   revalidateAppData();

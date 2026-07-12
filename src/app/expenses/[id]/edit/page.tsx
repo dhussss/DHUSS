@@ -38,6 +38,7 @@ export default async function EditExpensePage({
         gstAmountCents: true,
         receiptReference: true,
         notes: true,
+        wagePayment: { select: { teamMemberId: true } }
       }
     }),
     prisma.project.findMany({
@@ -62,7 +63,19 @@ export default async function EditExpensePage({
       </header>
 
       <section className="mt-6 max-w-4xl">
-        <WorkExpenseForm action={updateWorkExpenseAction} projects={projects} expense={expense} returnTo={returnTo} submitLabel="Save Expense" />
+        {expense.wagePayment ? (
+          <div className="card border-mint/30 bg-mint/10">
+            <p className="font-black text-ink">This expense was generated from a wage payment.</p>
+            <p className="mt-2 text-sm font-bold text-moss">
+              It can&apos;t be edited here. Update the paid date, reference, or reverse the payment from the subcontractor&apos;s Team page instead.
+            </p>
+            <Link href={`/team/${expense.wagePayment.teamMemberId}`} className="tap-primary mt-4">
+              Open Team Page
+            </Link>
+          </div>
+        ) : (
+          <WorkExpenseForm action={updateWorkExpenseAction} projects={projects} expense={expense} returnTo={returnTo} submitLabel="Save Expense" />
+        )}
       </section>
     </main>
   );
