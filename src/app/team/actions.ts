@@ -188,23 +188,12 @@ export async function createSubcontractorTimeEntryAction(formData: FormData) {
       notes,
       hourlyRateCentsSnapshot: assignment.chargeRateCents,
       payRateCentsSnapshot: assignment.payRateCents,
-      approvalStatus: "SUBMITTED",
+      approvalStatus: "APPROVED",
       paymentStatus: "UNPAID"
     }
   });
   revalidateTeam(assignment.projectId);
   redirect(safeReturnTo(formData, "/team/work?saved=1"));
-}
-
-export async function reviewSubcontractorTimeEntryAction(formData: FormData) {
-  const user = await requireUser();
-  const entryId = value(formData, "entryId");
-  const decision = value(formData, "decision");
-  const entry = await prisma.timeEntry.findFirst({ where: { id: entryId, ownerId: user.id, teamMemberId: { not: null } }, select: { id: true, projectId: true, billingStatus: true, paymentStatus: true } });
-  if (!entry) throw new Error("Team time entry not found.");
-  if (entry.billingStatus !== "UNBILLED" || entry.paymentStatus === "PAID") throw new Error("Billed or paid team time cannot be changed.");
-  await prisma.timeEntry.update({ where: { id: entry.id }, data: { approvalStatus: decision === "approve" ? "APPROVED" : "REJECTED" } });
-  revalidateTeam(entry.projectId);
 }
 
 export async function markTeamMemberPaidAction(formData: FormData) {

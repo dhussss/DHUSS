@@ -32,7 +32,7 @@ export default async function AssignedWorkPage() {
     <main className="page-shell">
       <LiveTeamRefresh />
       <Link href="/team" className="mb-4 inline-flex items-center gap-2 text-sm font-bold text-mint"><ArrowLeft size={18} aria-hidden="true" />Team</Link>
-      <header className="page-header"><p className="section-title">Assigned work</p><h1 className="page-title">Log subcontractor hours</h1><p className="page-subtitle">Hours are sent to the project owner for review. Your agreed pay rate is shown; their client rate remains private.</p></header>
+      <header className="page-header"><p className="section-title">Assigned work</p><h1 className="page-title">Log subcontractor hours</h1><p className="page-subtitle">Hours appear in the project owner&apos;s billing and wages ledger immediately. Your agreed pay rate is shown; their client rate remains private.</p></header>
 
       {assignments.length ? (
         <>
@@ -46,7 +46,7 @@ export default async function AssignedWorkPage() {
       <section className="mt-7">
         <div className="flex items-end justify-between gap-4"><div><p className="section-title">Recent entries</p><h2 className="mt-1 text-xl font-black">My submitted hours</h2></div><div className="text-right"><p className="text-sm font-semibold text-moss">Approved unpaid</p><p className="font-black">{formatMoney(unpaidCents)}</p></div></div>
         <div className="mt-3 grid gap-3">
-          {entries.length ? entries.map((entry) => <article key={entry.id} className="card flex items-start justify-between gap-4"><div><p className="font-black">{entry.project.title}</p><p className="mt-1 text-sm font-medium text-moss">{formatDateAU(entry.date)} · {entry.approvalStatus?.toLowerCase()}</p>{entry.notes ? <p className="mt-2 text-sm text-moss">{entry.notes}</p> : null}</div><div className="text-right"><p className="text-lg font-black">{formatHours(entry.durationMinutes)}h</p><p className="text-sm font-semibold text-moss">{formatMoney(labourTotalCents(entry.durationMinutes, entry.payRateCentsSnapshot || 0))}</p>{entry.paymentStatus === "PAID" ? <CheckCircle2 className="ml-auto mt-2 text-mint" size={17} aria-label="Paid" /> : null}</div></article>) : <p className="rounded-xl border border-line bg-white p-4 text-sm font-medium text-moss"><Clock3 className="mr-2 inline" size={18} aria-hidden="true" />No hours submitted yet.</p>}
+          {entries.length ? entries.map((entry) => <article key={entry.id} className="card flex items-start justify-between gap-4"><div><p className="font-black">{entry.project.title}</p><p className="mt-1 text-sm font-medium text-moss">{formatDateAU(entry.date)} · {entry.billingStatus.toLowerCase()}</p>{entry.notes ? <p className="mt-2 text-sm text-moss">{entry.notes}</p> : null}</div><div className="text-right"><p className="text-lg font-black">{formatHours(entry.durationMinutes)}h</p><p className="text-sm font-semibold text-moss">{formatMoney(labourTotalCents(entry.durationMinutes, entry.payRateCentsSnapshot || 0))}</p>{entry.paymentStatus === "PAID" ? <CheckCircle2 className="ml-auto mt-2 text-mint" size={17} aria-label="Paid" /> : null}</div></article>) : <p className="rounded-xl border border-line bg-white p-4 text-sm font-medium text-moss"><Clock3 className="mr-2 inline" size={18} aria-hidden="true" />No hours logged yet.</p>}
         </div>
       </section>
     </main>

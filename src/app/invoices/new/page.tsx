@@ -78,7 +78,7 @@ export default async function NewInvoicePage({
               OR: [{ teamMemberId: null }, { approvalStatus: "APPROVED" }],
               date: { gte: start, lte: end }
             },
-            select: { id: true, date: true, durationMinutes: true, notes: true, hourlyRateCentsSnapshot: true },
+            select: { id: true, date: true, durationMinutes: true, notes: true, hourlyRateCentsSnapshot: true, workerDisplayNameSnapshot: true, teamMemberId: true, payRateCentsSnapshot: true },
             orderBy: [{ date: "asc" }, { createdAt: "asc" }]
           }),
           prisma.expenseItem.findMany({
@@ -105,6 +105,13 @@ export default async function NewInvoicePage({
     registered: profile?.gstRegistered ?? false,
     rate: profile ? Number(profile.gstRate) : 0
   });
+  const ownerEntries = entries.filter((entry) => !entry.teamMemberId);
+  const employeeEntries = entries.filter((entry) => entry.teamMemberId);
+  const ownerMinutes = ownerEntries.reduce((sum, entry) => sum + entry.durationMinutes, 0);
+  const employeeMinutes = employeeEntries.reduce((sum, entry) => sum + entry.durationMinutes, 0);
+  const ownerBillingCents = ownerEntries.reduce((sum, entry) => sum + timeEntryTotalCents(entry), 0);
+  const employeeBillingCents = employeeEntries.reduce((sum, entry) => sum + timeEntryTotalCents(entry), 0);
+  const employeeWagesCents = employeeEntries.reduce((sum, entry) => sum + Math.round((entry.durationMinutes / 60) * (entry.payRateCentsSnapshot || 0)), 0);
   const warnings = [
     !profile ? "Create your business profile before sending this invoice." : "",
     profile && !profile.abn ? "Your business profile has no ABN." : "",
@@ -216,6 +223,7 @@ export default async function NewInvoicePage({
                   <div className="flex items-start justify-between gap-3">
                     <div>
                       <p className="font-bold">{formatDateAU(entry.date)}</p>
+                      <p className="mt-1 text-xs font-black uppercase text-mint">{entry.workerDisplayNameSnapshot || "Owner labour"}</p>
                       <p className="mt-1 text-sm text-moss">{entry.notes || "No notes"}</p>
                     </div>
                     <div className="text-right">
@@ -256,6 +264,13 @@ export default async function NewInvoicePage({
                 Source entries stay unbilled until this draft is marked sent or paid.
               </p>
               <dl className="mt-4 grid gap-3">
+                {employeeEntries.length ? (
+                  <div className="grid gap-2 rounded-lg border border-mint/25 bg-mint/10 p-3">
+                    <div className="flex items-center justify-between gap-3"><dt className="font-bold text-moss">Your labour</dt><dd className="font-black">{formatHours(ownerMinutes)}h · {formatMoney(ownerBillingCents)}</dd></div>
+                    <div className="flex items-center justify-between gap-3"><dt className="font-bold text-moss">Employee labour</dt><dd className="font-black">{formatHours(employeeMinutes)}h · {formatMoney(employeeBillingCents)}</dd></div>
+                    <div className="flex items-center justify-between gap-3 border-t border-mint/20 pt-2"><dt className="font-bold text-moss">Employee wages</dt><dd className="font-black text-mint">{formatMoney(employeeWagesCents)}</dd></div>
+                  </div>
+                ) : null}
                 <div className="flex items-center justify-between gap-3">
                   <dt className="font-bold text-moss">Total hours</dt>
                   <dd className="font-black">{Number(totals.totalHours.toFixed(2))}h</dd>

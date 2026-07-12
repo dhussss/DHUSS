@@ -22,6 +22,8 @@ import { requireUserId } from "@/lib/auth";
 import { invoiceBusinessDetails, invoiceClientDetails } from "@/lib/invoice-data";
 import { prisma } from "@/lib/prisma";
 import { createClient } from "@/lib/supabase/server";
+import { formatMoney } from "@/lib/money";
+import { formatHours, labourTotalCents } from "@/lib/time";
 
 export const dynamic = "force-dynamic";
 
@@ -59,6 +61,16 @@ export default async function InvoiceDetailPage({ params }: { params: Promise<{ 
   const publicInvoicePath = invoice.publicToken ? `/public/invoices/${invoice.publicToken}` : null;
   const publicInvoiceUrl = invoice.publicTokenEnabled && publicInvoicePath ? absoluteAppUrl(publicInvoicePath) : null;
   const canSharePublicLink = invoice.status === "SENT" || invoice.status === "PAID";
+  const employeeLabour = invoice.lineItems.filter((line) => line.type === "LABOUR" && line.teamMemberId);
+  const ownerLabour = invoice.lineItems.filter((line) => line.type === "LABOUR" && !line.teamMemberId);
+  const ownerHours = ownerLabour.reduce((sum, line) => sum + (line.hoursMinutes || 0), 0);
+  const ownerChargeCents = ownerLabour.reduce((sum, line) => sum + line.totalAmountCents, 0);
+  const employeeHours = employeeLabour.reduce((sum, line) => sum + (line.hoursMinutes || 0), 0);
+  const employeeChargeCents = employeeLabour.reduce((sum, line) => sum + line.totalAmountCents, 0);
+  const employeeWagesCents = employeeLabour.reduce(
+    (sum, line) => sum + labourTotalCents(line.hoursMinutes || 0, line.payRateCentsSnapshot || 0),
+    0
+  );
   const emailDisabledReason = !client.email
     ? "Add an email address to this client before emailing the invoice."
     : !emailDeliveryConfigured()
@@ -83,6 +95,18 @@ export default async function InvoiceDetailPage({ params }: { params: Promise<{ 
         <InvoiceDocumentView invoice={invoice} business={business} client={client} logoUrl={logoUrl} showStatus />
 
         <aside className="no-print grid h-fit gap-3">
+          {employeeLabour.length ? (
+            <section className="card border-mint/30 bg-mint/10">
+              <p className="section-title">Labour and wages ledger</p>
+              <p className="mt-2 text-sm font-bold text-moss">This invoice includes employee hours and keeps the wage obligation linked after billing.</p>
+              <dl className="mt-4 grid gap-2 text-sm">
+                <div className="flex justify-between gap-3"><dt className="font-bold text-moss">Your labour</dt><dd className="font-black">{formatHours(ownerHours)}h · {formatMoney(ownerChargeCents)}</dd></div>
+                <div className="flex justify-between gap-3"><dt className="font-bold text-moss">Employee hours</dt><dd className="font-black">{formatHours(employeeHours)}h</dd></div>
+                <div className="flex justify-between gap-3"><dt className="font-bold text-moss">Client billing</dt><dd className="font-black">{formatMoney(employeeChargeCents)}</dd></div>
+                <div className="flex justify-between gap-3 border-t border-mint/20 pt-2"><dt className="font-bold text-moss">Wages to pay</dt><dd className="font-black text-mint">{formatMoney(employeeWagesCents)}</dd></div>
+              </dl>
+            </section>
+          ) : null}
           {finaliseWarnings.length ? (
             <section className="rounded-lg border border-gum/30 bg-gum/10 p-4 text-sm font-bold text-gum">
               <div className="mb-2 flex items-center gap-2">

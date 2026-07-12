@@ -28,9 +28,13 @@ export default async function TeamMemberPage({ params }: { params: Promise<{ id:
   if (!member) notFound();
 
   const approvedUnpaid = member.timeEntries.filter((entry) => entry.approvalStatus === "APPROVED" && entry.paymentStatus === "UNPAID");
-  const unpaidMinutes = approvedUnpaid.reduce((sum, entry) => sum + entry.durationMinutes, 0);
+  const allLogged = member.timeEntries.filter((entry) => entry.approvalStatus !== "REJECTED");
+  const unbilled = approvedUnpaid.filter((entry) => entry.billingStatus === "UNBILLED");
+  const billedUnpaid = approvedUnpaid.filter((entry) => entry.billingStatus === "BILLED");
+  const totalLoggedMinutes = allLogged.reduce((sum, entry) => sum + entry.durationMinutes, 0);
   const unpaidCents = approvedUnpaid.reduce((sum, entry) => sum + labourTotalCents(entry.durationMinutes, entry.payRateCentsSnapshot || 0), 0);
-  const clientValueCents = approvedUnpaid.reduce((sum, entry) => sum + labourTotalCents(entry.durationMinutes, entry.hourlyRateCentsSnapshot), 0);
+  const unbilledClientValueCents = unbilled.reduce((sum, entry) => sum + labourTotalCents(entry.durationMinutes, entry.hourlyRateCentsSnapshot), 0);
+  const billedWagesDueCents = billedUnpaid.reduce((sum, entry) => sum + labourTotalCents(entry.durationMinutes, entry.payRateCentsSnapshot || 0), 0);
 
   return (
     <main className="page-shell">
@@ -42,10 +46,11 @@ export default async function TeamMemberPage({ params }: { params: Promise<{ id:
         <p className="page-subtitle">{member.email || "Linked account"}</p>
       </header>
 
-      <section className="mt-4 grid gap-3 sm:grid-cols-3">
-        <Metric label="Approved unpaid" value={`${formatHours(unpaidMinutes)}h`} />
+      <section className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+        <Metric label="Total hours logged" value={`${formatHours(totalLoggedMinutes)}h`} />
+        <Metric label="Ready to invoice" value={formatMoney(unbilledClientValueCents)} />
+        <Metric label="Billed wages due" value={formatMoney(billedWagesDueCents)} />
         <Metric label="Amount to pay" value={formatMoney(unpaidCents)} />
-        <Metric label="Client value" value={formatMoney(clientValueCents)} />
       </section>
 
       {approvedUnpaid.length ? (

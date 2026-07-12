@@ -1155,7 +1155,7 @@ export async function createInvoiceDraftAction(formData: FormData) {
         OR: [{ teamMemberId: null }, { approvalStatus: "APPROVED" }],
         date: { gte: start, lte: end }
       },
-      select: { id: true, date: true, durationMinutes: true, notes: true, hourlyRateCentsSnapshot: true },
+      select: { id: true, date: true, durationMinutes: true, notes: true, hourlyRateCentsSnapshot: true, workerDisplayNameSnapshot: true, teamMemberId: true, payRateCentsSnapshot: true },
       orderBy: [{ date: "asc" }, { createdAt: "asc" }]
     }),
     prisma.expenseItem.findMany({

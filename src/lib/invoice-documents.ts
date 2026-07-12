@@ -13,6 +13,9 @@ export type InvoiceDocumentLine = {
   unitAmountCents: number;
   totalAmountCents: number;
   notes: string | null;
+  workerNameSnapshot?: string | null;
+  teamMemberId?: string | null;
+  payRateCentsSnapshot?: number | null;
 };
 
 export type InvoiceDocumentData = {

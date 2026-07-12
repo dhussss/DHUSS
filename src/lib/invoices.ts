@@ -9,7 +9,7 @@ export type InvoiceSourceExpense = Pick<
 
 export type InvoiceSourceTimeEntry = Pick<
   TimeEntry,
-  "id" | "date" | "durationMinutes" | "notes" | "hourlyRateCentsSnapshot"
+  "id" | "date" | "durationMinutes" | "notes" | "hourlyRateCentsSnapshot" | "workerDisplayNameSnapshot" | "teamMemberId" | "payRateCentsSnapshot"
 >;
 
 export function timeEntryTotalCents(entry: Pick<TimeEntry, "durationMinutes" | "hourlyRateCentsSnapshot">) {
@@ -22,7 +22,10 @@ export function buildInvoiceLineData(entries: InvoiceSourceTimeEntry[], expenses
   const labourLines = entries.map((entry) => ({
     timeEntryId: entry.id,
     type: "LABOUR" as const,
-    description: `Labour - ${formatDateAU(entry.date)}`,
+    description: `${entry.workerDisplayNameSnapshot ? `${entry.workerDisplayNameSnapshot} - ` : "Owner - "}${formatDateAU(entry.date)}`,
+    workerNameSnapshot: entry.workerDisplayNameSnapshot || "Owner",
+    teamMemberId: entry.teamMemberId,
+    payRateCentsSnapshot: entry.payRateCentsSnapshot,
     date: entry.date,
     hoursMinutes: entry.durationMinutes,
     unitAmountCents: entry.hourlyRateCentsSnapshot,

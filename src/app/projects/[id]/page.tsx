@@ -113,6 +113,14 @@ export default async function ProjectDetailPage({ params }: { params: Promise<{ 
   );
   const unbilledExpenseValueCents = unbilledExpenseItems.reduce((sum, item) => sum + item.totalCostCents, 0);
   const unbilledTotalCents = unbilledTimeValueCents + unbilledExpenseValueCents;
+  const labourByWorker = unbilledTimeEntries.reduce((groups, entry) => {
+    const worker = entry.workerDisplayNameSnapshot || "Your labour";
+    const current = groups.get(worker) || { minutes: 0, valueCents: 0, isEmployee: Boolean(entry.teamMemberId) };
+    current.minutes += entry.durationMinutes;
+    current.valueCents += labourTotalCents(entry.durationMinutes, entry.hourlyRateCentsSnapshot);
+    groups.set(worker, current);
+    return groups;
+  }, new Map<string, { minutes: number; valueCents: number; isEmployee: boolean }>());
   const hasUnbilledWork = unbilledTimeEntries.length > 0 || unbilledExpenseItems.length > 0;
   const activeInvoiceCount = project.invoices.filter((invoice) => invoice.status !== "VOID").length;
   const monthLabel = new Intl.DateTimeFormat("en-AU", { month: "long", year: "numeric", timeZone: "UTC" }).format(today);
@@ -204,6 +212,19 @@ export default async function ProjectDetailPage({ params }: { params: Promise<{ 
           <UnbilledStat label="Expenses" value={formatMoney(unbilledExpenseValueCents)} dark={hasUnbilledWork} />
           <UnbilledStat label="Total" value={formatMoney(unbilledTotalCents)} dark={hasUnbilledWork} />
         </div>
+        {labourByWorker.size > 1 || [...labourByWorker.values()].some((worker) => worker.isEmployee) ? (
+          <div className="border-t border-line p-4 sm:p-5">
+            <p className="section-title">Labour ready to bill</p>
+            <div className="mt-3 grid gap-2 sm:grid-cols-2">
+              {[...labourByWorker.entries()].map(([worker, summary]) => (
+                <div key={worker} className="flex items-center justify-between gap-4 rounded-lg border border-line bg-white p-3 text-sm">
+                  <div><p className="font-black">{worker}</p><p className="mt-1 font-semibold text-moss">{formatHours(summary.minutes)}h</p></div>
+                  <p className="font-black">{formatMoney(summary.valueCents)}</p>
+                </div>
+              ))}
+            </div>
+          </div>
+        ) : null}
       </section>
 
       <section className="mt-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
@@ -434,7 +455,7 @@ function AssignedProjectView({ assignment, employerName }: { assignment: Assigne
       <section className="mt-4 grid gap-3 sm:grid-cols-3">
         <ProjectMetric label="Your pay rate" value={`${formatMoney(assignment.payRateCents)}/h`} icon={Banknote} />
         <ProjectMetric label="Hours submitted" value={`${formatHours(totalMinutes)}h`} icon={Clock3} />
-        <ProjectMetric label="Approved earnings" value={formatMoney(approvedPay)} icon={CheckCircle2} highlight={approvedMinutes > 0} />
+        <ProjectMetric label="Recorded earnings" value={formatMoney(approvedPay)} icon={CheckCircle2} highlight={approvedMinutes > 0} />
       </section>
 
       <SubcontractorTimeForm assignments={[formAssignment]} returnTo={`/projects/${assignment.project.id}?saved=1`} hideProjectSelector />
@@ -444,7 +465,7 @@ function AssignedProjectView({ assignment, employerName }: { assignment: Assigne
         <div className="mt-3 grid gap-3">
           {entries.length ? entries.map((entry) => (
             <article key={entry.id} className="card flex items-start justify-between gap-4">
-              <div><p className="font-black">{formatDateAU(entry.date)}</p><p className="mt-1 text-sm font-medium text-moss">{entry.notes || "No notes"}</p><p className="mt-2 text-xs font-black uppercase text-moss">{entry.approvalStatus?.toLowerCase()} · {entry.paymentStatus?.toLowerCase()}</p></div>
+              <div><p className="font-black">{formatDateAU(entry.date)}</p><p className="mt-1 text-sm font-medium text-moss">{entry.notes || "No notes"}</p><p className="mt-2 text-xs font-black uppercase text-moss">Logged · {entry.billingStatus.toLowerCase()} · {entry.paymentStatus?.toLowerCase()}</p></div>
               <div className="text-right"><p className="text-lg font-black">{formatHours(entry.durationMinutes)}h</p><p className="text-sm font-semibold text-moss">{formatMoney(labourTotalCents(entry.durationMinutes, entry.payRateCentsSnapshot || assignment.payRateCents))}</p></div>
             </article>
           )) : <EmptyPanel icon={Clock3} title="No hours submitted" text="Log your first shift for this assigned project." />}

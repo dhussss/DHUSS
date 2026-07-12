@@ -389,28 +389,32 @@ model Invoice {
 }
 
 model InvoiceLineItem {
-  id               String       @id @default(cuid())
-  ownerId          String?
-  invoiceId        String
-  timeEntryId      String?
-  expenseItemId    String?
-  type             LineItemType
-  description      String
-  date             DateTime?
-  quantity         Decimal?
-  hoursMinutes     Int?
-  unitAmountCents  Int
-  totalAmountCents Int
-  notes            String?
-  sortOrder        Int          @default(0)
-  invoice          Invoice      @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
-  timeEntry        TimeEntry?   @relation(fields: [timeEntryId], references: [id], onDelete: SetNull)
-  expenseItem      ExpenseItem? @relation(fields: [expenseItemId], references: [id], onDelete: SetNull)
+  id                   String       @id @default(cuid())
+  ownerId              String?
+  invoiceId            String
+  timeEntryId          String?
+  expenseItemId        String?
+  type                 LineItemType
+  description          String
+  date                 DateTime?
+  quantity             Decimal?
+  hoursMinutes         Int?
+  unitAmountCents      Int
+  totalAmountCents     Int
+  notes                String?
+  workerNameSnapshot   String?
+  teamMemberId         String?
+  payRateCentsSnapshot Int?
+  sortOrder            Int          @default(0)
+  invoice              Invoice      @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  timeEntry            TimeEntry?   @relation(fields: [timeEntryId], references: [id], onDelete: SetNull)
+  expenseItem          ExpenseItem? @relation(fields: [expenseItemId], references: [id], onDelete: SetNull)
 
   @@index([invoiceId])
   @@index([timeEntryId])
   @@index([expenseItemId])
   @@index([ownerId, invoiceId])
+  @@index([teamMemberId])
 }
 
 model BusinessProfile {

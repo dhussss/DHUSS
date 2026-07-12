@@ -1,6 +1,6 @@
 import Link from "next/link";
-import { ArrowRight, CheckCircle2, UserPlus, UsersRound, WalletCards, XCircle } from "lucide-react";
-import { createTeamInvitationAction, reviewSubcontractorTimeEntryAction, revokeTeamInvitationAction } from "@/app/team/actions";
+import { ArrowRight, UserPlus, UsersRound, WalletCards } from "lucide-react";
+import { createTeamInvitationAction, revokeTeamInvitationAction } from "@/app/team/actions";
 import { TeamInviteLink } from "@/components/TeamInviteLink";
 import { LiveTeamRefresh } from "@/components/LiveTeamRefresh";
 import { requireUser } from "@/lib/auth";
@@ -15,18 +15,13 @@ export default async function TeamPage({ searchParams }: { searchParams?: Promis
   const user = await requireUser();
   const params = await searchParams;
   const inviteCode = typeof params?.invite === "string" ? params.invite : "";
-  const [members, invitations, submittedEntries, workerAssignments] = await Promise.all([
+  const [members, invitations, workerAssignments] = await Promise.all([
     prisma.teamMember.findMany({
       where: { ownerId: user.id, status: "ACTIVE" },
       include: { timeEntries: { where: { approvalStatus: "APPROVED", paymentStatus: "UNPAID" }, select: { durationMinutes: true, payRateCentsSnapshot: true } }, assignments: { where: { active: true }, select: { id: true } } },
       orderBy: { displayName: "asc" }
     }),
     prisma.teamInvitation.findMany({ where: { ownerId: user.id, status: "PENDING", expiresAt: { gt: new Date() } }, orderBy: { createdAt: "desc" } }),
-    prisma.timeEntry.findMany({
-      where: { ownerId: user.id, approvalStatus: "SUBMITTED", teamMemberId: { not: null } },
-      include: { project: { select: { title: true } }, teamMember: { select: { displayName: true } } },
-      orderBy: [{ date: "desc" }, { createdAt: "desc" }]
-    }),
     prisma.projectAssignment.count({ where: { active: true, teamMember: { userId: user.id, status: "ACTIVE" } } })
   ]);
   const baseUrl = (process.env.APP_BASE_URL || "https://dhuss.vercel.app").replace(/\/$/, "");
@@ -37,7 +32,7 @@ export default async function TeamPage({ searchParams }: { searchParams?: Promis
       <header className="page-header">
         <p className="section-title">Team</p>
         <h1 className="page-title">Subcontractors</h1>
-        <p className="page-subtitle">Invite your team, assign projects, review their hours, and keep payments clear.</p>
+        <p className="page-subtitle">Invite your team, assign projects, and track billable labour and wages automatically.</p>
       </header>
 
       {workerAssignments ? (
@@ -78,25 +73,11 @@ export default async function TeamPage({ searchParams }: { searchParams?: Promis
         </section>
       </section>
 
-      {submittedEntries.length ? (
-        <section className="mt-6 surface-panel">
-          <div className="surface-header"><p className="section-title">Needs review</p><h2 className="mt-1 text-xl font-black">Submitted hours</h2></div>
-          <div className="grid gap-3 p-3">
-            {submittedEntries.map((entry) => (
-              <article key={entry.id} className="rounded-lg border border-line bg-white p-4">
-                <div className="flex items-start justify-between gap-4"><div><p className="font-black">{entry.teamMember?.displayName}</p><p className="mt-1 text-sm font-medium text-moss">{entry.project.title} · {formatDateAU(entry.date)}</p>{entry.notes ? <p className="mt-2 text-sm text-moss">{entry.notes}</p> : null}</div><div className="text-right"><p className="text-xl font-black">{formatHours(entry.durationMinutes)}h</p><p className="text-sm font-semibold text-moss">Cost {formatMoney(labourTotalCents(entry.durationMinutes, entry.payRateCentsSnapshot || 0))}</p></div></div>
-                <form action={reviewSubcontractorTimeEntryAction} className="mt-4 grid grid-cols-2 gap-2"><input type="hidden" name="entryId" value={entry.id} /><button className="tap-primary" name="decision" value="approve" type="submit"><CheckCircle2 size={18} aria-hidden="true" />Approve</button><button className="tap-danger" name="decision" value="reject" type="submit"><XCircle size={18} aria-hidden="true" />Reject</button></form>
-              </article>
-            ))}
-          </div>
-        </section>
-      ) : null}
-
       {invitations.length ? (
         <section className="mt-6"><h2 className="text-xl font-black">Pending invitations</h2><div className="mt-3 grid gap-3">{invitations.map((invitation) => <article key={invitation.id} className="card flex items-center justify-between gap-4"><div><p className="font-black">{invitation.subcontractorName}</p><p className="mt-1 text-sm font-medium text-moss">Expires {formatDateAU(invitation.expiresAt)}</p></div><form action={revokeTeamInvitationAction}><input type="hidden" name="invitationId" value={invitation.id} /><button className="tap-danger" type="submit">Revoke</button></form></article>)}</div></section>
       ) : null}
 
-      {!members.length && !submittedEntries.length ? <div className="mt-6 flex items-center gap-3 rounded-xl border border-line bg-white p-4 text-sm font-medium text-moss"><WalletCards size={20} aria-hidden="true" />Team payments will appear after approved hours are submitted.</div> : null}
+      {!members.length ? <div className="mt-6 flex items-center gap-3 rounded-xl border border-line bg-white p-4 text-sm font-medium text-moss"><WalletCards size={20} aria-hidden="true" />Team payments appear automatically after employees log hours.</div> : null}
     </main>
   );
 }

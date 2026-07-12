@@ -253,13 +253,21 @@ function drawLineItems(state: DrawState, invoice: InvoiceDocumentData, labourSub
   const labourLines = invoice.lineItems.filter((line) => line.type === "LABOUR");
   const expenseLines = invoice.lineItems.filter((line) => line.type === "EXPENSE");
   const rows: TableRow[] = [];
+  const simpleLabourGroups = labourLines.reduce((groups, line) => {
+    const worker = line.workerNameSnapshot || "Owner";
+    const current = groups.get(worker) || { minutes: 0, totalCents: 0 };
+    current.minutes += line.hoursMinutes || 0;
+    current.totalCents += line.totalAmountCents;
+    groups.set(worker, current);
+    return groups;
+  }, new Map<string, { minutes: number; totalCents: number }>());
 
   if (invoice.mode === "SIMPLE" && labourSubtotalCents > 0) {
-    rows.push({
-      description: `Labour for ${invoice.project.title}`,
-      detail: `${formatDateAU(invoice.dateRangeStart)} - ${formatDateAU(invoice.dateRangeEnd)}`,
-      amount: formatMoney(labourSubtotalCents)
-    });
+    rows.push(...[...simpleLabourGroups.entries()].map(([worker, summary]) => ({
+      description: `${worker} - labour`,
+      detail: `${formatHours(summary.minutes)}h for ${invoice.project.title}`,
+      amount: formatMoney(summary.totalCents)
+    })));
   }
 
   if (invoice.mode === "DETAILED") {
