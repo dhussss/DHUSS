@@ -2,7 +2,7 @@ import type { InvoiceStatus, ProjectStatus } from "@prisma/client";
 
 const invoiceStyles: Record<InvoiceStatus, string> = {
   DRAFT: "border-line bg-paper text-moss",
-  SENT: "border-yolk/50 bg-yolk/15 text-[#7a5414]",
+  SENT: "border-yolk/45 bg-yolk/10 text-yolk",
   PAID: "border-mint/40 bg-mint/10 text-mint",
   VOID: "border-gum/40 bg-gum/10 text-gum"
 };

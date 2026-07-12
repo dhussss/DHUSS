@@ -60,7 +60,7 @@ export function SettingsForm({ settings }: { settings: SettingsFormValue }) {
           </span>
           <div>
             <p className="section-title">Appearance</p>
-            <h2 className="text-xl font-black tracking-normal">App theme</h2>
+            <h2 className="text-xl font-black tracking-tight">App theme</h2>
           </div>
         </div>
         <div className="mt-5 grid gap-4 md:grid-cols-2">
@@ -92,7 +92,7 @@ export function SettingsForm({ settings }: { settings: SettingsFormValue }) {
           </span>
           <div>
             <p className="section-title">Tax planning</p>
-            <h2 className="text-xl font-black tracking-normal">Set-aside estimates</h2>
+            <h2 className="text-xl font-black tracking-tight">Set-aside estimates</h2>
           </div>
         </div>
         <div className="mt-5 grid gap-4 md:grid-cols-2">
@@ -127,7 +127,7 @@ export function SettingsForm({ settings }: { settings: SettingsFormValue }) {
           </span>
           <div>
             <p className="section-title">Super planning</p>
-            <h2 className="text-xl font-black tracking-normal">Optional estimates</h2>
+            <h2 className="text-xl font-black tracking-tight">Optional estimates</h2>
           </div>
         </div>
         <div className="mt-5 grid gap-4 md:grid-cols-2">

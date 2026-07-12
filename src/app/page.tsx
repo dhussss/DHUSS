@@ -95,27 +95,28 @@ export default async function DashboardPage() {
 
   return (
     <main className="page-shell max-w-[92rem]">
-      <section className="command-hero-bg overflow-hidden rounded-2xl text-white shadow-[0_18px_55px_rgba(24,61,42,0.18)]">
-        <div className="p-5 sm:p-7 lg:p-8">
+      <section className="command-hero-bg relative overflow-hidden rounded-2xl text-white shadow-[0_1px_1px_rgba(15,43,34,0.4),0_24px_60px_-16px_rgba(15,43,34,0.55)]">
+        <div className="pointer-events-none absolute -right-16 -top-24 size-72 rounded-full bg-white/[0.05] blur-3xl" aria-hidden="true" />
+        <div className="relative p-5 sm:p-7 lg:p-8">
           <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-center">
             <div>
-              <p className="text-sm font-semibold text-white/65">{todayLabel}</p>
-              <h1 className="mt-2 text-3xl font-black tracking-normal text-white sm:text-4xl">Good morning, {displayName}</h1>
+              <p className="text-sm font-semibold text-white/60">{todayLabel}</p>
+              <h1 className="mt-2 text-3xl font-black tracking-tight text-white sm:text-4xl">Good morning, {displayName}</h1>
             </div>
             <div className="grid gap-2 sm:grid-cols-3 lg:min-w-[31rem]">
-              <div className="[&_button]:w-full [&_button]:border-white/15 [&_button]:bg-white [&_button]:text-ink [&_button]:shadow-none [&_button:hover]:bg-paper">
+              <div className="[&_button]:w-full [&_button]:rounded-xl [&_button]:border-white/15 [&_button]:bg-white [&_button]:text-ink [&_button]:shadow-none [&_button:hover]:bg-paper">
                 <LogTimeSheet projects={projects} buttonLabel="Log Work" />
               </div>
-              <Link className="inline-flex min-h-12 items-center justify-center gap-2 rounded-[10px] border border-white/20 bg-white/10 px-4 py-3 text-sm font-bold text-white transition hover:bg-white/18" href="/invoices/new">
+              <Link className="inline-flex min-h-12 items-center justify-center gap-2 rounded-xl border border-white/15 bg-white/10 px-4 py-3 text-sm font-bold text-white transition hover:border-white/25 hover:bg-white/[0.16]" href="/invoices/new">
                 <ReceiptText size={18} aria-hidden="true" /> New Invoice
               </Link>
-              <Link className="inline-flex min-h-12 items-center justify-center gap-2 rounded-[10px] border border-white/20 bg-white/10 px-4 py-3 text-sm font-bold text-white transition hover:bg-white/18" href="/projects/new">
+              <Link className="inline-flex min-h-12 items-center justify-center gap-2 rounded-xl border border-white/15 bg-white/10 px-4 py-3 text-sm font-bold text-white transition hover:border-white/25 hover:bg-white/[0.16]" href="/projects/new">
                 <FolderKanban size={18} aria-hidden="true" /> New Project
               </Link>
             </div>
           </div>
 
-          <div className="mt-7 grid overflow-hidden rounded-xl border border-white/15 bg-white/[0.07] md:grid-cols-3">
+          <div className="mt-7 grid overflow-hidden rounded-2xl border border-white/12 bg-white/[0.06] md:grid-cols-3">
             <HeroKpi
               icon={Clock3}
               label="This week"
@@ -142,7 +143,7 @@ export default async function DashboardPage() {
         </div>
       </section>
 
-      <Link href="/insights" className="mt-4 flex items-center justify-between gap-4 rounded-xl border border-line bg-white px-4 py-3.5 text-sm shadow-soft transition hover:border-mint/50 sm:px-5">
+      <Link href="/insights" className="mt-4 flex items-center justify-between gap-4 rounded-2xl border border-line bg-white px-4 py-3.5 text-sm shadow-soft transition hover:border-mint/50 sm:px-5">
         <span className="font-semibold text-moss">Tax set-aside estimate</span>
         <span className="inline-flex items-center gap-2 font-black text-ink">
           {formatMoney(setAside.combinedWeeklyCents)}
@@ -151,7 +152,7 @@ export default async function DashboardPage() {
       </Link>
 
       {unpaidWageGroups.size ? (
-        <section className="mt-4 overflow-hidden rounded-xl border border-gum/30 bg-white shadow-soft">
+        <section className="mt-4 overflow-hidden rounded-2xl border border-gum/30 bg-white shadow-soft">
           <div className="flex items-center justify-between gap-4 border-b border-line bg-gum/5 p-4 sm:p-5">
             <div><p className="section-title text-gum">Employee pay due</p><h2 className="mt-1 text-xl font-black">Unpaid wages</h2></div>
             <WalletCards size={22} className="text-gum" aria-hidden="true" />
@@ -169,11 +170,11 @@ export default async function DashboardPage() {
       ) : null}
 
       {showSetup ? (
-        <section className="mt-4 rounded-xl border border-mint/25 bg-white p-4 shadow-soft sm:p-5">
+        <section className="mt-4 rounded-2xl border border-mint/25 bg-white p-4 shadow-soft sm:p-5">
           <div className="flex items-start justify-between gap-4">
             <div>
               <p className="section-title">Getting started</p>
-              <h2 className="mt-1 text-xl font-black tracking-normal">You are {setupProgress}% ready to send your first invoice</h2>
+              <h2 className="mt-1 text-xl font-black tracking-tight">You are {setupProgress}% ready to send your first invoice</h2>
             </div>
             <span className="text-2xl font-black text-mint">{setupStepsComplete}/3</span>
           </div>
@@ -197,10 +198,10 @@ export default async function DashboardPage() {
         </section>
       ) : null}
 
-      <section className="mt-5 overflow-hidden rounded-xl border border-line bg-white shadow-soft">
+      <section className="mt-5 overflow-hidden rounded-2xl border border-line bg-white shadow-soft">
         <div className="border-b border-line bg-white p-5 sm:p-6">
           <div>
-            <h2 className="text-2xl font-black tracking-normal text-ink">This week</h2>
+            <h2 className="text-2xl font-black tracking-tight text-ink">This week</h2>
             <p className="mt-1 text-sm font-medium text-moss">
               {formatDateAU(dashboardData.currentWeekStart)} - {formatDateAU(dashboardData.currentWeekEnd)}
             </p>
@@ -226,7 +227,7 @@ export default async function DashboardPage() {
             <Link key={project.id} href={`/projects/${project.id}`} className="group block rounded-[10px] border border-line bg-white p-4 transition hover:border-mint/60 hover:bg-paper/30">
               <div className="flex items-start justify-between gap-3">
                 <div>
-                  <p className="text-lg font-black tracking-normal text-ink">{project.title}</p>
+                  <p className="text-lg font-black tracking-tight text-ink">{project.title}</p>
                   <p className="mt-1 text-sm font-bold text-moss">{project.client.businessName}</p>
                 </div>
                 <ArrowRight size={18} className="mt-1 text-moss transition group-hover:text-mint" aria-hidden="true" />
@@ -299,17 +300,17 @@ function HeroKpi({
     gum: "text-[#ffb39e]"
   };
   const card = (
-    <article className={`min-h-40 border-t border-white/15 p-4 first:border-t-0 md:border-l md:border-t-0 ${tones[tone]} sm:p-5`}>
+    <article className={`group min-h-40 border-t border-white/12 p-4 first:border-t-0 md:border-l md:border-t-0 ${tones[tone]} sm:p-5`}>
       <div className="flex items-start justify-between gap-3">
-        <p className="text-sm font-semibold text-white/68">{label}</p>
-        <span className="grid size-9 place-items-center rounded-lg bg-white/10">
-          <Icon size={21} aria-hidden="true" />
+        <p className="text-sm font-semibold text-white/60">{label}</p>
+        <span className="grid size-9 place-items-center rounded-xl bg-white/10">
+          <Icon size={19} aria-hidden="true" />
         </span>
       </div>
-      <p className="mt-5 text-3xl font-black tracking-normal text-white sm:text-4xl">{value}</p>
-      <p className="mt-2 text-sm font-medium leading-5 text-white/62">{note}</p>
+      <p className="mt-5 text-3xl font-black tabular-nums tracking-tight text-white sm:text-4xl">{value}</p>
+      <p className="mt-2 text-sm font-medium leading-5 text-white/58">{note}</p>
       {href ? (
-        <span className="mt-4 inline-flex items-center gap-1 text-sm font-bold text-white">
+        <span className="mt-4 inline-flex items-center gap-1 text-sm font-bold text-white transition group-hover:gap-2">
           Review and invoice <ArrowRight size={16} aria-hidden="true" />
         </span>
       ) : null}
@@ -350,11 +351,11 @@ function DashboardWidget({
   };
 
   return (
-    <section className="overflow-hidden rounded-xl border border-line bg-white shadow-soft">
+    <section className="overflow-hidden rounded-2xl border border-line bg-white shadow-soft">
       <div className="flex items-center justify-between gap-3 border-b border-line bg-white p-4">
         <div className="flex items-center gap-3">
           <span className={`h-8 w-1 rounded-full ${accents[accent]}`} aria-hidden="true" />
-          <h2 className="text-xl font-black tracking-normal">{title}</h2>
+          <h2 className="text-xl font-black tracking-tight">{title}</h2>
         </div>
         <Link className="inline-flex items-center gap-1 text-sm font-bold text-mint" href={actionHref}>
           {actionLabel} <ArrowRight size={16} aria-hidden="true" />
@@ -380,7 +381,7 @@ function SnapshotMini({ label, value }: { label: string; value: string }) {
   return (
     <div className="rounded-[10px] bg-paper/70 p-2.5">
       <p className="text-[0.72rem] font-bold text-moss">{label}</p>
-      <p className="mt-1 text-lg font-black leading-6 text-ink">{value}</p>
+      <p className="mt-1 text-lg font-black tabular-nums leading-6 text-ink">{value}</p>
     </div>
   );
 }
@@ -411,7 +412,7 @@ function InvoiceSnapshotGrid({ snapshots }: { snapshots: DashboardData["invoiceS
               <p className="text-sm font-bold text-moss">{row.caption}</p>
             </div>
           </div>
-          <p className="text-lg font-black text-ink">{formatMoney(row.valueCents)}</p>
+          <p className="text-lg font-black tabular-nums text-ink">{formatMoney(row.valueCents)}</p>
         </Link>
       ))}
     </div>

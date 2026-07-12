@@ -13,10 +13,10 @@ export function TeamInviteLink({ code, joinUrl }: { code: string; joinUrl: strin
   }
 
   return (
-    <div className="mt-4 grid gap-3 rounded-xl border border-mint/25 bg-mint/10 p-4">
+    <div className="mt-4 grid gap-3 rounded-2xl border border-mint/25 bg-mint/10 p-4">
       <div>
         <p className="text-sm font-semibold text-moss">Invitation code</p>
-        <p className="mt-1 break-all text-2xl font-black tracking-normal text-ink">{code}</p>
+        <p className="mt-1 break-all text-2xl font-black tracking-tight text-ink">{code}</p>
       </div>
       <p className="break-all text-sm font-medium leading-6 text-moss">{joinUrl}</p>
       <button type="button" className="tap-primary" onClick={copyInvite}>

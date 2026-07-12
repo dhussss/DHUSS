@@ -80,7 +80,7 @@ export default async function InvoicesPage({
             <div className="flex items-start justify-between gap-3">
               <div>
                 <div className="flex flex-wrap items-center gap-2">
-                  <h2 className="text-xl font-black tracking-normal">{invoice.invoiceNumber}</h2>
+                  <h2 className="text-xl font-black tracking-tight">{invoice.invoiceNumber}</h2>
                   {overdue ? <span className="status-pill border-gum bg-gum/10 text-gum">overdue</span> : null}
                 </div>
                 <p className="mt-1 text-sm font-bold text-moss">

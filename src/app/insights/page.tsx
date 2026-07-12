@@ -38,7 +38,7 @@ export default async function InsightsPage() {
         </Link>
       </div>
 
-      <section className="overflow-hidden rounded-xl border border-line bg-white shadow-soft">
+      <section className="overflow-hidden rounded-2xl border border-line bg-white shadow-soft">
         <div className="command-hero-bg p-5 sm:p-6 lg:p-7">
           <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-end">
             <div>
@@ -46,7 +46,7 @@ export default async function InsightsPage() {
                 <BarChart3 size={17} aria-hidden="true" />
                 Insights
               </p>
-              <h1 className="mt-2 text-4xl font-black tracking-normal sm:text-5xl">Business tracking</h1>
+              <h1 className="mt-2 text-4xl font-black tracking-tight sm:text-5xl">Business tracking</h1>
               <p className="mt-3 max-w-2xl text-sm font-medium leading-6 text-moss">
                 Clear workload, invoice, and financial-year signals based on your logged data.
               </p>
@@ -147,19 +147,19 @@ function HeroMetric({ label, value }: { label: string; value: string }) {
   return (
     <div className="rounded-[10px] border border-line bg-paper/55 p-4">
       <p className="text-xs font-bold text-moss">{label}</p>
-      <p className="mt-2 text-3xl font-black tracking-normal text-ink">{value}</p>
+      <p className="mt-2 text-3xl font-black tracking-tight text-ink">{value}</p>
     </div>
   );
 }
 
 function Panel({ title, icon: Icon, children }: { title: string; icon: LucideIcon; children: ReactNode }) {
   return (
-    <section className="rounded-xl border border-line bg-white shadow-soft">
+    <section className="rounded-2xl border border-line bg-white shadow-soft">
       <div className="flex items-center gap-3 border-b border-line p-4">
         <span className="icon-tile">
           <Icon size={20} aria-hidden="true" />
         </span>
-        <h2 className="text-2xl font-black tracking-normal">{title}</h2>
+        <h2 className="text-2xl font-black tracking-tight">{title}</h2>
       </div>
       <div className="grid gap-2 p-4">{children}</div>
     </section>

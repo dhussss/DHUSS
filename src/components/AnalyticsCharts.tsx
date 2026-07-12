@@ -39,7 +39,7 @@ export function QuarterTrendChart({ points }: { points: QuarterTrendPoint[] }) {
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
           <p className="section-title">Quarter trend</p>
-          <h2 className="mt-1 text-2xl font-black tracking-normal">Daily hours and 7-day average</h2>
+          <h2 className="mt-1 text-2xl font-black tracking-tight">Daily hours and 7-day average</h2>
           <p className="mt-2 max-w-2xl text-sm font-bold leading-6 text-moss">
             Shows daily logged hours for the current quarter with a rolling 7-day average to reveal workload pace.
           </p>
@@ -64,14 +64,14 @@ export function QuarterTrendChart({ points }: { points: QuarterTrendPoint[] }) {
         </text>
         {yTicks.map((tick) => (
           <g key={tick}>
-            <line x1={padLeft} x2={width - padRight} y1={y(tick)} y2={y(tick)} stroke="#e5e0d6" strokeWidth="1.5" />
+            <line x1={padLeft} x2={width - padRight} y1={y(tick)} y2={y(tick)} stroke="#e5e1d5" strokeWidth="1.5" />
             <text x={padLeft - 10} y={y(tick) + 4} textAnchor="end" className="fill-moss text-[0.75rem] font-black">
               {formatHours(tick, "minutes")}
             </text>
           </g>
         ))}
-        <line x1={padLeft} x2={width - padRight} y1={height - padBottom} y2={height - padBottom} stroke="#d9d2c5" strokeWidth="2" />
-        <line x1={padLeft} x2={padLeft} y1={padTop} y2={height - padBottom} stroke="#d9d2c5" strokeWidth="2" />
+        <line x1={padLeft} x2={width - padRight} y1={height - padBottom} y2={height - padBottom} stroke="#cfc9ba" strokeWidth="2" />
+        <line x1={padLeft} x2={padLeft} y1={padTop} y2={height - padBottom} stroke="#cfc9ba" strokeWidth="2" />
         {points.map((point, index) => {
           const barHeight = Math.max(point.minutes > 0 ? 3 : 1, (point.minutes / maxMinutes) * usableHeight);
           return (
@@ -90,7 +90,7 @@ export function QuarterTrendChart({ points }: { points: QuarterTrendPoint[] }) {
             </g>
           );
         })}
-        <polyline fill="none" stroke="#17211c" strokeWidth="4" strokeLinecap="round" strokeLinejoin="round" points={linePoints} />
+        <polyline fill="none" stroke="#15181d" strokeWidth="4" strokeLinecap="round" strokeLinejoin="round" points={linePoints} />
         {points.map((point, index) => (
           point.date === active?.date ? <circle key={`${point.date}-active`} cx={x(index)} cy={y(point.rollingAverageMinutes)} r="6" fill="rgb(var(--color-accent-rgb))" stroke="#fff" strokeWidth="3" /> : null
         ))}
@@ -135,7 +135,7 @@ export function FinancialYearChart({ points, start, end }: { points: FinancialYe
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
           <p className="section-title">Financial year</p>
-          <h2 className="mt-1 text-2xl font-black tracking-normal">Monthly paid income</h2>
+          <h2 className="mt-1 text-2xl font-black tracking-tight">Monthly paid income</h2>
           <p className="mt-2 max-w-2xl text-sm font-bold leading-6 text-moss">
             Shows paid invoice income by month across the Australian financial year. The line shows cumulative paid income.
           </p>
@@ -161,14 +161,14 @@ export function FinancialYearChart({ points, start, end }: { points: FinancialYe
         </text>
         {yTicks.map((tick) => (
           <g key={tick}>
-            <line x1={padLeft} x2={width - padRight} y1={y(tick)} y2={y(tick)} stroke="#e5e0d6" strokeWidth="1.5" />
+            <line x1={padLeft} x2={width - padRight} y1={y(tick)} y2={y(tick)} stroke="#e5e1d5" strokeWidth="1.5" />
             <text x={padLeft - 10} y={y(tick) + 4} textAnchor="end" className="fill-moss text-[0.75rem] font-black">
               {axisMoney(tick)}
             </text>
           </g>
         ))}
-        <line x1={padLeft} x2={width - padRight} y1={height - padBottom} y2={height - padBottom} stroke="#d9d2c5" strokeWidth="2" />
-        <line x1={padLeft} x2={padLeft} y1={padTop} y2={height - padBottom} stroke="#d9d2c5" strokeWidth="2" />
+        <line x1={padLeft} x2={width - padRight} y1={height - padBottom} y2={height - padBottom} stroke="#cfc9ba" strokeWidth="2" />
+        <line x1={padLeft} x2={padLeft} y1={padTop} y2={height - padBottom} stroke="#cfc9ba" strokeWidth="2" />
         {points.map((point, index) => {
           const barHeight = Math.max(point.paidCents > 0 ? 4 : 1, (point.paidCents / maxCents) * usableHeight);
           return (
@@ -187,9 +187,9 @@ export function FinancialYearChart({ points, start, end }: { points: FinancialYe
             </g>
           );
         })}
-        <polyline fill="none" stroke="#17211c" strokeWidth="4" strokeLinecap="round" strokeLinejoin="round" points={linePoints} />
+        <polyline fill="none" stroke="#15181d" strokeWidth="4" strokeLinecap="round" strokeLinejoin="round" points={linePoints} />
         {points.map((point, index) => (
-          <circle key={`${point.month}-dot`} cx={x(index)} cy={y(point.cumulativePaidCents)} r={point.month === active?.month ? 6 : 4} fill={point.month === active?.month ? "rgb(var(--color-accent-rgb))" : "#17211c"} stroke="#fff" strokeWidth="2" />
+          <circle key={`${point.month}-dot`} cx={x(index)} cy={y(point.cumulativePaidCents)} r={point.month === active?.month ? 6 : 4} fill={point.month === active?.month ? "rgb(var(--color-accent-rgb))" : "#15181d"} stroke="#fff" strokeWidth="2" />
         ))}
         {points.map((point, index) => (
           <text key={`${point.month}-label`} x={x(index)} y={height - 28} textAnchor="middle" className="fill-moss text-[0.78rem] font-black">
@@ -228,7 +228,7 @@ function axisMoney(cents: number) {
 export function InsightCards({ cards }: { cards: InsightCard[] }) {
   const tones = {
     mint: "border-mint/30 bg-mint/10",
-    yolk: "border-mint/30 bg-mint/10",
+    yolk: "border-yolk/30 bg-yolk/10",
     gum: "border-gum/30 bg-gum/10",
     ink: "border-line bg-white"
   };
@@ -238,7 +238,7 @@ export function InsightCards({ cards }: { cards: InsightCard[] }) {
       {cards.map((card) => (
         <article key={card.title} className={`rounded-lg border p-4 shadow-soft ${tones[card.tone]}`}>
           <p className="text-xs font-black uppercase tracking-[0.12em] text-moss">{card.title}</p>
-          <p className="mt-3 text-3xl font-black tracking-normal text-ink">{card.value}</p>
+          <p className="mt-3 text-3xl font-black tracking-tight text-ink">{card.value}</p>
           <p className="mt-2 text-sm font-bold leading-6 text-moss">{card.body}</p>
         </article>
       ))}
@@ -252,7 +252,7 @@ function EmptyChart({ icon: Icon, title, body }: { icon: LucideIcon; title: stri
       <span className="icon-tile">
         <Icon size={20} aria-hidden="true" />
       </span>
-      <p className="mt-4 text-xl font-black tracking-normal text-ink">{title}</p>
+      <p className="mt-4 text-xl font-black tracking-tight text-ink">{title}</p>
       <p className="mt-2 text-sm font-bold leading-6 text-moss">{body}</p>
     </div>
   );

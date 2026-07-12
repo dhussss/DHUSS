@@ -65,7 +65,7 @@ export function LogTimeSheet({
             <div className="flex items-center justify-between gap-4">
               <div>
                 <p className="section-title">Quick entry</p>
-                <h2 className="text-2xl font-black tracking-normal">Log work</h2>
+                <h2 className="text-2xl font-black tracking-tight">Log work</h2>
               </div>
               <button
                 type="button"

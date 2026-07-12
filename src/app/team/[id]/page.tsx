@@ -99,7 +99,7 @@ export default async function TeamMemberPage({ params }: { params: Promise<{ id:
                 <form action={reverseWagePaymentAction} className="grid gap-2 rounded-lg border border-gum/20 bg-gum/5 p-3"><input type="hidden" name="paymentId" value={payment.id} /><label>Reversal note<input name="reversalNote" placeholder="Reason for correction" required /></label><ConfirmSubmitButton className="tap-danger" message="Mark this wage payment unpaid? The source hours will return to unpaid and the expense record will be archived.">Mark unpaid</ConfirmSubmitButton></form>
               </div> : <p className="mt-3 text-sm font-semibold text-moss">Reversed {payment.reversedAt ? formatDateAU(payment.reversedAt) : ""} · {payment.reversalNote}</p>}
             </article>
-          )) : <p className="rounded-xl border border-line bg-white p-4 text-sm font-medium text-moss">No wage payments recorded yet.</p>}
+          )) : <p className="rounded-2xl border border-line bg-white p-4 text-sm font-medium text-moss">No wage payments recorded yet.</p>}
         </div>
       </section>
 
@@ -111,7 +111,7 @@ export default async function TeamMemberPage({ params }: { params: Promise<{ id:
               <div><p className="font-black">{entry.project.title}</p><p className="mt-1 text-sm font-medium text-moss">{formatDateAU(entry.date)} · {entry.approvalStatus?.toLowerCase()} · {entry.paymentStatus?.toLowerCase()}</p>{entry.notes ? <p className="mt-2 text-sm text-moss">{entry.notes}</p> : null}</div>
               <div className="text-right"><p className="text-lg font-black">{formatHours(entry.durationMinutes)}h</p><p className="text-sm font-semibold text-moss">{formatMoney(labourTotalCents(entry.durationMinutes, entry.payRateCentsSnapshot || 0))}</p></div>
             </article>
-          )) : <p className="rounded-xl border border-line bg-white p-4 text-sm font-medium text-moss"><Clock3 className="mr-2 inline" size={18} aria-hidden="true" />No team hours logged yet.</p>}
+          )) : <p className="rounded-2xl border border-line bg-white p-4 text-sm font-medium text-moss"><Clock3 className="mr-2 inline" size={18} aria-hidden="true" />No team hours logged yet.</p>}
         </div>
       </section>
     </main>

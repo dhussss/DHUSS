@@ -58,10 +58,10 @@ export default async function ClientsPage({
         {clients.length ? (
           clients.map((client) => {
             return (
-              <article key={client.id} className="rounded-xl border border-line bg-white p-4 shadow-soft transition hover:border-mint/40 sm:p-5">
+              <article key={client.id} className="rounded-2xl border border-line bg-white p-4 shadow-soft transition hover:border-mint/40 sm:p-5">
                 <div className="grid gap-4 md:grid-cols-[minmax(0,1fr)_auto] md:items-center">
                   <div className="min-w-0">
-                    <h2 className="text-xl font-black tracking-normal text-ink">{client.businessName}</h2>
+                    <h2 className="text-xl font-black tracking-tight text-ink">{client.businessName}</h2>
                     {client.contactName ? <p className="mt-1 text-sm font-semibold text-moss">{client.contactName}</p> : null}
                     <div className="mt-3 flex flex-col gap-1 text-sm font-medium text-moss sm:flex-row sm:flex-wrap sm:gap-x-4">
                       {client.email ? (

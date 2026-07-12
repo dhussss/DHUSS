@@ -36,7 +36,7 @@ export default async function TeamPage({ searchParams }: { searchParams?: Promis
       </header>
 
       {workerAssignments ? (
-        <Link href="/team/work" className="mt-4 flex items-center justify-between gap-4 rounded-xl border border-mint/25 bg-mint/10 p-4 text-ink">
+        <Link href="/team/work" className="mt-4 flex items-center justify-between gap-4 rounded-2xl border border-mint/25 bg-mint/10 p-4 text-ink">
           <span><span className="block font-black">Work assigned to me</span><span className="mt-1 block text-sm font-medium text-moss">Log hours on projects shared with you.</span></span>
           <ArrowRight size={20} className="text-mint" aria-hidden="true" />
         </Link>
@@ -77,7 +77,7 @@ export default async function TeamPage({ searchParams }: { searchParams?: Promis
         <section className="mt-6"><h2 className="text-xl font-black">Pending invitations</h2><div className="mt-3 grid gap-3">{invitations.map((invitation) => <article key={invitation.id} className="card flex items-center justify-between gap-4"><div><p className="font-black">{invitation.subcontractorName}</p><p className="mt-1 text-sm font-medium text-moss">Expires {formatDateAU(invitation.expiresAt)}</p></div><form action={revokeTeamInvitationAction}><input type="hidden" name="invitationId" value={invitation.id} /><button className="tap-danger" type="submit">Revoke</button></form></article>)}</div></section>
       ) : null}
 
-      {!members.length ? <div className="mt-6 flex items-center gap-3 rounded-xl border border-line bg-white p-4 text-sm font-medium text-moss"><WalletCards size={20} aria-hidden="true" />Team payments appear automatically after employees log hours.</div> : null}
+      {!members.length ? <div className="mt-6 flex items-center gap-3 rounded-2xl border border-line bg-white p-4 text-sm font-medium text-moss"><WalletCards size={20} aria-hidden="true" />Team payments appear automatically after employees log hours.</div> : null}
     </main>
   );
 }

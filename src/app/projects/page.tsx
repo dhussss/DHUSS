@@ -82,7 +82,7 @@ export default async function ProjectsPage({
             <Link key={project.id} href={`/projects/${project.id}`} className="card block transition hover:border-mint">
               <div className="flex items-start justify-between gap-3">
                 <div>
-                  <h2 className="text-xl font-black tracking-normal">{project.title}</h2>
+                  <h2 className="text-xl font-black tracking-tight">{project.title}</h2>
                   <p className="mt-1 text-sm font-bold text-moss">{project.clientBusinessName}</p>
                 </div>
                 <ProjectStatusPill status={project.status} />
@@ -111,14 +111,14 @@ export default async function ProjectsPage({
         <section className="mt-9">
           <div className="mb-3 flex items-center gap-2">
             <BriefcaseBusiness size={20} className="text-mint" aria-hidden="true" />
-            <h2 className="text-xl font-black tracking-normal">Assigned projects</h2>
+            <h2 className="text-xl font-black tracking-tight">Assigned projects</h2>
           </div>
           <div className="grid gap-3 md:grid-cols-2">
             {assignedRows.map((assignment) => (
               <Link key={assignment.id} href={`/projects/${assignment.project.id}`} className="card block border-mint/25 transition hover:border-mint">
                 <div className="flex items-start justify-between gap-3">
                   <div>
-                    <h3 className="text-xl font-black tracking-normal">{assignment.project.title}</h3>
+                    <h3 className="text-xl font-black tracking-tight">{assignment.project.title}</h3>
                     <p className="mt-1 text-sm font-bold text-moss">{assignment.project.client.businessName}</p>
                   </div>
                   <span className="status-pill border-mint/30 bg-mint/10 text-mint">Assigned</span>
@@ -137,7 +137,7 @@ export default async function ProjectsPage({
       <section className="mt-9">
         <div className="mb-3 flex items-center gap-2">
           <Archive size={20} className="text-moss" aria-hidden="true" />
-          <h2 className="text-xl font-black tracking-normal">Archived projects</h2>
+          <h2 className="text-xl font-black tracking-tight">Archived projects</h2>
         </div>
 
         <div className="grid gap-3 md:grid-cols-2">
@@ -148,7 +148,7 @@ export default async function ProjectsPage({
                   <Link href={`/projects/${project.id}`} className="block">
                     <div className="flex items-start justify-between gap-3">
                       <div>
-                        <h3 className="text-lg font-black tracking-normal">{project.title}</h3>
+                        <h3 className="text-lg font-black tracking-tight">{project.title}</h3>
                         <p className="mt-1 text-sm font-bold text-moss">{project.clientBusinessName}</p>
                       </div>
                       <ProjectStatusPill status={project.status} />

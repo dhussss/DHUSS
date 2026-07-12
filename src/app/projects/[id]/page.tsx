@@ -133,7 +133,7 @@ export default async function ProjectDetailPage({ params }: { params: Promise<{ 
         Projects
       </Link>
 
-      <header className="overflow-hidden rounded-xl border border-line bg-white shadow-soft">
+      <header className="overflow-hidden rounded-2xl border border-line bg-white shadow-soft">
         <div className="grid gap-5 p-5 sm:p-6 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-end">
           <div>
             <div className="flex flex-wrap items-center gap-2">
@@ -145,7 +145,7 @@ export default async function ProjectDetailPage({ params }: { params: Promise<{ 
                 <span className="status-pill border-line bg-paper text-moss">all caught up</span>
               )}
             </div>
-            <h1 className="mt-3 text-4xl font-black tracking-normal">{project.title}</h1>
+            <h1 className="mt-3 text-4xl font-black tracking-tight">{project.title}</h1>
             <p className="mt-2 text-base font-semibold text-moss">{project.client.businessName}</p>
             {project.notes ? <p className="mt-4 max-w-3xl text-sm font-medium leading-6 text-moss">{project.notes}</p> : null}
           </div>
@@ -179,7 +179,7 @@ export default async function ProjectDetailPage({ params }: { params: Promise<{ 
         </div>
       </header>
 
-      <section className={`mt-4 overflow-hidden rounded-xl border bg-white shadow-soft ${hasUnbilledWork ? "border-mint/35" : "border-line"}`}>
+      <section className={`mt-4 overflow-hidden rounded-2xl border bg-white shadow-soft ${hasUnbilledWork ? "border-mint/35" : "border-line"}`}>
         <div className="grid gap-5 p-5 sm:p-6 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-center">
           <div>
             <div className="flex items-center gap-2">
@@ -190,7 +190,7 @@ export default async function ProjectDetailPage({ params }: { params: Promise<{ 
               )}
               <p className={`text-sm font-bold ${hasUnbilledWork ? "text-mint" : "text-moss"}`}>Unbilled work</p>
             </div>
-            <h2 className="mt-3 text-4xl font-black tracking-normal text-ink sm:text-5xl">
+            <h2 className="mt-3 text-4xl font-black tracking-tight text-ink sm:text-5xl">
               {hasUnbilledWork ? formatMoney(unbilledTotalCents) : "All caught up"}
             </h2>
             <p className="mt-2 text-sm font-medium leading-6 text-moss">
@@ -238,7 +238,7 @@ export default async function ProjectDetailPage({ params }: { params: Promise<{ 
 
       <section className="mt-7 grid gap-6 lg:grid-cols-2">
         <div>
-          <h2 className="mb-3 text-xl font-black tracking-normal">Logged hours</h2>
+          <h2 className="mb-3 text-xl font-black tracking-tight">Logged hours</h2>
           <div className="grid gap-3">
             {project.timeEntries.length ? (
               project.timeEntries.map((entry) => (
@@ -296,7 +296,7 @@ export default async function ProjectDetailPage({ params }: { params: Promise<{ 
 
         <div className="grid content-start gap-6">
           <section>
-            <h2 className="mb-3 text-xl font-black tracking-normal">Expense items</h2>
+            <h2 className="mb-3 text-xl font-black tracking-tight">Expense items</h2>
             <div className="grid gap-3">
               {project.expenseItems.length ? (
                 project.expenseItems.map((item) => (
@@ -343,7 +343,7 @@ export default async function ProjectDetailPage({ params }: { params: Promise<{ 
 
           <section>
             <div className="mb-3 flex items-center justify-between gap-3">
-              <h2 className="text-xl font-black tracking-normal">Work expenses</h2>
+              <h2 className="text-xl font-black tracking-tight">Work expenses</h2>
               <Link href="/expenses" className="text-sm font-bold text-mint">Expenses</Link>
             </div>
             <div className="grid gap-3">
@@ -386,7 +386,7 @@ export default async function ProjectDetailPage({ params }: { params: Promise<{ 
           </section>
 
           <section>
-            <h2 className="mb-3 text-xl font-black tracking-normal">Linked invoices</h2>
+            <h2 className="mb-3 text-xl font-black tracking-tight">Linked invoices</h2>
             <div className="grid gap-3">
               {project.invoices.length ? (
                 project.invoices.map((invoice) => (
@@ -442,10 +442,10 @@ function AssignedProjectView({ assignment, employerName }: { assignment: Assigne
     <main className="page-shell">
       <LiveTeamRefresh />
       <Link href="/projects" className="mb-4 inline-flex items-center gap-2 text-sm font-bold text-mint"><ArrowLeft size={18} aria-hidden="true" />Projects</Link>
-      <header className="overflow-hidden rounded-xl border border-mint/25 bg-white shadow-soft">
+      <header className="overflow-hidden rounded-2xl border border-mint/25 bg-white shadow-soft">
         <div className="p-5 sm:p-6">
           <div className="flex flex-wrap items-center gap-2"><p className="section-title">Assigned project</p><span className="status-pill border-mint/30 bg-mint/10 text-mint">Read only</span></div>
-          <h1 className="mt-3 text-4xl font-black tracking-normal">{assignment.project.title}</h1>
+          <h1 className="mt-3 text-4xl font-black tracking-tight">{assignment.project.title}</h1>
           <p className="mt-2 text-base font-semibold text-moss">{assignment.project.client.businessName}</p>
           <p className="mt-4 rounded-lg bg-paper p-3 text-sm font-semibold text-moss">Assigned by <strong className="text-ink">{employerName}</strong>. Project details are managed by your employer.</p>
           {assignment.project.notes ? <p className="mt-4 max-w-3xl text-sm font-medium leading-6 text-moss">{assignment.project.notes}</p> : null}
@@ -494,7 +494,7 @@ function ProjectMetric({
           <Icon size={20} aria-hidden="true" />
         </span>
       </div>
-      <p className="mt-5 text-2xl font-black tracking-normal text-ink">{value}</p>
+      <p className="mt-5 text-2xl font-black tracking-tight text-ink">{value}</p>
     </article>
   );
 }
@@ -503,7 +503,7 @@ function UnbilledStat({ label, value, dark }: { label: string; value: string; da
   return (
     <div className={`rounded-[10px] border bg-white p-4 ${dark ? "border-mint/25" : "border-line"}`}>
       <p className="text-xs font-bold text-moss">{label}</p>
-      <p className="mt-2 text-2xl font-black tracking-normal text-ink">{value}</p>
+      <p className="mt-2 text-2xl font-black tracking-tight text-ink">{value}</p>
     </div>
   );
 }
@@ -568,7 +568,7 @@ function MonthlyActivityCalendar({ monthLabel, cells }: { monthLabel: string; ce
           </span>
           <div>
             <p className="section-title">Monthly activity</p>
-            <h2 className="text-xl font-black tracking-normal">{monthLabel}</h2>
+            <h2 className="text-xl font-black tracking-tight">{monthLabel}</h2>
           </div>
         </div>
         <p className="text-sm font-bold text-moss">{hasActivity ? "Theme dots show work. Red dots show days off." : "No logged work this month yet"}</p>

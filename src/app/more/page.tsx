@@ -59,12 +59,12 @@ export default async function MorePage() {
         {links.map((item) => {
           const Icon = item.icon;
           return (
-            <Link key={item.href} href={item.href} className="group flex items-start gap-4 rounded-xl border border-line bg-white p-4 shadow-soft transition hover:border-mint/50 hover:bg-white sm:p-5">
+            <Link key={item.href} href={item.href} className="group flex items-start gap-4 rounded-2xl border border-line bg-white p-4 shadow-soft transition hover:border-mint/50 hover:bg-white sm:p-5">
               <span className="icon-tile">
                 <Icon size={21} aria-hidden="true" />
               </span>
               <span>
-                <span className="block text-xl font-black tracking-normal text-ink">{item.label}</span>
+                <span className="block text-xl font-black tracking-tight text-ink">{item.label}</span>
                 <span className="mt-1 block text-sm font-medium leading-6 text-moss">{item.body}</span>
               </span>
             </Link>

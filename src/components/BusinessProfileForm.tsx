@@ -145,7 +145,7 @@ export function BusinessProfileForm({
           </span>
           <div>
             <p className="section-title">Business identity</p>
-            <h2 className="text-xl font-black tracking-normal">Profile details</h2>
+            <h2 className="text-xl font-black tracking-tight">Profile details</h2>
           </div>
         </div>
 
@@ -244,7 +244,7 @@ export function BusinessProfileForm({
           </span>
           <div>
             <p className="section-title">Email defaults</p>
-            <h2 className="text-xl font-black tracking-normal">Invoice email</h2>
+            <h2 className="text-xl font-black tracking-tight">Invoice email</h2>
           </div>
         </div>
         <div className="mt-5 grid gap-4">

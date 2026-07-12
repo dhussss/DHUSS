@@ -117,7 +117,7 @@ export function EmailComposer({
       <div className="card grid gap-4">
         <div>
           <p className="section-title">Review email</p>
-          <h2 className="mt-1 text-2xl font-black tracking-normal text-ink">Confirm before sending</h2>
+          <h2 className="mt-1 text-2xl font-black tracking-tight text-ink">Confirm before sending</h2>
           <p className="mt-2 text-sm font-bold leading-6 text-moss">
             This sends the email from the app through your configured SMTP account with the invoice PDF attached. A confirmation copy will be sent to your email so you have a real record.
           </p>

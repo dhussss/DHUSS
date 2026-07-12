@@ -188,7 +188,7 @@ export default async function NewInvoicePage({
       <section className="mt-6">
         <div className="mb-3">
           <p className="section-title">Review</p>
-          <h2 className="text-2xl font-black tracking-normal">
+          <h2 className="text-2xl font-black tracking-tight">
             {selectedProject ? selectedProject.title : "Select a project"}
           </h2>
           {selectedProject ? (
