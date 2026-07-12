@@ -136,7 +136,8 @@ export default async function TeamMemberPage({ params }: { params: Promise<{ id:
         <h2 className="text-xl font-black">Time history</h2>
         <div className="mt-3 grid gap-3">
           {member.timeEntries.length ? member.timeEntries.map((entry) => {
-            const canDelete = entry.billingStatus === "UNBILLED" && entry.paymentStatus !== "PAID";
+            const canDelete = entry.billingStatus === "UNBILLED";
+            const isPaid = entry.paymentStatus === "PAID";
             return (
               <article key={entry.id} className="card flex items-start justify-between gap-4">
                 <div><p className="font-black">{entry.project.title}</p><p className="mt-1 text-sm font-medium text-moss">{formatDateAU(entry.date)} · {entry.approvalStatus?.toLowerCase()} · {entry.paymentStatus?.toLowerCase()}</p>{entry.notes ? <p className="mt-2 text-sm text-moss">{entry.notes}</p> : null}</div>
@@ -148,7 +149,11 @@ export default async function TeamMemberPage({ params }: { params: Promise<{ id:
                       <input type="hidden" name="entryId" value={entry.id} />
                       <ConfirmSubmitButton
                         className="tap-danger min-h-9 px-3 py-1.5 text-xs"
-                        message={`Delete this ${formatHours(entry.durationMinutes)}h entry for ${member.displayName}? This cannot be undone.`}
+                        message={
+                          isPaid
+                            ? `Delete this paid ${formatHours(entry.durationMinutes)}h entry for ${member.displayName}? This will also reverse the wage payment it belongs to (other paid entries in that same payment will return to unpaid). This cannot be undone.`
+                            : `Delete this ${formatHours(entry.durationMinutes)}h entry for ${member.displayName}? This cannot be undone.`
+                        }
                         pendingLabel="Deleting..."
                         showDefaultIcon={false}
                       >
@@ -156,10 +161,8 @@ export default async function TeamMemberPage({ params }: { params: Promise<{ id:
                         Delete
                       </ConfirmSubmitButton>
                     </form>
-                  ) : entry.billingStatus === "BILLED" ? (
-                    <p className="mt-2 text-xs font-bold text-moss">Billed · locked</p>
                   ) : (
-                    <p className="mt-2 text-xs font-bold text-moss">Paid · reverse payment to edit</p>
+                    <p className="mt-2 text-xs font-bold text-moss">Billed · locked</p>
                   )}
                 </div>
               </article>

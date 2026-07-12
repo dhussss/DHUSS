@@ -227,14 +227,36 @@ export async function deleteTeamTimeEntryAction(formData: FormData) {
   const entryId = value(formData, "entryId");
   const entry = await prisma.timeEntry.findFirst({
     where: { id: entryId, ownerId: user.id, teamMemberId: { not: null } },
-    select: { id: true, projectId: true, teamMemberId: true, billingStatus: true, paymentStatus: true }
+    select: { id: true, projectId: true, teamMemberId: true, billingStatus: true, paymentStatus: true, wagePaymentId: true }
   });
   if (!entry) throw new Error("Time entry not found.");
   if (entry.billingStatus !== "UNBILLED") throw new Error("Billed time entries cannot be deleted. Unbill the invoice first.");
-  if (entry.paymentStatus === "PAID") throw new Error("Paid hours cannot be deleted. Reverse the wage payment first.");
 
-  await prisma.timeEntry.delete({ where: { id: entryId } });
+  await prisma.$transaction(async (tx) => {
+    // Deleting a paid entry reverses the whole wage payment it belongs to (other entries
+    // in that payment return to unpaid, ready to be re-paid together) rather than forcing
+    // a separate trip to find and click "reverse payment" first.
+    if (entry.paymentStatus === "PAID" && entry.wagePaymentId) {
+      const payment = await tx.wagePayment.findFirst({ where: { id: entry.wagePaymentId, ownerId: user.id, status: "PAID" }, select: { id: true, workExpenseId: true } });
+      if (payment) {
+        const reversedAt = new Date();
+        await tx.wagePayment.update({ where: { id: payment.id }, data: { status: "VOID", reversedAt, reversalNote: "Reversed by deleting a time entry" } });
+        await tx.timeEntry.updateMany({
+          where: { wagePaymentId: payment.id, ownerId: user.id },
+          data: { paymentStatus: "UNPAID", paidAt: null, paymentReference: null, wagePaymentId: null }
+        });
+        if (payment.workExpenseId) {
+          await tx.workExpense.update({ where: { id: payment.workExpenseId }, data: { archivedAt: reversedAt, notes: "Reversed by deleting a time entry" } });
+        }
+      }
+    }
+
+    await tx.timeEntry.delete({ where: { id: entryId } });
+  });
+
   revalidateTeam(entry.projectId);
+  revalidatePath("/expenses");
+  revalidatePath("/insights");
   redirect(safeReturnTo(formData, `/team/${entry.teamMemberId}`));
 }
 

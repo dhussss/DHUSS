@@ -285,19 +285,21 @@ export default async function ProjectDetailPage({ params }: { params: Promise<{ 
                           </ConfirmSubmitButton>
                         </form>
                       </div>
-                    ) : entry.billingStatus === "UNBILLED" && entry.teamMemberId && entry.paymentStatus !== "PAID" ? (
+                    ) : entry.billingStatus === "UNBILLED" && entry.teamMemberId ? (
                       <form action={deleteTeamTimeEntryAction}>
                         <input type="hidden" name="entryId" value={entry.id} />
                         <input type="hidden" name="returnTo" value={`/projects/${project.id}`} />
                         <ConfirmSubmitButton
                           className="tap-danger px-3"
-                          message={`Delete this ${formatHours(entry.durationMinutes)}h entry for ${entry.workerDisplayNameSnapshot || "this subcontractor"} on ${formatDateAU(entry.date)}? This permanently removes it.`}
+                          message={
+                            entry.paymentStatus === "PAID"
+                              ? `Delete this paid ${formatHours(entry.durationMinutes)}h entry for ${entry.workerDisplayNameSnapshot || "this subcontractor"} on ${formatDateAU(entry.date)}? This will also reverse the wage payment it belongs to (other paid entries in that same payment will return to unpaid). This permanently removes it.`
+                              : `Delete this ${formatHours(entry.durationMinutes)}h entry for ${entry.workerDisplayNameSnapshot || "this subcontractor"} on ${formatDateAU(entry.date)}? This permanently removes it.`
+                          }
                         >
                           Delete
                         </ConfirmSubmitButton>
                       </form>
-                    ) : entry.teamMemberId && entry.paymentStatus === "PAID" ? (
-                      <span className="text-xs font-bold text-moss">Paid - reverse payment to edit</span>
                     ) : null}
                   </div>
                 </article>
