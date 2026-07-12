@@ -73,6 +73,7 @@ export type DashboardData = {
   totalCurrentWeekMinutes: number;
   totalCurrentWeekBillableCents: number;
   rolling30AverageDailyMinutes: number;
+  rolling30AverageWeeklyBillableCents: number;
   currentWeekAverageDailyMinutes: number;
   weeklyAverageDeltaMinutes: number;
   currentWeekElapsedDays: number;
@@ -110,6 +111,7 @@ type DashboardRow = {
   totalCurrentWeekMinutes: bigint | number | null;
   totalCurrentWeekBillableCents: bigint | number | null;
   rolling30TotalMinutes: bigint | number | null;
+  rolling30BillableCents: bigint | number | null;
   rolling30IncludedDayCount: bigint | number | null;
   unbilledEntryCount: bigint | number | null;
   unbilledItemCount: bigint | number | null;
@@ -216,7 +218,10 @@ export async function loadDashboardData(ownerId: string): Promise<DashboardData>
         AND p.status = 'ACTIVE'
     ),
     rolling_30_time_by_day AS (
-      SELECT t.date::date AS date_key, COALESCE(SUM(t."durationMinutes"), 0) AS minutes
+      SELECT
+        t.date::date AS date_key,
+        COALESCE(SUM(t."durationMinutes"), 0) AS minutes,
+        COALESCE(SUM(ROUND((t."durationMinutes"::numeric / 60) * t."hourlyRateCentsSnapshot")), 0) AS billable_cents
       FROM "TimeEntry" t
       CROSS JOIN bounds b
       WHERE t."ownerId" = ${ownerId}
@@ -237,6 +242,7 @@ export async function loadDashboardData(ownerId: string): Promise<DashboardData>
     rolling_30_work AS (
       SELECT
         COALESCE(SUM(COALESCE(t.minutes, 0)), 0) AS total_minutes,
+        COALESCE(SUM(COALESCE(t.billable_cents, 0)), 0) AS total_billable_cents,
         COUNT(*) AS included_day_count
       FROM rolling_30_time_by_day t
       FULL OUTER JOIN rolling_30_day_offs d ON d.date_key = t.date_key
@@ -398,6 +404,7 @@ export async function loadDashboardData(ownerId: string): Promise<DashboardData>
       current_week_entries.total_minutes AS "totalCurrentWeekMinutes",
       current_week_entries.billable_value AS "totalCurrentWeekBillableCents",
       rolling_30_work.total_minutes AS "rolling30TotalMinutes",
+      rolling_30_work.total_billable_cents AS "rolling30BillableCents",
       rolling_30_work.included_day_count AS "rolling30IncludedDayCount",
       unbilled_time.entry_count AS "unbilledEntryCount",
       unbilled_items.item_count AS "unbilledItemCount",
@@ -451,6 +458,9 @@ export async function loadDashboardData(ownerId: string): Promise<DashboardData>
   const elapsedDays = Math.max(1, Math.min(7, Math.floor((today.getTime() - currentWeek.start.getTime()) / 86_400_000) + 1));
   const rolling30IncludedDayCount = numberValue(row?.rolling30IncludedDayCount);
   const rolling30AverageDailyMinutes = rolling30IncludedDayCount ? numberValue(row?.rolling30TotalMinutes) / rolling30IncludedDayCount : 0;
+  const rolling30AverageWeeklyBillableCents = rolling30IncludedDayCount
+    ? Math.round((numberValue(row?.rolling30BillableCents) / rolling30IncludedDayCount) * 7)
+    : 0;
   const currentWeekAverageDailyMinutes = numberValue(row?.totalCurrentWeekMinutes) / elapsedDays;
 
   return {
@@ -494,6 +504,7 @@ export async function loadDashboardData(ownerId: string): Promise<DashboardData>
     totalCurrentWeekMinutes: numberValue(row?.totalCurrentWeekMinutes),
     totalCurrentWeekBillableCents: numberValue(row?.totalCurrentWeekBillableCents),
     rolling30AverageDailyMinutes,
+    rolling30AverageWeeklyBillableCents,
     currentWeekAverageDailyMinutes,
     weeklyAverageDeltaMinutes: currentWeekAverageDailyMinutes - rolling30AverageDailyMinutes,
     currentWeekElapsedDays: elapsedDays,

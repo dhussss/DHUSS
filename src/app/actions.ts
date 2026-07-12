@@ -959,18 +959,18 @@ function projectDeleteBlockedMessage({
   invoiceCount,
   billedTimeCount,
   billedExpenseCount,
-  teamAssignmentCount
+  wagePaymentCount
 }: {
   invoiceCount: number;
   billedTimeCount: number;
   billedExpenseCount: number;
-  teamAssignmentCount: number;
+  wagePaymentCount: number;
 }) {
   const reasons = [
     invoiceCount ? `${invoiceCount} invoice${invoiceCount === 1 ? "" : "s"}` : "",
     billedTimeCount ? `${billedTimeCount} billed time entr${billedTimeCount === 1 ? "y" : "ies"}` : "",
     billedExpenseCount ? `${billedExpenseCount} billed expense item${billedExpenseCount === 1 ? "" : "s"}` : "",
-    teamAssignmentCount ? `${teamAssignmentCount} subcontractor assignment${teamAssignmentCount === 1 ? "" : "s"}` : ""
+    wagePaymentCount ? `${wagePaymentCount} recorded wage payment${wagePaymentCount === 1 ? "" : "s"}` : ""
   ].filter(Boolean);
 
   return reasons.length
@@ -996,30 +996,31 @@ export async function deleteProjectAction(formData: FormData) {
         invoiceCount: number;
         billedTimeCount: number;
         billedExpenseCount: number;
-        teamAssignmentCount: number;
+        wagePaymentCount: number;
       }
     | null = null;
 
   try {
     deleteResult = await prisma.$transaction(async (tx) => {
-      const [invoiceCount, billedTimeCount, billedExpenseCount, teamAssignmentCount] = await Promise.all([
+      const [invoiceCount, billedTimeCount, billedExpenseCount, wagePaymentCount] = await Promise.all([
         tx.invoice.count({ where: { projectId, ownerId } }),
         tx.timeEntry.count({ where: { projectId, ownerId, billingStatus: "BILLED" } }),
         tx.expenseItem.count({ where: { projectId, ownerId, billingStatus: "BILLED" } }),
-        tx.projectAssignment.count({ where: { projectId, ownerId } })
+        tx.wagePayment.count({ where: { projectId, ownerId } })
       ]);
-      const blockedMessage = projectDeleteBlockedMessage({ invoiceCount, billedTimeCount, billedExpenseCount, teamAssignmentCount });
+      const blockedMessage = projectDeleteBlockedMessage({ invoiceCount, billedTimeCount, billedExpenseCount, wagePaymentCount });
 
       if (blockedMessage) {
-        return { deleted: false, blockedMessage, invoiceCount, billedTimeCount, billedExpenseCount, teamAssignmentCount };
+        return { deleted: false, blockedMessage, invoiceCount, billedTimeCount, billedExpenseCount, wagePaymentCount };
       }
 
       await tx.timeEntry.deleteMany({ where: { projectId, ownerId } });
+      await tx.projectAssignment.deleteMany({ where: { projectId, ownerId } });
       await tx.expenseItem.deleteMany({ where: { projectId, ownerId } });
       await tx.rateHistory.deleteMany({ where: { projectId, ownerId } });
       await tx.project.deleteMany({ where: { id: projectId, ownerId } });
 
-      return { deleted: true, blockedMessage: "", invoiceCount, billedTimeCount, billedExpenseCount, teamAssignmentCount };
+      return { deleted: true, blockedMessage: "", invoiceCount, billedTimeCount, billedExpenseCount, wagePaymentCount };
     });
   } catch (error) {
     console.error("Project deletion failed", error);
@@ -1054,7 +1055,7 @@ export async function deleteClientAction(formData: FormData) {
     });
     const projectIds = projects.map((project) => project.id);
 
-    const [invoiceCount, billedTimeCount, billedExpenseCount, teamAssignmentCount] = await Promise.all([
+    const [invoiceCount, billedTimeCount, billedExpenseCount, wagePaymentCount] = await Promise.all([
       tx.invoice.count({
         where: {
           ownerId,
@@ -1063,14 +1064,17 @@ export async function deleteClientAction(formData: FormData) {
       }),
       tx.timeEntry.count({ where: { ownerId, projectId: { in: projectIds }, billingStatus: "BILLED" } }),
       tx.expenseItem.count({ where: { ownerId, projectId: { in: projectIds }, billingStatus: "BILLED" } }),
-      tx.projectAssignment.count({ where: { ownerId, projectId: { in: projectIds } } })
+      tx.wagePayment.count({ where: { ownerId, projectId: { in: projectIds } } })
     ]);
 
-    if (invoiceCount || billedTimeCount || billedExpenseCount || teamAssignmentCount) {
-      throw new Error("This client has invoice, billed, or subcontractor assignment history. Archive their projects instead of deleting the client.");
+    if (invoiceCount || billedTimeCount || billedExpenseCount || wagePaymentCount) {
+      throw new Error("This client has invoice, billed, or wage payment history. Archive their projects instead of deleting the client.");
     }
 
     await tx.timeEntry.deleteMany({
+      where: { ownerId, projectId: { in: projectIds } }
+    });
+    await tx.projectAssignment.deleteMany({
       where: { ownerId, projectId: { in: projectIds } }
     });
     await tx.expenseItem.deleteMany({

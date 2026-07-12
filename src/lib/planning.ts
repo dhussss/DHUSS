@@ -92,7 +92,12 @@ export function estimateAustralianIndividualTaxCents(annualIncomeCents: number, 
   return Math.max(0, bracketTax + medicareLevy);
 }
 
-export function calculateSetAsidePlanning(weeklyEarningsCents: number, profile: PlanningProfile | null | undefined, date = new Date()): SetAsidePlanning {
+export function calculateSetAsidePlanning(
+  weeklyEarningsCents: number,
+  profile: PlanningProfile | null | undefined,
+  date = new Date(),
+  planningBasisWeeklyCents?: number
+): SetAsidePlanning {
   const taxEnabled = profile?.taxSetAsideEnabled ?? true;
   const superEnabled = profile?.superPlanningEnabled ?? false;
   const includeSuperInSetAsidePlanning = profile?.includeSuperInSetAsidePlanning ?? false;
@@ -101,7 +106,11 @@ export function calculateSetAsidePlanning(weeklyEarningsCents: number, profile: 
   const superRate = numeric(profile?.superContributionPercentage, 11.5);
   const gstRate = profile?.gstRegistered ? numeric(profile.gstRate, 10) : 0;
   const currentWeekEarningsCents = Math.max(0, Math.round(weeklyEarningsCents));
-  const estimatedAnnualIncomeCents = currentWeekEarningsCents * WEEKS_PER_YEAR;
+  // A single week's earnings swing wildly (e.g. $0 early Monday morning), so the annual
+  // projection is based on a smoothed 30-day average when one is available, falling back
+  // to the current week's figure only when there isn't enough history yet.
+  const basisWeeklyCents = Math.max(0, Math.round(planningBasisWeeklyCents ?? currentWeekEarningsCents)) || currentWeekEarningsCents;
+  const estimatedAnnualIncomeCents = basisWeeklyCents * WEEKS_PER_YEAR;
   const estimatedAnnualTaxCents =
     taxEnabled && customTaxRate > 0
       ? Math.round(estimatedAnnualIncomeCents * (customTaxRate / 100))

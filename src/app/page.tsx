@@ -4,6 +4,7 @@ import {
   ArrowRight,
   Banknote,
   Building2,
+  Calculator,
   ClipboardList,
   Clock3,
   FileClock,
@@ -21,7 +22,7 @@ import { requireUserId } from "@/lib/auth";
 import { getDashboardData, type DashboardData } from "@/lib/app-data";
 import { dateInputValue, formatDateAU, previousWeekMondayToSunday, todayInPerth } from "@/lib/dates";
 import { formatMoney } from "@/lib/money";
-import { calculateSetAsidePlanning } from "@/lib/planning";
+import { calculateSetAsidePlanning, formatPercent } from "@/lib/planning";
 import { formatHours, labourTotalCents } from "@/lib/time";
 import { prisma } from "@/lib/prisma";
 import { markTeamMemberPaidAction } from "@/app/team/actions";
@@ -72,6 +73,7 @@ export default async function DashboardPage() {
     totalCurrentWeekMinutes,
     totalCurrentWeekBillableCents,
     rolling30AverageDailyMinutes,
+    rolling30AverageWeeklyBillableCents,
     currentWeekEntryCount,
     unbilledEntryCount,
     unbilledItemCount,
@@ -89,7 +91,7 @@ export default async function DashboardPage() {
     year: "numeric",
     timeZone: "UTC"
   }).format(today);
-  const setAside = calculateSetAsidePlanning(totalCurrentWeekBillableCents, profile, today);
+  const setAside = calculateSetAsidePlanning(totalCurrentWeekBillableCents, profile, today, rolling30AverageWeeklyBillableCents);
   const setupStepsComplete = [Boolean(profile), projects.length > 0, currentWeekEntryCount > 0].filter(Boolean).length;
   const setupProgress = Math.round((setupStepsComplete / 3) * 100);
 
@@ -143,12 +145,33 @@ export default async function DashboardPage() {
         </div>
       </section>
 
-      <Link href="/insights" className="mt-4 flex items-center justify-between gap-4 rounded-2xl border border-line bg-white px-4 py-3.5 text-sm shadow-soft transition hover:border-mint/50 sm:px-5">
-        <span className="font-semibold text-moss">Tax set-aside estimate</span>
-        <span className="inline-flex items-center gap-2 font-black text-ink">
-          {formatMoney(setAside.combinedWeeklyCents)}
-          <ArrowRight size={16} className="text-mint" aria-hidden="true" />
-        </span>
+      <Link href="/insights" className="card mt-4 block transition hover:border-mint/50">
+        <div className="flex flex-wrap items-start justify-between gap-4">
+          <div className="flex items-start gap-3">
+            <span className="icon-tile">
+              <Calculator size={19} aria-hidden="true" />
+            </span>
+            <div>
+              <p className="font-black text-ink">Tax set-aside this week</p>
+              <p className="mt-1 text-sm font-semibold text-moss">
+                {setAside.taxEnabled ? `Based on your 30-day average earnings, annualised at ${formatPercent(setAside.estimatedEffectiveTaxRate)}.` : "Tax set-aside is switched off in Settings."}
+              </p>
+            </div>
+          </div>
+          <div className="text-right">
+            <p className="text-3xl font-black tabular-nums tracking-tight text-ink">{formatMoney(setAside.combinedWeeklyCents)}</p>
+            <span className="mt-1 inline-flex items-center gap-1 text-sm font-bold text-mint">
+              Full breakdown <ArrowRight size={15} aria-hidden="true" />
+            </span>
+          </div>
+        </div>
+        {setAside.taxEnabled || setAside.superEnabled || setAside.includeGstInTaxEstimate ? (
+          <div className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-3">
+            {setAside.taxEnabled ? <SetAsideChip label="Income tax" value={formatMoney(setAside.suggestedTaxWeeklyCents)} /> : null}
+            {setAside.includeGstInTaxEstimate ? <SetAsideChip label="GST" value={formatMoney(setAside.suggestedGstWeeklyCents)} /> : null}
+            {setAside.superEnabled && setAside.includeSuperInSetAsidePlanning ? <SetAsideChip label="Super" value={formatMoney(setAside.suggestedSuperWeeklyCents)} /> : null}
+          </div>
+        ) : null}
       </Link>
 
       {unpaidWageGroups.size ? (
@@ -374,6 +397,15 @@ function DashboardWidget({
         )}
       </div>
     </section>
+  );
+}
+
+function SetAsideChip({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="rounded-lg bg-paper p-2.5">
+      <p className="text-xs font-bold text-moss">{label}</p>
+      <p className="mt-1 font-black tabular-nums text-ink">{value}</p>
+    </div>
   );
 }
 

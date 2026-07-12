@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { ArrowLeft, Banknote, BarChart3, Calculator, Clock3, ReceiptText, ShieldCheck } from "lucide-react";
+import { ArrowLeft, Banknote, BarChart3, Calculator, Clock3, PiggyBank, ReceiptText, ShieldCheck, TrendingUp } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import type { ReactNode } from "react";
 import { FinancialYearChart, InsightCards, QuarterTrendChart } from "@/components/AnalyticsCharts";
@@ -28,6 +28,17 @@ export default async function InsightsPage() {
   const ytdEmployeeEarningsCents = billedEmployeeEntries.reduce((sum, entry) => sum + labourTotalCents(entry.durationMinutes, entry.hourlyRateCentsSnapshot), 0);
   const ytdPaidToEmployeesCents = paidEmployeeEntries.reduce((sum, entry) => sum + labourTotalCents(entry.durationMinutes, entry.payRateCentsSnapshot || 0), 0);
   const averageRate = insights.revenue.averageHourlyRateCents;
+  const setAside = insights.taxSetAside;
+
+  const takeHomeWeeklyCents = Math.max(0, insights.currentWeek.billableValueCents - setAside.combinedWeeklyCents);
+  const setAsideSegments = [
+    setAside.taxEnabled ? { label: "Income tax", cents: setAside.suggestedTaxWeeklyCents, color: "bg-gum" } : null,
+    setAside.includeGstInTaxEstimate ? { label: "GST", cents: setAside.suggestedGstWeeklyCents, color: "bg-yolk" } : null,
+    setAside.superEnabled && setAside.includeSuperInSetAsidePlanning ? { label: "Super", cents: setAside.suggestedSuperWeeklyCents, color: "bg-mint" } : null,
+    { label: "Take-home", cents: takeHomeWeeklyCents, color: "bg-ink" }
+  ].filter((segment): segment is { label: string; cents: number; color: string } => Boolean(segment));
+
+  const maxExpenseCategoryCents = Math.max(1, ...insights.expenses.byCategoryThisMonth.map((item) => item.valueCents));
 
   return (
     <main className="page-shell max-w-[92rem]">
@@ -39,21 +50,23 @@ export default async function InsightsPage() {
       </div>
 
       <section className="overflow-hidden rounded-2xl border border-line bg-white shadow-soft">
-        <div className="command-hero-bg p-5 sm:p-6 lg:p-7">
-          <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-end">
+        <div className="command-hero-bg relative overflow-hidden p-5 sm:p-6 lg:p-7">
+          <div className="pointer-events-none absolute -right-16 -top-24 size-72 rounded-full bg-white/[0.05] blur-3xl" aria-hidden="true" />
+          <div className="relative grid gap-5 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-end">
             <div>
-              <p className="inline-flex items-center gap-2 text-sm font-bold text-mint">
+              <p className="inline-flex items-center gap-2 text-sm font-bold text-white/70">
                 <BarChart3 size={17} aria-hidden="true" />
                 Insights
               </p>
-              <h1 className="mt-2 text-4xl font-black tracking-tight sm:text-5xl">Business tracking</h1>
-              <p className="mt-3 max-w-2xl text-sm font-medium leading-6 text-moss">
+              <h1 className="mt-2 text-4xl font-black tracking-tight text-white sm:text-5xl">Business tracking</h1>
+              <p className="mt-3 max-w-2xl text-sm font-medium leading-6 text-white/65">
                 Clear workload, invoice, and financial-year signals based on your logged data.
               </p>
             </div>
-            <div className="grid gap-2 sm:grid-cols-2 lg:w-[27rem]">
+            <div className="grid gap-2 sm:grid-cols-3 lg:w-[31rem]">
               <HeroMetric label="Week hours" value={`${formatHours(insights.currentWeek.totalMinutes)}h`} />
-              <HeroMetric label="Set aside" value={formatMoney(insights.taxSetAside.combinedWeeklyCents)} />
+              <HeroMetric label="Set aside" value={formatMoney(setAside.combinedWeeklyCents)} />
+              <HeroMetric label="Take-home" value={formatMoney(takeHomeWeeklyCents)} />
             </div>
           </div>
         </div>
@@ -64,35 +77,40 @@ export default async function InsightsPage() {
       </section>
 
       <section className="mt-5 grid gap-3 md:grid-cols-3">
-        <HeroMetric label="YTD paid to me" value={formatMoney(ytdPaidToMeCents)} />
-        <HeroMetric label="YTD earned from employees" value={formatMoney(ytdEmployeeEarningsCents)} />
-        <HeroMetric label="YTD paid to employees" value={formatMoney(ytdPaidToEmployeesCents)} />
+        <StatTile label="YTD paid to me" value={formatMoney(ytdPaidToMeCents)} icon={Banknote} />
+        <StatTile label="YTD earned from employees" value={formatMoney(ytdEmployeeEarningsCents)} icon={TrendingUp} />
+        <StatTile label="YTD paid to employees" value={formatMoney(ytdPaidToEmployeesCents)} icon={PiggyBank} />
       </section>
 
       <section className="mt-5 grid gap-4 xl:grid-cols-2">
-        <Panel title="Workload insights" icon={Clock3}>
-          <InsightStat label="Current week total" value={`${formatHours(insights.currentWeek.totalMinutes)}h`} />
-          <InsightStat label="30-day included-day average" value={`${formatHours(insights.rolling30.averageDailyMinutes, "minutes")}h/day`} />
-          <InsightStat label="Current week daily average" value={`${formatHours(insights.currentWeek.averageDailyMinutes, "minutes")}h/day`} />
-          <InsightStat
-            label="Difference vs 30-day average"
-            value={`${insights.currentWeek.averageDeltaMinutes >= 0 ? "+" : "-"}${formatHours(Math.abs(insights.currentWeek.averageDeltaMinutes), "minutes")}h/day`}
-          />
-          <InsightStat label="Included days in average" value={`${insights.rolling30.includedDayCount} days (${insights.rolling30.dayOffCount} day off)`} />
-          <InsightStat label="Best day this month" value={insights.workload.bestDayThisMonth ? `${formatDateAU(insights.workload.bestDayThisMonth.date)} - ${formatHours(insights.workload.bestDayThisMonth.minutes)}h` : "No hours yet"} />
-          <InsightStat label="Busiest project this month" value={insights.workload.busiestProjectThisMonth ? `${insights.workload.busiestProjectThisMonth.title} - ${formatHours(insights.workload.busiestProjectThisMonth.minutes)}h` : "No project hours yet"} />
-          <InsightStat label="Hours this month" value={`${formatHours(insights.workload.hoursThisMonthMinutes)}h`} />
-          <InsightStat label="Hours this quarter" value={`${formatHours(insights.workload.hoursThisQuarterMinutes)}h`} />
+        <Panel title="Workload" icon={Clock3}>
+          <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+            <StatTile compact label="This week" value={`${formatHours(insights.currentWeek.totalMinutes)}h`} />
+            <StatTile compact label="30-day avg/day" value={`${formatHours(insights.rolling30.averageDailyMinutes, "minutes")}h`} />
+            <StatTile
+              compact
+              label="vs 30-day pace"
+              value={`${insights.currentWeek.averageDeltaMinutes >= 0 ? "+" : "-"}${formatHours(Math.abs(insights.currentWeek.averageDeltaMinutes), "minutes")}h/day`}
+              tone={insights.currentWeek.averageDeltaMinutes >= 0 ? "mint" : "yolk"}
+            />
+            <StatTile compact label="This month" value={`${formatHours(insights.workload.hoursThisMonthMinutes)}h`} />
+            <StatTile compact label="This quarter" value={`${formatHours(insights.workload.hoursThisQuarterMinutes)}h`} />
+            <StatTile compact label="Days off (30d)" value={`${insights.rolling30.dayOffCount}`} />
+          </div>
+          <InsightRow label="Best day this month" value={insights.workload.bestDayThisMonth ? `${formatDateAU(insights.workload.bestDayThisMonth.date)} - ${formatHours(insights.workload.bestDayThisMonth.minutes)}h` : "No hours yet"} />
+          <InsightRow label="Busiest project this month" value={insights.workload.busiestProjectThisMonth ? `${insights.workload.busiestProjectThisMonth.title} - ${formatHours(insights.workload.busiestProjectThisMonth.minutes)}h` : "No project hours yet"} />
         </Panel>
 
-        <Panel title="Revenue insights" icon={Banknote}>
-          <InsightStat label="Billable value this week" value={formatMoney(insights.revenue.billableThisWeekCents)} />
-          <InsightStat label="Billable value this month" value={formatMoney(insights.revenue.billableThisMonthCents)} />
-          <InsightStat label="Paid this month" value={`${formatMoney(insights.revenue.paidThisMonthCents)} (${insights.revenue.paidThisMonthCount})`} />
-          <InsightStat label="Outstanding invoices" value={`${formatMoney(insights.revenue.outstandingCents)} (${insights.revenue.outstandingCount})`} />
-          <InsightStat label="Unbilled work" value={`${formatMoney(insights.revenue.unbilledCents)} (${insights.revenue.unbilledTimeEntryCount} time, ${insights.revenue.unbilledExpenseItemCount} expenses)`} />
-          <InsightStat label="Overdue invoices" value={`${formatMoney(insights.revenue.overdueCents)} (${insights.revenue.overdueCount})`} />
-          <InsightStat label="Average hourly rate realised" value={averageRate ? `${formatMoney(averageRate)}/h` : "Not enough data"} />
+        <Panel title="Revenue" icon={Banknote}>
+          <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+            <StatTile compact label="Billable this week" value={formatMoney(insights.revenue.billableThisWeekCents)} />
+            <StatTile compact label="Billable this month" value={formatMoney(insights.revenue.billableThisMonthCents)} />
+            <StatTile compact label="Paid this month" value={formatMoney(insights.revenue.paidThisMonthCents)} hint={`${insights.revenue.paidThisMonthCount} invoice${insights.revenue.paidThisMonthCount === 1 ? "" : "s"}`} />
+            <StatTile compact label="Outstanding" value={formatMoney(insights.revenue.outstandingCents)} hint={`${insights.revenue.outstandingCount} invoice${insights.revenue.outstandingCount === 1 ? "" : "s"}`} />
+            <StatTile compact label="Overdue" value={formatMoney(insights.revenue.overdueCents)} hint={`${insights.revenue.overdueCount} invoice${insights.revenue.overdueCount === 1 ? "" : "s"}`} tone={insights.revenue.overdueCount ? "gum" : undefined} />
+            <StatTile compact label="Avg rate realised" value={averageRate ? `${formatMoney(averageRate)}/h` : "N/A"} />
+          </div>
+          <InsightRow label="Unbilled work" value={`${formatMoney(insights.revenue.unbilledCents)} (${insights.revenue.unbilledTimeEntryCount} time, ${insights.revenue.unbilledExpenseItemCount} expenses)`} />
           <Link href="/invoices/new" className="tap-primary mt-2">
             <ReceiptText size={18} aria-hidden="true" />
             Invoice Unbilled Work
@@ -100,34 +118,85 @@ export default async function InsightsPage() {
         </Panel>
       </section>
 
-      <section className="mt-5 grid gap-4 xl:grid-cols-[0.95fr_1.05fr]">
-        <Panel title="Tax to set aside this week" icon={Calculator}>
-          <InsightStat label="Current week earnings" value={formatMoney(insights.taxSetAside.currentWeekEarningsCents)} />
-          <InsightStat label="Annualised income estimate" value={formatMoney(insights.taxSetAside.estimatedAnnualIncomeCents)} />
-          <InsightStat label="Effective tax rate estimate" value={formatPercent(insights.taxSetAside.estimatedEffectiveTaxRate)} />
-          <InsightStat label="Suggested tax this week" value={formatMoney(insights.taxSetAside.suggestedTaxWeeklyCents)} />
-          <InsightStat label="Suggested tax this month" value={formatMoney(insights.taxSetAside.suggestedTaxMonthlyCents)} />
-          {insights.taxSetAside.includeGstInTaxEstimate ? <InsightStat label="GST set-aside this week" value={formatMoney(insights.taxSetAside.suggestedGstWeeklyCents)} /> : null}
-          {insights.taxSetAside.superEnabled ? <InsightStat label="Super estimate this week" value={formatMoney(insights.taxSetAside.suggestedSuperWeeklyCents)} /> : null}
-          <InsightStat label="Combined set-aside this week" value={formatMoney(insights.taxSetAside.combinedWeeklyCents)} />
-          <p className="rounded-lg border border-line bg-paper p-3 text-xs font-bold leading-5 text-moss">
-            Estimate only, not tax advice. Uses your current week billable value annualised across the {insights.taxSetAside.financialYear} Australian resident brackets unless a custom percentage is set.
+      <section className="mt-5 grid gap-4 xl:grid-cols-[1.05fr_0.95fr]">
+        <Panel title="Tax &amp; super planning" icon={Calculator}>
+          <p className="text-sm font-semibold leading-6 text-moss">
+            Based on a smoothed 30-day average of your billable earnings (not just this single week), annualised at an estimated{" "}
+            <strong className="text-ink">{formatPercent(setAside.estimatedEffectiveTaxRate)}</strong> effective rate.
           </p>
+
+          {setAsideSegments.length ? (
+            <div>
+              <div className="flex h-4 overflow-hidden rounded-full border border-line">
+                {setAsideSegments.map((segment) => (
+                  <div
+                    key={segment.label}
+                    className={segment.color}
+                    style={{ width: `${Math.max(2, Math.round((segment.cents / Math.max(1, insights.currentWeek.billableValueCents)) * 100))}%` }}
+                    title={`${segment.label}: ${formatMoney(segment.cents)}`}
+                  />
+                ))}
+              </div>
+              <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-4">
+                {setAsideSegments.map((segment) => (
+                  <div key={segment.label} className="rounded-lg bg-paper p-2.5">
+                    <span className="inline-flex items-center gap-1.5 text-xs font-bold text-moss">
+                      <span className={`size-2 rounded-full ${segment.color}`} aria-hidden="true" />
+                      {segment.label}
+                    </span>
+                    <p className="mt-1 font-black tabular-nums text-ink">{formatMoney(segment.cents)}</p>
+                  </div>
+                ))}
+              </div>
+            </div>
+          ) : (
+            <p className="rounded-lg border border-line bg-paper p-3 text-sm font-bold text-moss">
+              Tax and super planning are switched off. Turn them on in Settings to see a breakdown here.
+            </p>
+          )}
+
+          <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+            <StatTile compact label="Suggested this week" value={formatMoney(setAside.combinedWeeklyCents)} />
+            <StatTile compact label="Suggested this month" value={formatMoney(setAside.combinedMonthlyCents)} />
+            <StatTile compact label="Annualised income est." value={formatMoney(setAside.estimatedAnnualIncomeCents)} />
+          </div>
+
+          <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-line bg-paper p-3 text-xs font-bold leading-5 text-moss">
+            <p>
+              Estimate only, not tax advice. Uses the {setAside.financialYear} Australian resident brackets{setAside.customTaxRate ? ", overridden by your custom rate" : ""}.
+            </p>
+            <Link href="/settings" className="shrink-0 text-mint">
+              Adjust in Settings
+            </Link>
+          </div>
         </Panel>
 
-        <Panel title="Expense insights" icon={ShieldCheck}>
-          <InsightStat label="Work expenses this month" value={formatMoney(insights.expenses.thisMonthCents)} />
-          <InsightStat label="Work expenses this financial year" value={formatMoney(insights.expenses.financialYearCents)} />
-          <InsightStat label="General expenses this FY" value={formatMoney(insights.expenses.generalFinancialYearCents)} />
-          <InsightStat
-            label="Largest category this month"
-            value={insights.expenses.largestCategoryThisMonth ? `${insights.expenses.byCategoryThisMonth[0]?.label ?? insights.expenses.largestCategoryThisMonth.category} - ${formatMoney(insights.expenses.largestCategoryThisMonth.valueCents)}` : "No expenses yet"}
-          />
-          <div className="grid gap-2">
-            {insights.expenses.byCategoryThisMonth.slice(0, 4).map((item) => (
-              <InsightStat key={item.category} label={item.label} value={formatMoney(item.valueCents)} />
-            ))}
+        <Panel title="Expenses" icon={ShieldCheck}>
+          <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+            <StatTile compact label="This month" value={formatMoney(insights.expenses.thisMonthCents)} />
+            <StatTile compact label="This financial year" value={formatMoney(insights.expenses.financialYearCents)} />
+            <StatTile compact label="General (no project)" value={formatMoney(insights.expenses.generalFinancialYearCents)} />
           </div>
+
+          {insights.expenses.byCategoryThisMonth.length ? (
+            <div className="grid gap-2">
+              <p className="text-xs font-bold uppercase tracking-[0.08em] text-moss">By category this month</p>
+              {insights.expenses.byCategoryThisMonth.slice(0, 6).map((item) => (
+                <div key={item.category} className="grid gap-1">
+                  <div className="flex items-center justify-between text-sm">
+                    <span className="font-bold text-ink">{item.label}</span>
+                    <span className="font-black tabular-nums text-ink">{formatMoney(item.valueCents)}</span>
+                  </div>
+                  <div className="h-2 overflow-hidden rounded-full bg-paper">
+                    <div className="h-full rounded-full bg-mint" style={{ width: `${Math.max(3, Math.round((item.valueCents / maxExpenseCategoryCents) * 100))}%` }} />
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <p className="rounded-lg border border-line bg-paper p-3 text-sm font-bold text-moss">No work expenses logged this month.</p>
+          )}
+
           <Link href="/expenses" className="tap-secondary mt-2">
             <ReceiptText size={18} aria-hidden="true" />
             Open Expenses
@@ -145,9 +214,9 @@ export default async function InsightsPage() {
 
 function HeroMetric({ label, value }: { label: string; value: string }) {
   return (
-    <div className="rounded-[10px] border border-line bg-paper/55 p-4">
-      <p className="text-xs font-bold text-moss">{label}</p>
-      <p className="mt-2 text-3xl font-black tracking-tight text-ink">{value}</p>
+    <div className="rounded-xl border border-white/12 bg-white/[0.06] p-4">
+      <p className="text-xs font-bold text-white/60">{label}</p>
+      <p className="mt-2 text-2xl font-black tabular-nums tracking-tight text-white sm:text-3xl">{value}</p>
     </div>
   );
 }
@@ -161,14 +230,42 @@ function Panel({ title, icon: Icon, children }: { title: string; icon: LucideIco
         </span>
         <h2 className="text-2xl font-black tracking-tight">{title}</h2>
       </div>
-      <div className="grid gap-2 p-4">{children}</div>
+      <div className="grid gap-4 p-4">{children}</div>
     </section>
   );
 }
 
-function InsightStat({ label, value }: { label: string; value: string }) {
+function StatTile({
+  label,
+  value,
+  hint,
+  icon: Icon,
+  compact = false,
+  tone
+}: {
+  label: string;
+  value: string;
+  hint?: string;
+  icon?: LucideIcon;
+  compact?: boolean;
+  tone?: "mint" | "gum" | "yolk";
+}) {
+  const toneClass = tone === "gum" ? "text-gum" : tone === "mint" ? "text-mint" : tone === "yolk" ? "text-yolk" : "text-ink";
   return (
-    <div className="flex flex-col gap-1 rounded-[10px] border border-line bg-paper/55 p-3 sm:flex-row sm:items-center sm:justify-between">
+    <div className={`rounded-lg border border-line bg-paper/55 ${compact ? "p-3" : "p-4"}`}>
+      <div className="flex items-center justify-between gap-2">
+        <p className="text-xs font-bold text-moss">{label}</p>
+        {Icon ? <Icon size={16} className="text-moss" aria-hidden="true" /> : null}
+      </div>
+      <p className={`mt-1.5 font-black tabular-nums tracking-tight ${toneClass} ${compact ? "text-lg" : "text-2xl"}`}>{value}</p>
+      {hint ? <p className="mt-0.5 text-xs font-semibold text-moss">{hint}</p> : null}
+    </div>
+  );
+}
+
+function InsightRow({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="flex flex-col gap-1 rounded-lg border border-line bg-paper/55 p-3 sm:flex-row sm:items-center sm:justify-between">
       <span className="text-sm font-bold text-moss">{label}</span>
       <span className="font-black text-ink">{value}</span>
     </div>

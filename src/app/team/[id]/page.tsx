@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { ArrowLeft, BriefcaseBusiness, Clock3, PauseCircle, WalletCards } from "lucide-react";
-import { createProjectAssignmentAction, markTeamMemberPaidAction, reverseWagePaymentAction, stopProjectAssignmentAction, updateWagePaymentAction } from "@/app/team/actions";
+import { ArrowLeft, BriefcaseBusiness, Clock3, PauseCircle, Trash2, WalletCards } from "lucide-react";
+import { createProjectAssignmentAction, deleteTeamTimeEntryAction, markTeamMemberPaidAction, reverseWagePaymentAction, stopProjectAssignmentAction, updateWagePaymentAction } from "@/app/team/actions";
 import { ConfirmSubmitButton } from "@/components/ConfirmSubmitButton";
 import { LiveTeamRefresh } from "@/components/LiveTeamRefresh";
 import { requireUserId } from "@/lib/auth";
@@ -106,12 +106,36 @@ export default async function TeamMemberPage({ params }: { params: Promise<{ id:
       <section className="mt-7">
         <h2 className="text-xl font-black">Time history</h2>
         <div className="mt-3 grid gap-3">
-          {member.timeEntries.length ? member.timeEntries.map((entry) => (
-            <article key={entry.id} className="card flex items-start justify-between gap-4">
-              <div><p className="font-black">{entry.project.title}</p><p className="mt-1 text-sm font-medium text-moss">{formatDateAU(entry.date)} · {entry.approvalStatus?.toLowerCase()} · {entry.paymentStatus?.toLowerCase()}</p>{entry.notes ? <p className="mt-2 text-sm text-moss">{entry.notes}</p> : null}</div>
-              <div className="text-right"><p className="text-lg font-black">{formatHours(entry.durationMinutes)}h</p><p className="text-sm font-semibold text-moss">{formatMoney(labourTotalCents(entry.durationMinutes, entry.payRateCentsSnapshot || 0))}</p></div>
-            </article>
-          )) : <p className="rounded-2xl border border-line bg-white p-4 text-sm font-medium text-moss"><Clock3 className="mr-2 inline" size={18} aria-hidden="true" />No team hours logged yet.</p>}
+          {member.timeEntries.length ? member.timeEntries.map((entry) => {
+            const canDelete = entry.billingStatus === "UNBILLED" && entry.paymentStatus !== "PAID";
+            return (
+              <article key={entry.id} className="card flex items-start justify-between gap-4">
+                <div><p className="font-black">{entry.project.title}</p><p className="mt-1 text-sm font-medium text-moss">{formatDateAU(entry.date)} · {entry.approvalStatus?.toLowerCase()} · {entry.paymentStatus?.toLowerCase()}</p>{entry.notes ? <p className="mt-2 text-sm text-moss">{entry.notes}</p> : null}</div>
+                <div className="text-right">
+                  <p className="text-lg font-black">{formatHours(entry.durationMinutes)}h</p>
+                  <p className="text-sm font-semibold text-moss">{formatMoney(labourTotalCents(entry.durationMinutes, entry.payRateCentsSnapshot || 0))}</p>
+                  {canDelete ? (
+                    <form action={deleteTeamTimeEntryAction} className="mt-2">
+                      <input type="hidden" name="entryId" value={entry.id} />
+                      <ConfirmSubmitButton
+                        className="tap-danger min-h-9 px-3 py-1.5 text-xs"
+                        message={`Delete this ${formatHours(entry.durationMinutes)}h entry for ${member.displayName}? This cannot be undone.`}
+                        pendingLabel="Deleting..."
+                        showDefaultIcon={false}
+                      >
+                        <Trash2 size={14} aria-hidden="true" />
+                        Delete
+                      </ConfirmSubmitButton>
+                    </form>
+                  ) : entry.billingStatus === "BILLED" ? (
+                    <p className="mt-2 text-xs font-bold text-moss">Billed · locked</p>
+                  ) : (
+                    <p className="mt-2 text-xs font-bold text-moss">Paid · reverse payment to edit</p>
+                  )}
+                </div>
+              </article>
+            );
+          }) : <p className="rounded-2xl border border-line bg-white p-4 text-sm font-medium text-moss"><Clock3 className="mr-2 inline" size={18} aria-hidden="true" />No team hours logged yet.</p>}
         </div>
       </section>
     </main>

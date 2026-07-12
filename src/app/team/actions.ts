@@ -196,6 +196,38 @@ export async function createSubcontractorTimeEntryAction(formData: FormData) {
   redirect(safeReturnTo(formData, "/team/work?saved=1"));
 }
 
+export async function deleteTeamTimeEntryAction(formData: FormData) {
+  const user = await requireUser();
+  const entryId = value(formData, "entryId");
+  const entry = await prisma.timeEntry.findFirst({
+    where: { id: entryId, ownerId: user.id, teamMemberId: { not: null } },
+    select: { id: true, projectId: true, teamMemberId: true, billingStatus: true, paymentStatus: true }
+  });
+  if (!entry) throw new Error("Time entry not found.");
+  if (entry.billingStatus !== "UNBILLED") throw new Error("Billed time entries cannot be deleted. Unbill the invoice first.");
+  if (entry.paymentStatus === "PAID") throw new Error("Paid hours cannot be deleted. Reverse the wage payment first.");
+
+  await prisma.timeEntry.delete({ where: { id: entryId } });
+  revalidateTeam(entry.projectId);
+  redirect(safeReturnTo(formData, `/team/${entry.teamMemberId}`));
+}
+
+export async function deleteMyTimeEntryAction(formData: FormData) {
+  const user = await requireUser();
+  const entryId = value(formData, "entryId");
+  const entry = await prisma.timeEntry.findFirst({
+    where: { id: entryId, createdByUserId: user.id, teamMemberId: { not: null } },
+    select: { id: true, projectId: true, billingStatus: true, paymentStatus: true }
+  });
+  if (!entry) throw new Error("Time entry not found.");
+  if (entry.billingStatus !== "UNBILLED") throw new Error("Billed hours cannot be deleted. Ask the project owner to unbill the invoice first.");
+  if (entry.paymentStatus === "PAID") throw new Error("Paid hours cannot be deleted. Ask the project owner to reverse the wage payment first.");
+
+  await prisma.timeEntry.delete({ where: { id: entryId } });
+  revalidateTeam(entry.projectId);
+  redirect(safeReturnTo(formData, "/team/work"));
+}
+
 export async function markTeamMemberPaidAction(formData: FormData) {
   const user = await requireUser();
   const teamMemberId = value(formData, "teamMemberId");

@@ -23,21 +23,31 @@ export default async function EditProjectPage({
   const query = await searchParams;
   const deleteError = typeof query?.deleteError === "string" ? query.deleteError : "";
   const ownerId = await requireUserId();
-  const [project, clients, invoiceCount, billedTimeCount, billedExpenseCount] = await Promise.all([
+  const [project, clients, invoiceCount, billedTimeCount, billedExpenseCount, wagePaymentCount, unbilledTimeCount, unbilledExpenseCount, assignmentCount] = await Promise.all([
     prisma.project.findFirst({ where: { id, ownerId }, include: { client: true } }),
     prisma.client.findMany({ where: { ownerId }, orderBy: { businessName: "asc" } }),
     prisma.invoice.count({ where: { projectId: id, ownerId } }),
     prisma.timeEntry.count({ where: { projectId: id, ownerId, billingStatus: "BILLED" } }),
-    prisma.expenseItem.count({ where: { projectId: id, ownerId, billingStatus: "BILLED" } })
+    prisma.expenseItem.count({ where: { projectId: id, ownerId, billingStatus: "BILLED" } }),
+    prisma.wagePayment.count({ where: { projectId: id, ownerId } }),
+    prisma.timeEntry.count({ where: { projectId: id, ownerId, billingStatus: "UNBILLED" } }),
+    prisma.expenseItem.count({ where: { projectId: id, ownerId, billingStatus: "UNBILLED" } }),
+    prisma.projectAssignment.count({ where: { projectId: id, ownerId } })
   ]);
 
   if (!project) notFound();
   const deleteBlockers = [
     invoiceCount ? `${invoiceCount} invoice${invoiceCount === 1 ? "" : "s"}` : "",
     billedTimeCount ? `${billedTimeCount} billed time entr${billedTimeCount === 1 ? "y" : "ies"}` : "",
-    billedExpenseCount ? `${billedExpenseCount} billed expense item${billedExpenseCount === 1 ? "" : "s"}` : ""
+    billedExpenseCount ? `${billedExpenseCount} billed expense item${billedExpenseCount === 1 ? "" : "s"}` : "",
+    wagePaymentCount ? `${wagePaymentCount} recorded wage payment${wagePaymentCount === 1 ? "" : "s"}` : ""
   ].filter(Boolean);
   const canDelete = deleteBlockers.length === 0;
+  const deleteWipesAway = [
+    unbilledTimeCount ? `${unbilledTimeCount} unbilled time entr${unbilledTimeCount === 1 ? "y" : "ies"}` : "",
+    unbilledExpenseCount ? `${unbilledExpenseCount} unbilled expense item${unbilledExpenseCount === 1 ? "" : "s"}` : "",
+    assignmentCount ? `${assignmentCount} subcontractor assignment${assignmentCount === 1 ? "" : "s"}` : ""
+  ].filter(Boolean);
 
   return (
     <main className="page-shell">
@@ -127,7 +137,11 @@ export default async function EditProjectPage({
                   <input type="hidden" name="projectId" value={project.id} />
                   <ConfirmSubmitButton
                     className="tap-danger w-full"
-                    message={`Delete ${project.title} permanently? This cannot be undone.`}
+                    message={
+                      deleteWipesAway.length
+                        ? `Delete ${project.title} permanently? This will also permanently remove ${deleteWipesAway.join(", ")}. This cannot be undone.`
+                        : `Delete ${project.title} permanently? This cannot be undone.`
+                    }
                     pendingLabel="Checking..."
                   >
                     Delete Project

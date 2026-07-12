@@ -44,6 +44,7 @@ export type Rolling30Stats = {
   dayOffCount: number;
   averageDailyMinutes: number;
   loggedDayAverageMinutes: number;
+  averageWeeklyBillableCents: number;
 };
 
 export type QuarterTrendPoint = {
@@ -122,6 +123,7 @@ type InsightRow = {
   totalCurrentWeekMinutes: Numeric;
   totalCurrentWeekBillableCents: Numeric;
   rolling30TotalMinutes: Numeric;
+  rolling30BillableCents: Numeric;
   rolling30LoggedDayCount: Numeric;
   rolling30IncludedDayCount: Numeric;
   rolling30DayOffCount: Numeric;
@@ -274,7 +276,8 @@ export async function loadInsightsData(ownerId: string): Promise<InsightsData> {
     rolling_30_time_by_day AS (
       SELECT
         t.date::date AS date_key,
-        COALESCE(SUM(t."durationMinutes"), 0) AS minutes
+        COALESCE(SUM(t."durationMinutes"), 0) AS minutes,
+        COALESCE(SUM(ROUND((t."durationMinutes"::numeric / 60) * t."hourlyRateCentsSnapshot")), 0) AS billable_cents
       FROM "TimeEntry" t
       CROSS JOIN bounds b
       WHERE t."ownerId" = ${ownerId}
@@ -295,6 +298,7 @@ export async function loadInsightsData(ownerId: string): Promise<InsightsData> {
     rolling_30 AS (
       SELECT
         COALESCE(SUM(COALESCE(t.minutes, 0)), 0) AS total_minutes,
+        COALESCE(SUM(COALESCE(t.billable_cents, 0)), 0) AS total_billable_cents,
         COUNT(t.date_key) FILTER (WHERE COALESCE(t.minutes, 0) > 0) AS logged_day_count,
         COUNT(*) AS included_day_count,
         COUNT(d.date_key) AS day_off_count
@@ -540,6 +544,7 @@ export async function loadInsightsData(ownerId: string): Promise<InsightsData> {
       current_week_entries.total_minutes AS "totalCurrentWeekMinutes",
       current_week_entries.billable_value AS "totalCurrentWeekBillableCents",
       rolling_30.total_minutes AS "rolling30TotalMinutes",
+      rolling_30.total_billable_cents AS "rolling30BillableCents",
       rolling_30.logged_day_count AS "rolling30LoggedDayCount",
       rolling_30.included_day_count AS "rolling30IncludedDayCount",
       rolling_30.day_off_count AS "rolling30DayOffCount",
@@ -618,6 +623,9 @@ export async function loadInsightsData(ownerId: string): Promise<InsightsData> {
   const rolling30IncludedDayCount = numberValue(row?.rolling30IncludedDayCount);
   const rolling30DayOffCount = numberValue(row?.rolling30DayOffCount);
   const rolling30AverageDailyMinutes = rolling30IncludedDayCount ? numberValue(row?.rolling30TotalMinutes) / rolling30IncludedDayCount : 0;
+  const rolling30AverageWeeklyBillableCents = rolling30IncludedDayCount
+    ? Math.round((numberValue(row?.rolling30BillableCents) / rolling30IncludedDayCount) * 7)
+    : 0;
   const currentWeekAverageDailyMinutes = numberValue(row?.totalCurrentWeekMinutes) / elapsedDays;
   const monthMinutes = numberValue(row?.hoursThisMonthMinutes);
   const billableThisMonthCents = numberValue(row?.billableThisMonthCents);
@@ -697,7 +705,7 @@ export async function loadInsightsData(ownerId: string): Promise<InsightsData> {
       valueCents: numberValue(item.valueCents)
     }))
   };
-  const taxSetAside = calculateSetAsidePlanning(revenue.billableThisWeekCents, profile, today);
+  const taxSetAside = calculateSetAsidePlanning(revenue.billableThisWeekCents, profile, today, rolling30AverageWeeklyBillableCents);
 
   const topUnbilledProject = row?.topUnbilledProject
     ? { title: row.topUnbilledProject.title, valueCents: numberValue(row.topUnbilledProject.valueCents) }
@@ -818,7 +826,8 @@ export async function loadInsightsData(ownerId: string): Promise<InsightsData> {
       includedDayCount: rolling30IncludedDayCount,
       dayOffCount: rolling30DayOffCount,
       averageDailyMinutes: rolling30AverageDailyMinutes,
-      loggedDayAverageMinutes: rolling30LoggedDayCount ? numberValue(row?.rolling30TotalMinutes) / rolling30LoggedDayCount : 0
+      loggedDayAverageMinutes: rolling30LoggedDayCount ? numberValue(row?.rolling30TotalMinutes) / rolling30LoggedDayCount : 0,
+      averageWeeklyBillableCents: rolling30AverageWeeklyBillableCents
     },
     workload: {
       hoursThisMonthMinutes: monthMinutes,

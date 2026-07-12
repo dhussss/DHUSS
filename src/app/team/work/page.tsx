@@ -1,6 +1,8 @@
 import Link from "next/link";
-import { ArrowLeft, BriefcaseBusiness, CheckCircle2, Clock3 } from "lucide-react";
+import { ArrowLeft, BriefcaseBusiness, CheckCircle2, Clock3, Trash2 } from "lucide-react";
+import { deleteMyTimeEntryAction } from "@/app/team/actions";
 import { SubcontractorTimeForm } from "@/components/SubcontractorTimeForm";
+import { ConfirmSubmitButton } from "@/components/ConfirmSubmitButton";
 import { LiveTeamRefresh } from "@/components/LiveTeamRefresh";
 import { requireUser } from "@/lib/auth";
 import { formatDateAU } from "@/lib/dates";
@@ -46,7 +48,38 @@ export default async function AssignedWorkPage() {
       <section className="mt-7">
         <div className="flex items-end justify-between gap-4"><div><p className="section-title">Recent entries</p><h2 className="mt-1 text-xl font-black">My submitted hours</h2></div><div className="text-right"><p className="text-sm font-semibold text-moss">Approved unpaid</p><p className="font-black">{formatMoney(unpaidCents)}</p></div></div>
         <div className="mt-3 grid gap-3">
-          {entries.length ? entries.map((entry) => <article key={entry.id} className="card flex items-start justify-between gap-4"><div><p className="font-black">{entry.project.title}</p><p className="mt-1 text-sm font-medium text-moss">{formatDateAU(entry.date)} · {entry.billingStatus.toLowerCase()}</p>{entry.notes ? <p className="mt-2 text-sm text-moss">{entry.notes}</p> : null}{entry.wagePayment ? <p className="mt-2 text-xs font-bold text-mint">Paid {formatDateAU(entry.wagePayment.paidAt)}{entry.wagePayment.reference ? ` · Ref ${entry.wagePayment.reference}` : ""}</p> : null}</div><div className="text-right"><p className="text-lg font-black">{formatHours(entry.durationMinutes)}h</p><p className="text-sm font-semibold text-moss">{formatMoney(labourTotalCents(entry.durationMinutes, entry.payRateCentsSnapshot || 0))}</p>{entry.paymentStatus === "PAID" ? <CheckCircle2 className="ml-auto mt-2 text-mint" size={17} aria-label="Paid" /> : null}</div></article>) : <p className="rounded-2xl border border-line bg-white p-4 text-sm font-medium text-moss"><Clock3 className="mr-2 inline" size={18} aria-hidden="true" />No hours logged yet.</p>}
+          {entries.length ? entries.map((entry) => {
+            const canDelete = entry.billingStatus === "UNBILLED" && entry.paymentStatus !== "PAID";
+            return (
+              <article key={entry.id} className="card flex items-start justify-between gap-4">
+                <div>
+                  <p className="font-black">{entry.project.title}</p>
+                  <p className="mt-1 text-sm font-medium text-moss">{formatDateAU(entry.date)} · {entry.billingStatus.toLowerCase()}</p>
+                  {entry.notes ? <p className="mt-2 text-sm text-moss">{entry.notes}</p> : null}
+                  {entry.wagePayment ? <p className="mt-2 text-xs font-bold text-mint">Paid {formatDateAU(entry.wagePayment.paidAt)}{entry.wagePayment.reference ? ` · Ref ${entry.wagePayment.reference}` : ""}</p> : null}
+                </div>
+                <div className="text-right">
+                  <p className="text-lg font-black">{formatHours(entry.durationMinutes)}h</p>
+                  <p className="text-sm font-semibold text-moss">{formatMoney(labourTotalCents(entry.durationMinutes, entry.payRateCentsSnapshot || 0))}</p>
+                  {entry.paymentStatus === "PAID" ? <CheckCircle2 className="ml-auto mt-2 text-mint" size={17} aria-label="Paid" /> : null}
+                  {canDelete ? (
+                    <form action={deleteMyTimeEntryAction} className="mt-2">
+                      <input type="hidden" name="entryId" value={entry.id} />
+                      <ConfirmSubmitButton
+                        className="tap-danger min-h-9 px-3 py-1.5 text-xs"
+                        message={`Delete this ${formatHours(entry.durationMinutes)}h entry for ${entry.project.title}? This cannot be undone.`}
+                        pendingLabel="Deleting..."
+                        showDefaultIcon={false}
+                      >
+                        <Trash2 size={14} aria-hidden="true" />
+                        Delete
+                      </ConfirmSubmitButton>
+                    </form>
+                  ) : null}
+                </div>
+              </article>
+            );
+          }) : <p className="rounded-2xl border border-line bg-white p-4 text-sm font-medium text-moss"><Clock3 className="mr-2 inline" size={18} aria-hidden="true" />No hours logged yet.</p>}
         </div>
       </section>
     </main>
