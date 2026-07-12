@@ -315,7 +315,6 @@ export async function loadDashboardData(ownerId: string): Promise<DashboardData>
         SELECT "projectId", COALESCE(SUM("totalCostCents"), 0) AS value_cents
         FROM "ExpenseItem"
         WHERE "billingStatus" = 'UNBILLED' AND "ownerId" = ${ownerId}
-          AND ("teamMemberId" IS NULL OR "approvalStatus" = 'APPROVED')
         GROUP BY "projectId"
       ) item_totals ON item_totals."projectId" = p.id
       WHERE p.status = 'ACTIVE' AND p."ownerId" = ${ownerId}
