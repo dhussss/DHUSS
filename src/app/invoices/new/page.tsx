@@ -31,7 +31,10 @@ export default async function NewInvoicePage({
       id: true,
       title: true,
       client: { select: { businessName: true, email: true } },
-      timeEntries: { where: { billingStatus: "UNBILLED" }, select: { durationMinutes: true } },
+      timeEntries: {
+        where: { billingStatus: "UNBILLED", OR: [{ teamMemberId: null }, { approvalStatus: "APPROVED" }] },
+        select: { durationMinutes: true }
+      },
       expenseItems: { where: { billingStatus: "UNBILLED" }, select: { id: true } }
     },
     orderBy: { title: "asc" }
@@ -68,7 +71,13 @@ export default async function NewInvoicePage({
       } else {
         [entries, expenses] = await Promise.all([
           prisma.timeEntry.findMany({
-            where: { projectId, ownerId, billingStatus: "UNBILLED", date: { gte: start, lte: end } },
+            where: {
+              projectId,
+              ownerId,
+              billingStatus: "UNBILLED",
+              OR: [{ teamMemberId: null }, { approvalStatus: "APPROVED" }],
+              date: { gte: start, lte: end }
+            },
             select: { id: true, date: true, durationMinutes: true, notes: true, hourlyRateCentsSnapshot: true },
             orderBy: [{ date: "asc" }, { createdAt: "asc" }]
           }),

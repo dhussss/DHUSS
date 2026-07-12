@@ -43,6 +43,7 @@ export default async function ProjectDetailPage({ params }: { params: Promise<{ 
       where: {
         projectId: id,
         ownerId,
+        OR: [{ teamMemberId: null }, { approvalStatus: "APPROVED" }],
         date: { gte: calendarStart, lte: calendarEnd }
       },
       select: { date: true, durationMinutes: true }
@@ -72,7 +73,9 @@ export default async function ProjectDetailPage({ params }: { params: Promise<{ 
     start: rangeStart,
     end: rangeEnd
   });
-  const unbilledTimeEntries = project.timeEntries.filter((entry) => entry.billingStatus === "UNBILLED");
+  const unbilledTimeEntries = project.timeEntries.filter(
+    (entry) => entry.billingStatus === "UNBILLED" && (!entry.teamMemberId || entry.approvalStatus === "APPROVED")
+  );
   const unbilledExpenseItems = project.expenseItems.filter((item) => item.billingStatus === "UNBILLED");
   const unbilledMinutes = unbilledTimeEntries.reduce((sum, entry) => sum + entry.durationMinutes, 0);
   const unbilledTimeValueCents = unbilledTimeEntries.reduce(
@@ -93,7 +96,7 @@ export default async function ProjectDetailPage({ params }: { params: Promise<{ 
         Projects
       </Link>
 
-      <header className="overflow-hidden rounded-lg border border-line bg-white shadow-soft">
+      <header className="overflow-hidden rounded-xl border border-line bg-white shadow-soft">
         <div className="grid gap-5 p-5 sm:p-6 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-end">
           <div>
             <div className="flex flex-wrap items-center gap-2">
@@ -106,8 +109,8 @@ export default async function ProjectDetailPage({ params }: { params: Promise<{ 
               )}
             </div>
             <h1 className="mt-3 text-4xl font-black tracking-normal">{project.title}</h1>
-            <p className="mt-2 text-base font-bold text-moss">{project.client.businessName}</p>
-            {project.notes ? <p className="mt-4 max-w-3xl text-sm font-bold leading-6 text-moss">{project.notes}</p> : null}
+            <p className="mt-2 text-base font-semibold text-moss">{project.client.businessName}</p>
+            {project.notes ? <p className="mt-4 max-w-3xl text-sm font-medium leading-6 text-moss">{project.notes}</p> : null}
           </div>
           <div className="flex flex-col gap-2 sm:flex-row">
             <Link href={`/projects/${project.id}/edit`} className="tap-secondary">
@@ -139,8 +142,8 @@ export default async function ProjectDetailPage({ params }: { params: Promise<{ 
         </div>
       </header>
 
-      <section className={`mt-4 overflow-hidden rounded-lg border shadow-soft ${hasUnbilledWork ? "border-mint/30 bg-ink text-white" : "border-line bg-white"}`}>
-        <div className={`grid gap-5 p-5 sm:p-6 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-center ${hasUnbilledWork ? "accent-glow-bg" : ""}`}>
+      <section className={`mt-4 overflow-hidden rounded-xl border bg-white shadow-soft ${hasUnbilledWork ? "border-mint/35" : "border-line"}`}>
+        <div className="grid gap-5 p-5 sm:p-6 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-center">
           <div>
             <div className="flex items-center gap-2">
               {hasUnbilledWork ? (
@@ -148,25 +151,25 @@ export default async function ProjectDetailPage({ params }: { params: Promise<{ 
               ) : (
                 <CheckCircle2 size={22} className="text-moss" aria-hidden="true" />
               )}
-              <p className={`text-sm font-black uppercase ${hasUnbilledWork ? "text-mint" : "text-moss"}`}>Unbilled Work</p>
+              <p className={`text-sm font-bold ${hasUnbilledWork ? "text-mint" : "text-moss"}`}>Unbilled work</p>
             </div>
-            <h2 className={`mt-3 text-4xl font-black tracking-normal sm:text-5xl ${hasUnbilledWork ? "text-white" : "text-ink"}`}>
+            <h2 className="mt-3 text-4xl font-black tracking-normal text-ink sm:text-5xl">
               {hasUnbilledWork ? formatMoney(unbilledTotalCents) : "All caught up"}
             </h2>
-            <p className={`mt-2 text-sm font-bold leading-6 ${hasUnbilledWork ? "text-white/70" : "text-moss"}`}>
+            <p className="mt-2 text-sm font-medium leading-6 text-moss">
               {hasUnbilledWork
                 ? "Time and expenses below are still unbilled. Create the invoice directly from this project when you are ready."
                 : "There are no unbilled time entries or expense items on this project."}
             </p>
           </div>
           {hasUnbilledWork && project.status === "ACTIVE" ? (
-            <Link href={`/invoices/new?${projectQuery.toString()}`} className="tap-primary bg-mint px-5 text-base hover:bg-white hover:text-ink">
+            <Link href={`/invoices/new?${projectQuery.toString()}`} className="tap-primary px-5 text-base">
               <FilePlus size={22} aria-hidden="true" />
               Invoice Unbilled Work
             </Link>
           ) : null}
         </div>
-        <div className={`grid gap-3 border-t p-4 sm:grid-cols-2 xl:grid-cols-4 ${hasUnbilledWork ? "border-white/10 bg-black/10" : "border-line bg-paper/40"}`}>
+        <div className="grid gap-3 border-t border-line bg-paper/40 p-4 sm:grid-cols-2 xl:grid-cols-4">
           <UnbilledStat label="Hours" value={`${formatHours(unbilledMinutes)}h`} dark={hasUnbilledWork} />
           <UnbilledStat label="Labour" value={formatMoney(unbilledTimeValueCents)} dark={hasUnbilledWork} />
           <UnbilledStat label="Expenses" value={formatMoney(unbilledExpenseValueCents)} dark={hasUnbilledWork} />
@@ -193,6 +196,14 @@ export default async function ProjectDetailPage({ params }: { params: Promise<{ 
                   <div className="flex items-start justify-between gap-3">
                     <div>
                       <p className="font-black">{formatDateAU(entry.date)}</p>
+                      {entry.workerDisplayNameSnapshot ? <p className="mt-1 text-sm font-semibold text-mint">{entry.workerDisplayNameSnapshot}</p> : null}
+                      {entry.teamMemberId ? (
+                        <p className="mt-1 text-xs font-bold uppercase text-moss">
+                          {entry.approvalStatus === "APPROVED"
+                            ? "Approved team hours"
+                            : `${(entry.approvalStatus ?? "submitted").toLowerCase()} team hours`}
+                        </p>
+                      ) : null}
                       <p className="mt-1 text-sm font-bold text-moss">
                         {entry.startTime && entry.endTime ? `${entry.startTime} - ${entry.endTime}` : "Manual hours"}
                       </p>
@@ -205,7 +216,7 @@ export default async function ProjectDetailPage({ params }: { params: Promise<{ 
                       {entry.billingStatus.toLowerCase()} at {formatMoney(entry.hourlyRateCentsSnapshot)}/h -{" "}
                       {formatMoney(labourTotalCents(entry.durationMinutes, entry.hourlyRateCentsSnapshot))}
                     </p>
-                    {entry.billingStatus === "UNBILLED" ? (
+                    {entry.billingStatus === "UNBILLED" && !entry.teamMemberId ? (
                       <div className="flex gap-2">
                         <Link href={`/projects/${project.id}/time-entries/${entry.id}/edit`} className="tap-secondary px-3">
                           <Edit size={18} aria-hidden="true" />
@@ -368,8 +379,8 @@ function ProjectMetric({
   return (
     <article className={`card min-h-32 ${highlight ? "border-mint/30 bg-mint/10" : ""}`}>
       <div className="flex items-start justify-between gap-3">
-        <p className="text-sm font-black uppercase text-moss">{label}</p>
-        <span className={`grid size-10 place-items-center rounded-lg ${highlight ? "bg-white text-mint" : "bg-paper text-moss"}`}>
+        <p className="text-sm font-bold text-moss">{label}</p>
+        <span className={`grid size-10 place-items-center rounded-[10px] ${highlight ? "bg-white text-mint" : "bg-paper text-moss"}`}>
           <Icon size={20} aria-hidden="true" />
         </span>
       </div>
@@ -380,9 +391,9 @@ function ProjectMetric({
 
 function UnbilledStat({ label, value, dark }: { label: string; value: string; dark: boolean }) {
   return (
-    <div className={`rounded-lg border p-4 shadow-soft ${dark ? "border-white/15 bg-gradient-to-br from-mint/20 to-white/10" : "border-line bg-white"}`}>
-      <p className={`text-xs font-black uppercase ${dark ? "text-white/60" : "text-moss"}`}>{label}</p>
-      <p className={`mt-2 text-2xl font-black tracking-normal ${dark ? "text-white" : "text-ink"}`}>{value}</p>
+    <div className={`rounded-[10px] border bg-white p-4 ${dark ? "border-mint/25" : "border-line"}`}>
+      <p className="text-xs font-bold text-moss">{label}</p>
+      <p className="mt-2 text-2xl font-black tracking-normal text-ink">{value}</p>
     </div>
   );
 }

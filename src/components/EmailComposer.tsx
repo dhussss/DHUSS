@@ -2,7 +2,7 @@
 
 import { useState, useTransition } from "react";
 import { Clipboard, Download, Mail } from "lucide-react";
-import { prepareInvoiceEmailAction } from "@/app/actions";
+import { sendInvoiceEmailAction } from "@/app/actions";
 
 export function EmailComposer({
   invoiceId,
@@ -11,6 +11,7 @@ export function EmailComposer({
   initialTo,
   initialSubject,
   initialBody,
+  confirmationCopyEmail,
   disabledReason
 }: {
   invoiceId: string;
@@ -19,6 +20,7 @@ export function EmailComposer({
   initialTo: string;
   initialSubject: string;
   initialBody: string;
+  confirmationCopyEmail: string | null;
   disabledReason?: string;
 }) {
   const [to, setTo] = useState(initialTo);
@@ -29,7 +31,7 @@ export function EmailComposer({
   const [isDownloading, setIsDownloading] = useState(false);
   const [isPending, startTransition] = useTransition();
 
-  function openEmailApp() {
+  function sendEmail() {
     setError("");
     setMessage("");
 
@@ -40,11 +42,10 @@ export function EmailComposer({
         formData.set("to", to);
         formData.set("subject", subject);
         formData.set("message", body);
-        await prepareInvoiceEmailAction(formData);
-        window.location.href = mailtoUrl(to, subject, body);
-        setMessage("Email app opened. Send it from your mail app when ready.");
+        const result = await sendInvoiceEmailAction(formData);
+        setMessage(result.message);
       } catch (openError) {
-        setError(openError instanceof Error ? openError.message : "The email could not be prepared.");
+        setError(openError instanceof Error ? openError.message : "The invoice email could not be sent.");
       }
     });
   }
@@ -115,10 +116,10 @@ export function EmailComposer({
 
       <div className="card grid gap-4">
         <div>
-          <p className="section-title">Prepare email</p>
-          <h2 className="mt-1 text-2xl font-black tracking-normal text-ink">Review before opening your email app</h2>
+          <p className="section-title">Review email</p>
+          <h2 className="mt-1 text-2xl font-black tracking-normal text-ink">Confirm before sending</h2>
           <p className="mt-2 text-sm font-bold leading-6 text-moss">
-            This will open in your email app as plain text. Download the PDF first, then attach it manually before sending.
+            This sends the email from the app through your configured SMTP account with the invoice PDF attached. A confirmation copy will be sent to your email so you have a real record.
           </p>
         </div>
 
@@ -131,6 +132,15 @@ export function EmailComposer({
             Subject
             <input value={subject} onChange={(event) => setSubject(event.target.value)} required />
           </label>
+          {confirmationCopyEmail ? (
+            <div className="rounded-lg border border-mint/30 bg-mint/10 p-3 text-sm font-bold leading-6 text-moss">
+              Confirmation copy: <span className="text-ink">{confirmationCopyEmail}</span>
+            </div>
+          ) : (
+            <div className="rounded-lg border border-gum/30 bg-gum/10 p-3 text-sm font-bold leading-6 text-gum">
+              No confirmation copy email is available. Add an email to your business profile or configure SMTP_FROM_EMAIL.
+            </div>
+          )}
           <label>
             Message
             <textarea value={body} onChange={(event) => setBody(event.target.value)} rows={12} required className="text-sm font-semibold leading-7 text-ink" />
@@ -138,19 +148,19 @@ export function EmailComposer({
         </div>
 
         <div className="grid gap-2 lg:grid-cols-3">
-          <button className="tap-primary w-full" type="button" onClick={downloadPdf} disabled={isDownloading}>
-            <Download size={20} aria-hidden="true" />
-            {isDownloading ? "Creating PDF..." : "Create PDF"}
-          </button>
-          <button className="tap-secondary w-full" type="button" onClick={openEmailApp} disabled={Boolean(disabledReason) || isPending}>
+          <button className="tap-primary w-full lg:col-span-2" type="button" onClick={sendEmail} disabled={Boolean(disabledReason) || isPending}>
             {isPending ? (
-              "Preparing..."
+              "Sending..."
             ) : (
               <>
                 <Mail size={20} aria-hidden="true" />
-                Open Email App
+                Send Email with PDF
               </>
             )}
+          </button>
+          <button className="tap-secondary w-full" type="button" onClick={downloadPdf} disabled={isDownloading}>
+            <Download size={20} aria-hidden="true" />
+            {isDownloading ? "Creating PDF..." : "Download PDF Copy"}
           </button>
           <button className="tap-secondary w-full" type="button" onClick={copyEmailText}>
             <Clipboard size={20} aria-hidden="true" />
@@ -159,7 +169,7 @@ export function EmailComposer({
         </div>
 
         <p className="text-xs font-bold leading-5 text-moss">
-          Browser email links cannot reliably attach PDFs automatically. Download the PDF, open your email app, attach it manually, then mark the invoice as sent after sending.
+          The confirmation message means the SMTP server accepted the email. The invoice record will track that it was emailed from the app, and your copied email gives you a practical sent record.
         </p>
       </div>
 
@@ -173,6 +183,11 @@ export function EmailComposer({
             <p>
               <span className="text-moss">Subject:</span> {subject || "Invoice"}
             </p>
+            {confirmationCopyEmail ? (
+              <p>
+                <span className="text-moss">Confirmation copy:</span> {confirmationCopyEmail}
+              </p>
+            ) : null}
           </div>
         </div>
         <div className="bg-white px-5 py-6 sm:px-7">
@@ -183,15 +198,6 @@ export function EmailComposer({
       </article>
     </section>
   );
-}
-
-function mailtoUrl(to: string, subject: string, body: string) {
-  const recipients = to
-    .split(/[;,]/)
-    .map((email) => email.trim())
-    .filter(Boolean)
-    .join(",");
-  return `mailto:${recipients}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
 }
 
 function PreviewBody({ body }: { body: string }) {

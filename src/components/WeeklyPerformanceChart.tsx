@@ -1,115 +1,97 @@
 "use client";
 
 import Link from "next/link";
-import { BarChart3, ReceiptText } from "lucide-react";
+import { ReceiptText } from "lucide-react";
+import { useEffect, useRef } from "react";
 import { formatMoney } from "@/lib/money";
 import { formatHours } from "@/lib/time";
 import type { WeekPerformanceDay } from "@/lib/insights";
 
 type WeeklyPerformanceChartProps = {
   days: WeekPerformanceDay[];
-  totalMinutes: number;
-  billableValueCents: number;
   rollingAverageDailyMinutes: number;
-  currentWeekAverageDailyMinutes: number;
-  averageDeltaMinutes: number;
   hasEntries: boolean;
 };
 
 export function WeeklyPerformanceChart({
   days,
-  totalMinutes,
-  billableValueCents,
   rollingAverageDailyMinutes,
-  currentWeekAverageDailyMinutes,
-  averageDeltaMinutes,
   hasEntries
 }: WeeklyPerformanceChartProps) {
   const maxMinutes = weeklyPerformanceScale(days, rollingAverageDailyMinutes);
-  const averagePercent = chartPercent(rollingAverageDailyMinutes, maxMinutes);
-  const averageTop = 100 - averagePercent;
-  const deltaHours = Math.abs(averageDeltaMinutes) / 60;
-  const deltaLabel = `${averageDeltaMinutes >= 0 ? "+" : "-"}${deltaHours.toFixed(1).replace(/\.0$/, "")}h/day`;
-  const trackingCopy = `This week is tracking ${deltaLabel} ${averageDeltaMinutes >= 0 ? "above" : "below"} your 30-day average.`;
+  const scrollContainerRef = useRef<HTMLDivElement>(null);
+  const todayCardRef = useRef<HTMLElement>(null);
+  const todayDate = days.find((day) => day.isToday)?.date;
+
+  useEffect(() => {
+    if (!todayDate || !window.matchMedia("(max-width: 767px)").matches) return;
+
+    const frame = window.requestAnimationFrame(() => {
+      const container = scrollContainerRef.current;
+      const card = todayCardRef.current;
+      if (!container || !card) return;
+
+      const centeredLeft = card.offsetLeft - (container.clientWidth - card.clientWidth) / 2;
+      container.scrollTo({ left: Math.max(0, centeredLeft), behavior: "auto" });
+    });
+
+    return () => window.cancelAnimationFrame(frame);
+  }, [todayDate]);
 
   return (
     <section>
-      <div className="grid gap-4 border-b border-line/80 p-4 sm:grid-cols-[minmax(0,1fr)_auto] sm:p-5">
-        <div>
-          <p className="inline-flex items-center gap-2 text-xs font-black uppercase tracking-[0.14em] text-mint">
-            <BarChart3 size={17} aria-hidden="true" />
-            Weekly performance
-          </p>
-          <h3 className="mt-1 text-2xl font-black tracking-normal text-ink">Hours by day</h3>
-          <p className="mt-2 text-sm font-semibold leading-6 text-moss">
-            Current pace: {formatHours(currentWeekAverageDailyMinutes, "minutes")}h/day. 30-day avg: {formatHours(rollingAverageDailyMinutes, "minutes")}h/day. {trackingCopy}
-          </p>
-        </div>
-        <div className="grid gap-2 sm:min-w-[20rem] sm:grid-cols-2">
-          <WeekStat value={`${formatHours(totalMinutes)}h`} label="This week" />
-          <WeekStat value={formatMoney(billableValueCents)} label="Billable value" />
-        </div>
-      </div>
-
-      <div className="overflow-x-auto p-4 sm:p-5">
-        <div className="min-w-[68rem]">
-          <div className="rounded-lg border border-line/80 bg-white/80 p-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.75)]">
-            <div className="grid grid-cols-7 gap-3">
-              {days.map((day) => {
-                const barPercent = chartPercent(day.totalMinutes, maxMinutes);
-                const visiblePercent = day.totalMinutes ? Math.max(8, barPercent) : 2;
-
-                return (
-                  <div key={day.date} className={`rounded-lg border p-3 ${day.isToday ? "border-mint bg-mint/10 ring-2 ring-mint/20" : "border-line/80 bg-paper/70"}`}>
-                    <div className="flex min-h-14 flex-col gap-1">
-                      <p className="text-xs font-black uppercase tracking-[0.12em] text-moss">{day.dayShort}</p>
-                      <div className="flex items-center justify-between gap-2">
-                        <p className="text-lg font-black text-ink">{day.dateLabel}</p>
-                        {day.isToday ? <span className="rounded-full bg-mint px-2 py-1 text-[0.62rem] font-black uppercase leading-none text-white">Today</span> : null}
-                      </div>
-                    </div>
-                    <div className="flex h-44 items-end" aria-label={`${day.dayName}: ${formatHours(day.totalMinutes)} hours`}>
-                      <div className={`w-full rounded-t-lg ${day.isToday ? "bg-gradient-to-t from-mint to-white" : "bg-gradient-to-t from-ink to-mint"}`} style={{ height: `${visiblePercent}%` }} />
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-            <div className="relative -mt-44 ml-4 mr-4 h-44">
-              <div className="pointer-events-none absolute left-0 right-0 z-10 border-t border-dashed border-mint/70" style={{ top: `${averageTop}%` }}>
-                <span className="absolute -top-3 right-0 rounded-full border border-mint/40 bg-white px-2 py-0.5 text-[0.65rem] font-black uppercase text-mint">
-                  30-day avg
-                </span>
-              </div>
-            </div>
-          </div>
-
-          <div className="mt-3 grid grid-cols-7 gap-3">
+      <div
+        ref={scrollContainerRef}
+        className="snap-x snap-mandatory overflow-x-auto md:snap-none"
+        role="region"
+        aria-label="Current week, scroll horizontally to view each day"
+        tabIndex={0}
+      >
+        <div className="min-w-[70rem]">
+          <div className="grid grid-cols-7 divide-x divide-line">
             {days.map((day) => {
               const projectChips = day.projects.slice(0, 2);
               const extraProjectCount = Math.max(day.projects.length - projectChips.length, 0);
+              const progress = chartPercent(day.totalMinutes, maxMinutes);
 
               return (
-                <article key={`${day.date}-details`} className={`rounded-lg border p-3 ${day.isToday ? "border-mint bg-mint/10" : "border-line/80 bg-white/80"}`}>
-                  <p className="text-lg font-black text-ink">{formatHours(day.totalMinutes)}h logged</p>
-                  <p className="mt-1 text-sm font-bold text-moss">{formatMoney(day.billableValueCents)} billable</p>
-                  <div className="mt-3 flex flex-wrap gap-1.5">
+                <article
+                  key={day.date}
+                  ref={day.isToday ? todayCardRef : undefined}
+                  className={`flex min-h-56 snap-center flex-col p-5 ${day.isToday ? "bg-mint/[0.08] shadow-[inset_0_3px_0_rgb(var(--color-accent-rgb))]" : "bg-white"}`}
+                >
+                  <div className="min-h-16 border-b border-line/70 pb-3">
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <p className="text-sm font-bold text-ink">{day.dayShort}</p>
+                      {day.isToday ? <span className="rounded-md bg-mint px-2 py-1 text-[0.65rem] font-black uppercase leading-none text-white">Today</span> : null}
+                    </div>
+                    <p className="mt-1 text-sm font-medium text-moss">{day.dateLabel}</p>
+                  </div>
+
+                  {day.totalMinutes ? (
+                    <>
+                      <p className="mt-4 text-2xl font-black text-ink">{formatHours(day.totalMinutes)}h</p>
+                      <p className="mt-1 text-sm font-medium text-moss">{formatMoney(day.billableValueCents)}</p>
+                      <div className="mt-4 h-1 overflow-hidden rounded-full bg-paper" aria-label={`${day.dayName}: ${formatHours(day.totalMinutes)} hours`}>
+                        <div className="h-full rounded-full bg-mint" style={{ width: `${progress}%` }} />
+                      </div>
+                    </>
+                  ) : null}
+
+                  <div className="mt-4 flex flex-wrap gap-1.5">
                     {projectChips.length ? (
                       <>
                         {projectChips.map((project) => (
-                          <span key={project} className="max-w-full break-words rounded-full bg-paper px-2 py-1 text-xs font-bold leading-4 text-moss">
+                          <span key={project} className="max-w-full break-words rounded-md border border-line/80 bg-paper/70 px-2 py-1 text-xs font-semibold leading-4 text-moss">
                             {project}
                           </span>
                         ))}
-                        {extraProjectCount ? <span className="rounded-full bg-paper px-2 py-1 text-xs font-black leading-4 text-moss">+{extraProjectCount} more</span> : null}
+                        {extraProjectCount ? <span className="rounded-md border border-line/80 bg-paper/70 px-2 py-1 text-xs font-bold leading-4 text-moss">+{extraProjectCount} more</span> : null}
                       </>
                     ) : (
-                      <span className="text-sm font-bold text-moss/75">No work logged</span>
+                      <span className="text-sm font-medium text-moss/75">No work logged</span>
                     )}
                   </div>
-                  <p className="mt-3 text-xs font-black uppercase tracking-[0.1em] text-moss">
-                    {day.entryCount} entr{day.entryCount === 1 ? "y" : "ies"}
-                  </p>
                 </article>
               );
             })}
@@ -142,13 +124,4 @@ function weeklyPerformanceScale(days: WeekPerformanceDay[], rollingAverageDailyM
 function chartPercent(value: number, max: number) {
   if (!max) return 0;
   return Math.max(0, Math.min(100, (value / max) * 100));
-}
-
-function WeekStat({ value, label }: { value: string; label: string }) {
-  return (
-    <div className="rounded-lg border border-line/80 bg-paper/80 p-3">
-      <p className="text-2xl font-black tracking-normal text-ink">{value}</p>
-      <p className="mt-1 text-xs font-black uppercase tracking-[0.12em] text-moss">{label}</p>
-    </div>
-  );
 }

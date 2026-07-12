@@ -13,6 +13,7 @@ export function AuthForm({ mode }: { mode: "login" | "signup" }) {
   const [message, setMessage] = useState("");
   const [pending, setPending] = useState(false);
   const isSignup = mode === "signup";
+  const next = searchParams.get("next") || "/";
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -30,7 +31,7 @@ export function AuthForm({ mode }: { mode: "login" | "signup" }) {
           email,
           password,
           options: {
-            emailRedirectTo: `${window.location.origin}/auth/callback`
+            emailRedirectTo: `${window.location.origin}/auth/callback?next=${encodeURIComponent(next)}`
           }
         })
       : await supabase.auth.signInWithPassword({ email, password });
@@ -47,7 +48,7 @@ export function AuthForm({ mode }: { mode: "login" | "signup" }) {
       return;
     }
 
-    router.push(searchParams.get("next") || "/");
+    router.push(next);
     router.refresh();
   }
 
@@ -70,9 +71,9 @@ export function AuthForm({ mode }: { mode: "login" | "signup" }) {
         {pending ? "Please wait..." : isSignup ? "Create Account" : "Log In"}
       </button>
 
-      <p className="text-center text-sm font-bold text-moss">
+      <p className="text-center text-sm font-medium text-moss">
         {isSignup ? "Already have an account? " : "Need an account? "}
-        <Link className="text-mint" href={isSignup ? "/login" : "/signup"}>
+        <Link className="text-mint" href={`${isSignup ? "/login" : "/signup"}?next=${encodeURIComponent(next)}`}>
           {isSignup ? "Log in" : "Sign up"}
         </Link>
       </p>

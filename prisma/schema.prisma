@@ -56,6 +56,28 @@ enum WorkExpenseStatus {
   TAX_RECORD_ONLY
 }
 
+enum TeamInvitationStatus {
+  PENDING
+  ACCEPTED
+  REVOKED
+}
+
+enum TeamMemberStatus {
+  ACTIVE
+  ARCHIVED
+}
+
+enum TeamApprovalStatus {
+  SUBMITTED
+  APPROVED
+  REJECTED
+}
+
+enum TeamPaymentStatus {
+  UNPAID
+  PAID
+}
+
 model Client {
   id           String    @id @default(cuid())
   ownerId      String?
@@ -78,21 +100,22 @@ model Client {
 }
 
 model Project {
-  id                      String        @id @default(cuid())
-  ownerId                 String?
-  title                   String
-  clientId                String
-  currentHourlyRateCents  Int
-  status                  ProjectStatus @default(ACTIVE)
-  notes                   String?
-  createdAt               DateTime      @default(now())
-  updatedAt               DateTime      @updatedAt
-  client                  Client        @relation(fields: [clientId], references: [id], onDelete: Restrict)
-  timeEntries             TimeEntry[]
-  expenseItems            ExpenseItem[]
-  workExpenses            WorkExpense[]
-  invoices                Invoice[]
-  rateHistory             RateHistory[]
+  id                     String              @id @default(cuid())
+  ownerId                String?
+  title                  String
+  clientId               String
+  currentHourlyRateCents Int
+  status                 ProjectStatus       @default(ACTIVE)
+  notes                  String?
+  createdAt              DateTime            @default(now())
+  updatedAt              DateTime            @updatedAt
+  client                 Client              @relation(fields: [clientId], references: [id], onDelete: Restrict)
+  timeEntries            TimeEntry[]
+  expenseItems           ExpenseItem[]
+  workExpenses           WorkExpense[]
+  invoices               Invoice[]
+  rateHistory            RateHistory[]
+  teamAssignments        ProjectAssignment[]
 
   @@index([clientId])
   @@index([status])
@@ -116,22 +139,33 @@ model RateHistory {
 }
 
 model TimeEntry {
-  id                       String        @id @default(cuid())
-  ownerId                  String?
-  projectId                String
-  invoiceId                String?
-  date                     DateTime
-  startTime                String?
-  endTime                  String?
-  durationMinutes          Int
-  notes                    String?
-  billingStatus            BillingStatus @default(UNBILLED)
-  hourlyRateCentsSnapshot  Int
-  createdAt                DateTime      @default(now())
-  updatedAt                DateTime      @updatedAt
-  project                  Project       @relation(fields: [projectId], references: [id], onDelete: Restrict)
-  invoice                  Invoice?      @relation(fields: [invoiceId], references: [id], onDelete: SetNull)
-  invoiceLineItems         InvoiceLineItem[]
+  id                        String              @id @default(cuid())
+  ownerId                   String?
+  projectId                 String
+  invoiceId                 String?
+  date                      DateTime
+  startTime                 String?
+  endTime                   String?
+  durationMinutes           Int
+  notes                     String?
+  billingStatus             BillingStatus       @default(UNBILLED)
+  hourlyRateCentsSnapshot   Int
+  createdByUserId           String?
+  teamMemberId              String?
+  projectAssignmentId       String?
+  workerDisplayNameSnapshot String?
+  approvalStatus            TeamApprovalStatus?
+  payRateCentsSnapshot      Int?
+  paymentStatus             TeamPaymentStatus?
+  paidAt                    DateTime?
+  paymentReference          String?
+  createdAt                 DateTime            @default(now())
+  updatedAt                 DateTime            @updatedAt
+  project                   Project             @relation(fields: [projectId], references: [id], onDelete: Restrict)
+  invoice                   Invoice?            @relation(fields: [invoiceId], references: [id], onDelete: SetNull)
+  invoiceLineItems          InvoiceLineItem[]
+  teamMember                TeamMember?         @relation(fields: [teamMemberId], references: [id], onDelete: Restrict)
+  projectAssignment         ProjectAssignment?  @relation(fields: [projectAssignmentId], references: [id], onDelete: Restrict)
 
   @@index([projectId, date])
   @@index([billingStatus])
@@ -142,24 +176,90 @@ model TimeEntry {
   @@index([ownerId, date])
   @@index([ownerId, billingStatus])
   @@index([ownerId, invoiceId])
+  @@index([createdByUserId, date])
+  @@index([ownerId, approvalStatus])
+  @@index([ownerId, paymentStatus])
+  @@index([teamMemberId, date])
+  @@index([projectAssignmentId])
+}
+
+model TeamInvitation {
+  id                     String               @id @default(cuid())
+  ownerId                String
+  tokenHash              String               @unique
+  subcontractorName      String
+  subcontractorEmail     String?
+  defaultPayRateCents    Int
+  defaultChargeRateCents Int
+  status                 TeamInvitationStatus @default(PENDING)
+  expiresAt              DateTime
+  acceptedByUserId       String?
+  acceptedAt             DateTime?
+  createdAt              DateTime             @default(now())
+  updatedAt              DateTime             @updatedAt
+
+  @@index([ownerId, status])
+  @@index([expiresAt])
+}
+
+model TeamMember {
+  id                     String              @id @default(cuid())
+  ownerId                String
+  userId                 String
+  displayName            String
+  email                  String?
+  defaultPayRateCents    Int
+  defaultChargeRateCents Int
+  status                 TeamMemberStatus    @default(ACTIVE)
+  linkedAt               DateTime            @default(now())
+  createdAt              DateTime            @default(now())
+  updatedAt              DateTime            @updatedAt
+  assignments            ProjectAssignment[]
+  timeEntries            TimeEntry[]
+
+  @@unique([ownerId, userId])
+  @@index([ownerId, status])
+  @@index([userId, status])
+}
+
+model ProjectAssignment {
+  id              String      @id @default(cuid())
+  ownerId         String
+  projectId       String
+  teamMemberId    String
+  payRateCents    Int
+  chargeRateCents Int
+  active          Boolean     @default(true)
+  startsAt        DateTime    @default(now())
+  endsAt          DateTime?
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
+  project         Project     @relation(fields: [projectId], references: [id], onDelete: Restrict)
+  teamMember      TeamMember  @relation(fields: [teamMemberId], references: [id], onDelete: Restrict)
+  timeEntries     TimeEntry[]
+
+  @@unique([projectId, teamMemberId])
+  @@index([ownerId, active])
+  @@index([teamMemberId, active])
+  @@index([projectId, active])
 }
 
 model ExpenseItem {
-  id              String        @id @default(cuid())
-  ownerId         String?
-  projectId       String
-  invoiceId       String?
-  datePurchased   DateTime
-  description     String
-  quantity        Decimal       @default(1)
-  unitCostCents   Int
-  totalCostCents  Int
-  notes           String?
-  billingStatus   BillingStatus @default(UNBILLED)
-  createdAt       DateTime      @default(now())
-  updatedAt       DateTime      @updatedAt
-  project         Project       @relation(fields: [projectId], references: [id], onDelete: Restrict)
-  invoice         Invoice?      @relation(fields: [invoiceId], references: [id], onDelete: SetNull)
+  id               String            @id @default(cuid())
+  ownerId          String?
+  projectId        String
+  invoiceId        String?
+  datePurchased    DateTime
+  description      String
+  quantity         Decimal           @default(1)
+  unitCostCents    Int
+  totalCostCents   Int
+  notes            String?
+  billingStatus    BillingStatus     @default(UNBILLED)
+  createdAt        DateTime          @default(now())
+  updatedAt        DateTime          @updatedAt
+  project          Project           @relation(fields: [projectId], references: [id], onDelete: Restrict)
+  invoice          Invoice?          @relation(fields: [invoiceId], references: [id], onDelete: SetNull)
   invoiceLineItems InvoiceLineItem[]
 
   @@index([projectId, datePurchased])
@@ -216,63 +316,64 @@ model DayOffLog {
 }
 
 model Invoice {
-  id             String            @id @default(cuid())
-  ownerId        String?
-  invoiceNumber  String
-  projectId      String
-  clientId       String
-  invoiceDate    DateTime
-  dueDate        DateTime?
-  paymentTermsDays Int            @default(14)
-  dateRangeStart DateTime
-  dateRangeEnd   DateTime
-  status         InvoiceStatus     @default(DRAFT)
-  mode           InvoiceMode       @default(DETAILED)
-  totalHours     Decimal           @default(0)
-  totalDurationMinutes Int         @default(0)
-  subtotalCents     Int            @default(0)
-  expensesSubtotalCents Int        @default(0)
-  gstCents       Int               @default(0)
-  labourTotalCents Int             @default(0)
-  itemTotalCents   Int             @default(0)
-  grandTotalCents  Int             @default(0)
-  paymentDate    DateTime?
-  publicToken    String?           @unique
-  publicTokenEnabled Boolean       @default(false)
-  lastEmailedAt  DateTime?
-  emailSendCount Int               @default(0)
-  summary        String?
-  businessNameSnapshot String?
-  businessLegalNameSnapshot String?
-  businessAbnSnapshot String?
-  businessContactNameSnapshot String?
-  businessEmailSnapshot String?
-  businessPhoneSnapshot String?
-  businessAddressSnapshot String?
-  businessWebsiteSnapshot String?
-  businessBankAccountNameSnapshot String?
-  businessBsbSnapshot String?
-  businessAccountNumberSnapshot String?
-  businessGstRegisteredSnapshot Boolean @default(false)
-  businessGstRateSnapshot Decimal @default(0)
-  businessLogoPathSnapshot String?
-  businessDefaultInvoiceNotesSnapshot String?
+  id                                         String            @id @default(cuid())
+  ownerId                                    String?
+  invoiceNumber                              String
+  projectId                                  String
+  clientId                                   String
+  invoiceDate                                DateTime
+  dueDate                                    DateTime?
+  paymentTermsDays                           Int               @default(14)
+  dateRangeStart                             DateTime
+  dateRangeEnd                               DateTime
+  status                                     InvoiceStatus     @default(DRAFT)
+  mode                                       InvoiceMode       @default(DETAILED)
+  totalHours                                 Decimal           @default(0)
+  totalDurationMinutes                       Int               @default(0)
+  subtotalCents                              Int               @default(0)
+  expensesSubtotalCents                      Int               @default(0)
+  gstCents                                   Int               @default(0)
+  labourTotalCents                           Int               @default(0)
+  itemTotalCents                             Int               @default(0)
+  grandTotalCents                            Int               @default(0)
+  paymentDate                                DateTime?
+  publicToken                                String?           @unique
+  publicTokenEnabled                         Boolean           @default(false)
+  lastEmailedAt                              DateTime?
+  emailSendCount                             Int               @default(0)
+  summary                                    String?
+  businessNameSnapshot                       String?
+  businessLegalNameSnapshot                  String?
+  businessAbnSnapshot                        String?
+  businessContactNameSnapshot                String?
+  businessEmailSnapshot                      String?
+  businessPhoneSnapshot                      String?
+  businessAddressSnapshot                    String?
+  businessWebsiteSnapshot                    String?
+  businessBankAccountNameSnapshot            String?
+  businessBsbSnapshot                        String?
+  businessAccountNumberSnapshot              String?
+  businessGstRegisteredSnapshot              Boolean           @default(false)
+  businessGstRateSnapshot                    Decimal           @default(0)
+  businessLogoPathSnapshot                   String?
+  businessDefaultInvoiceNotesSnapshot        String?
   businessDefaultInvoiceEmailMessageSnapshot String?
-  businessSignatureFooterSnapshot String?
-  clientBusinessNameSnapshot String?
-  clientContactNameSnapshot String?
-  clientEmailSnapshot String?
-  clientPhoneSnapshot String?
-  clientAddressSnapshot String?
-  clientAbnSnapshot String?
-  createdAt      DateTime          @default(now())
-  updatedAt      DateTime          @updatedAt
-  project        Project           @relation(fields: [projectId], references: [id], onDelete: Restrict)
-  client         Client            @relation(fields: [clientId], references: [id], onDelete: Restrict)
-  timeEntries    TimeEntry[]
-  expenseItems   ExpenseItem[]
-  lineItems      InvoiceLineItem[]
+  businessSignatureFooterSnapshot            String?
+  clientBusinessNameSnapshot                 String?
+  clientContactNameSnapshot                  String?
+  clientEmailSnapshot                        String?
+  clientPhoneSnapshot                        String?
+  clientAddressSnapshot                      String?
+  clientAbnSnapshot                          String?
+  createdAt                                  DateTime          @default(now())
+  updatedAt                                  DateTime          @updatedAt
+  project                                    Project           @relation(fields: [projectId], references: [id], onDelete: Restrict)
+  client                                     Client            @relation(fields: [clientId], references: [id], onDelete: Restrict)
+  timeEntries                                TimeEntry[]
+  expenseItems                               ExpenseItem[]
+  lineItems                                  InvoiceLineItem[]
 
+  @@unique([ownerId, invoiceNumber])
   @@index([projectId])
   @@index([clientId])
   @@index([status])
@@ -285,27 +386,26 @@ model Invoice {
   @@index([ownerId, invoiceDate])
   @@index([ownerId, dueDate])
   @@index([ownerId, publicTokenEnabled])
-  @@unique([ownerId, invoiceNumber])
 }
 
 model InvoiceLineItem {
-  id                String       @id @default(cuid())
-  ownerId           String?
-  invoiceId         String
-  timeEntryId       String?
-  expenseItemId     String?
-  type              LineItemType
-  description       String
-  date              DateTime?
-  quantity          Decimal?
-  hoursMinutes      Int?
-  unitAmountCents   Int
-  totalAmountCents  Int
-  notes             String?
-  sortOrder         Int          @default(0)
-  invoice           Invoice      @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
-  timeEntry         TimeEntry?   @relation(fields: [timeEntryId], references: [id], onDelete: SetNull)
-  expenseItem       ExpenseItem? @relation(fields: [expenseItemId], references: [id], onDelete: SetNull)
+  id               String       @id @default(cuid())
+  ownerId          String?
+  invoiceId        String
+  timeEntryId      String?
+  expenseItemId    String?
+  type             LineItemType
+  description      String
+  date             DateTime?
+  quantity         Decimal?
+  hoursMinutes     Int?
+  unitAmountCents  Int
+  totalAmountCents Int
+  notes            String?
+  sortOrder        Int          @default(0)
+  invoice          Invoice      @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  timeEntry        TimeEntry?   @relation(fields: [timeEntryId], references: [id], onDelete: SetNull)
+  expenseItem      ExpenseItem? @relation(fields: [expenseItemId], references: [id], onDelete: SetNull)
 
   @@index([invoiceId])
   @@index([timeEntryId])
@@ -314,56 +414,56 @@ model InvoiceLineItem {
 }
 
 model BusinessProfile {
-  id                         String   @id @default(cuid())
-  ownerId                    String   @unique
-  tradingName                String
-  invoicePrefix              String   @default("INV-")
-  legalName                  String?
-  abn                        String?
-  acn                        String?
-  contactName                String?
-  email                      String?
-  phone                      String?
-  address                    String?
-  website                    String?
-  defaultHourlyRateCents     Int?
-  gstRegistered              Boolean  @default(false)
-  gstRate                    Decimal  @default(10)
-  bankAccountName            String?
-  bsb                        String?
-  accountNumber              String?
-  paymentTermsDays           Int      @default(14)
-  defaultInvoiceNotes        String?
-  defaultInvoiceEmailMessage String?
+  id                                 String   @id @default(cuid())
+  ownerId                            String   @unique
+  tradingName                        String
+  invoicePrefix                      String   @default("INV-")
+  legalName                          String?
+  abn                                String?
+  acn                                String?
+  contactName                        String?
+  email                              String?
+  phone                              String?
+  address                            String?
+  website                            String?
+  defaultHourlyRateCents             Int?
+  gstRegistered                      Boolean  @default(false)
+  gstRate                            Decimal  @default(10)
+  bankAccountName                    String?
+  bsb                                String?
+  accountNumber                      String?
+  paymentTermsDays                   Int      @default(14)
+  defaultInvoiceNotes                String?
+  defaultInvoiceEmailMessage         String?
   defaultInvoiceEmailSubjectTemplate String?
-  defaultInvoiceEmailBody    String?
-  defaultInvoiceGreeting     String?
-  defaultInvoiceBody         String?
-  defaultInvoiceSignOff      String?
-  defaultInvoiceFooter       String?
-  defaultEmailGreeting       String?
-  defaultEmailIntro          String?
-  defaultEmailPaymentLine    String?
-  defaultEmailSignOff        String?
-  includePaymentDetailsInEmail Boolean @default(false)
-  includeInvoiceSummaryInEmail Boolean @default(false)
-  includePublicInvoiceLinkInEmail Boolean @default(true)
-  taxSetAsideEnabled       Boolean  @default(true)
-  customTaxPercentageOverride Decimal?
-  includeGstInTaxEstimate  Boolean  @default(false)
-  includeSuperInSetAsidePlanning Boolean @default(false)
-  superPlanningEnabled     Boolean  @default(false)
-  superContributionPercentage Decimal @default(11.5)
-  superFundName            String?
-  superMemberNumber        String?
-  replyToEmail               String?
-  themeAccent                String   @default("emerald")
-  themeSecondary             String?
-  themeMode                  String   @default("system")
-  logoPath                   String?
-  signatureFooter            String?
-  createdAt                  DateTime @default(now())
-  updatedAt                  DateTime @updatedAt
+  defaultInvoiceEmailBody            String?
+  defaultInvoiceGreeting             String?
+  defaultInvoiceBody                 String?
+  defaultInvoiceSignOff              String?
+  defaultInvoiceFooter               String?
+  defaultEmailGreeting               String?
+  defaultEmailIntro                  String?
+  defaultEmailPaymentLine            String?
+  defaultEmailSignOff                String?
+  includePaymentDetailsInEmail       Boolean  @default(false)
+  includeInvoiceSummaryInEmail       Boolean  @default(false)
+  includePublicInvoiceLinkInEmail    Boolean  @default(true)
+  taxSetAsideEnabled                 Boolean  @default(true)
+  customTaxPercentageOverride        Decimal?
+  includeGstInTaxEstimate            Boolean  @default(false)
+  includeSuperInSetAsidePlanning     Boolean  @default(false)
+  superPlanningEnabled               Boolean  @default(false)
+  superContributionPercentage        Decimal  @default(11.5)
+  superFundName                      String?
+  superMemberNumber                  String?
+  replyToEmail                       String?
+  themeAccent                        String   @default("emerald")
+  themeSecondary                     String?
+  themeMode                          String   @default("system")
+  logoPath                           String?
+  signatureFooter                    String?
+  createdAt                          DateTime @default(now())
+  updatedAt                          DateTime @updatedAt
 
   @@index([ownerId])
 }

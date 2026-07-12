@@ -26,16 +26,16 @@ export default async function InsightsPage() {
         </Link>
       </div>
 
-      <section className="overflow-hidden rounded-lg border border-ink/10 bg-ink text-white shadow-soft">
+      <section className="overflow-hidden rounded-xl border border-line bg-white shadow-soft">
         <div className="command-hero-bg p-5 sm:p-6 lg:p-7">
           <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-end">
             <div>
-              <p className="inline-flex items-center gap-2 text-sm font-black uppercase text-mint">
+              <p className="inline-flex items-center gap-2 text-sm font-bold text-mint">
                 <BarChart3 size={17} aria-hidden="true" />
                 Insights
               </p>
               <h1 className="mt-2 text-4xl font-black tracking-normal sm:text-5xl">Business tracking</h1>
-              <p className="mt-3 max-w-2xl text-sm font-bold leading-6 text-white/75">
+              <p className="mt-3 max-w-2xl text-sm font-medium leading-6 text-moss">
                 Clear workload, invoice, and financial-year signals based on your logged data.
               </p>
             </div>
@@ -127,16 +127,16 @@ export default async function InsightsPage() {
 
 function HeroMetric({ label, value }: { label: string; value: string }) {
   return (
-    <div className="rounded-lg border border-white/15 bg-white/10 p-4 shadow-soft">
-      <p className="text-xs font-black uppercase tracking-[0.12em] text-white/60">{label}</p>
-      <p className="mt-2 text-3xl font-black tracking-normal text-white">{value}</p>
+    <div className="rounded-[10px] border border-line bg-paper/55 p-4">
+      <p className="text-xs font-bold text-moss">{label}</p>
+      <p className="mt-2 text-3xl font-black tracking-normal text-ink">{value}</p>
     </div>
   );
 }
 
 function Panel({ title, icon: Icon, children }: { title: string; icon: LucideIcon; children: ReactNode }) {
   return (
-    <section className="rounded-lg border border-line bg-white shadow-soft">
+    <section className="rounded-xl border border-line bg-white shadow-soft">
       <div className="flex items-center gap-3 border-b border-line p-4">
         <span className="icon-tile">
           <Icon size={20} aria-hidden="true" />
@@ -150,7 +150,7 @@ function Panel({ title, icon: Icon, children }: { title: string; icon: LucideIco
 
 function InsightStat({ label, value }: { label: string; value: string }) {
   return (
-    <div className="flex flex-col gap-1 rounded-lg border border-line bg-paper/60 p-3 sm:flex-row sm:items-center sm:justify-between">
+    <div className="flex flex-col gap-1 rounded-[10px] border border-line bg-paper/55 p-3 sm:flex-row sm:items-center sm:justify-between">
       <span className="text-sm font-bold text-moss">{label}</span>
       <span className="font-black text-ink">{value}</span>
     </div>

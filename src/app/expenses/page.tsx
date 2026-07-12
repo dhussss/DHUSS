@@ -86,22 +86,22 @@ export default async function ExpensesPage({
           <div className="grid gap-3 p-3">
             {expenses.length ? (
               expenses.map((expense) => (
-                <article key={expense.id} className={`rounded-lg border bg-white p-4 shadow-soft ${expense.archivedAt ? "border-line opacity-70" : "border-line"}`}>
+                <article key={expense.id} className={`rounded-xl border bg-white p-4 shadow-soft ${expense.archivedAt ? "border-line opacity-70" : "border-line"}`}>
                   <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                     <div>
                       <div className="flex flex-wrap items-center gap-2">
                         <p className="text-lg font-black text-ink">{expense.description}</p>
                         {expense.archivedAt ? <span className="status-pill border-line bg-paper text-moss">archived</span> : null}
                       </div>
-                      <p className="mt-1 text-sm font-bold text-moss">
+                      <p className="mt-1 text-sm font-medium text-moss">
                         {formatDateAU(dateInputValue(expense.date))} · {expenseCategoryLabel(expense.category)}
                       </p>
-                      {expense.vendor ? <p className="mt-1 text-sm font-bold text-moss">Supplier: {expense.vendor}</p> : null}
+                      {expense.vendor ? <p className="mt-1 text-sm font-medium text-moss">Supplier: {expense.vendor}</p> : null}
                     </div>
                     <p className="text-2xl font-black text-ink">{formatMoney(expense.amountCents)}</p>
                   </div>
 
-                  <div className="mt-3 flex flex-wrap gap-2 text-xs font-black uppercase text-moss">
+                  <div className="mt-3 flex flex-wrap gap-2 text-xs font-bold text-moss">
                     {expense.gstIncluded ? <span className="rounded-full bg-paper px-2 py-1">GST {formatMoney(expense.gstAmountCents)}</span> : null}
                     {expense.project ? (
                       <Link href={`/projects/${expense.project.id}`} className="inline-flex items-center gap-1 rounded-full bg-paper px-2 py-1 transition hover:text-mint">
@@ -113,7 +113,7 @@ export default async function ExpensesPage({
                   </div>
 
                   {expense.notes || expense.receiptReference ? (
-                    <p className="mt-3 text-sm font-bold leading-6 text-moss">
+                    <p className="mt-3 text-sm font-medium leading-6 text-moss">
                       {[expense.receiptReference ? `Ref ${expense.receiptReference}` : "", expense.notes ?? ""]
                         .filter(Boolean)
                         .join(" · ")}
@@ -167,7 +167,7 @@ export default async function ExpensesPage({
 function SummaryTile({ label, value }: { label: string; value: string }) {
   return (
     <article className="card">
-      <p className="text-xs font-black uppercase text-moss">{label}</p>
+      <p className="text-sm font-semibold text-moss">{label}</p>
       <p className="mt-3 text-3xl font-black tracking-normal text-ink">{value}</p>
     </article>
   );

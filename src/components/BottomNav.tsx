@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { FileText, FolderKanban, LayoutDashboard, MoreHorizontal, UsersRound } from "lucide-react";
+import { isNavigationItemActive, shouldHideAppNavigation } from "@/lib/navigation";
 
 const items = [
   { href: "/", label: "Dashboard", icon: LayoutDashboard },
@@ -14,31 +15,21 @@ const items = [
 
 export function BottomNav() {
   const pathname = usePathname();
-  if (pathname === "/login" || pathname === "/signup" || pathname.startsWith("/public/")) return null;
+  if (shouldHideAppNavigation(pathname)) return null;
 
   return (
-    <nav className="bottom-safe fixed inset-x-0 bottom-0 z-40 border-t border-line/80 bg-white/[0.86] px-2 pt-2 shadow-[0_-18px_45px_rgba(40,34,25,0.12)] backdrop-blur-xl md:bottom-4 md:left-1/2 md:max-w-2xl md:-translate-x-1/2 md:rounded-lg md:border md:p-2">
+    <nav className="bottom-safe fixed inset-x-0 bottom-0 z-40 border-t border-line bg-white/95 px-2 pt-2 shadow-[0_-8px_24px_rgba(37,40,35,0.07)] backdrop-blur-xl md:hidden">
       <div className="grid grid-cols-5 gap-1.5 md:gap-2">
         {items.map((item) => {
           const Icon = item.icon;
-          const active =
-            item.href === "/"
-              ? pathname === "/"
-              : item.href === "/more"
-                ? pathname.startsWith("/more") ||
-                  pathname.startsWith("/settings") ||
-                  pathname.startsWith("/insights") ||
-                  pathname.startsWith("/expenses") ||
-                  pathname.startsWith("/hours-export") ||
-                  pathname.startsWith("/business-profile")
-                : pathname.startsWith(item.href);
+          const active = isNavigationItemActive(pathname, item.href);
 
           return (
             <Link
               key={item.href}
               href={item.href}
-              className={`flex min-h-14 flex-col items-center justify-center gap-1 rounded-lg px-1 text-[0.68rem] font-bold transition ${
-                active ? "bg-ink text-white shadow-soft" : "text-moss hover:bg-paper/80 hover:text-ink"
+              className={`flex min-h-14 flex-col items-center justify-center gap-1 rounded-[10px] px-1 text-[0.68rem] font-bold transition ${
+                active ? "bg-mint/10 text-mint" : "text-moss hover:bg-paper hover:text-ink"
               }`}
               aria-current={active ? "page" : undefined}
             >

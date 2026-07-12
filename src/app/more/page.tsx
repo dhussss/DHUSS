@@ -1,11 +1,17 @@
 import Link from "next/link";
-import { BarChart3, Building2, Clock3, LogOut, ReceiptText, Settings2 } from "lucide-react";
+import { BarChart3, Building2, Clock3, LogOut, ReceiptText, Settings2, UsersRound } from "lucide-react";
 import { logoutAction } from "@/app/actions";
 import { requireUserId } from "@/lib/auth";
 
 export const dynamic = "force-dynamic";
 
 const links = [
+  {
+    href: "/team",
+    label: "Team",
+    body: "Invite subcontractors, assign projects, review hours, and track payments.",
+    icon: UsersRound
+  },
   {
     href: "/settings",
     label: "Settings",
@@ -53,13 +59,13 @@ export default async function MorePage() {
         {links.map((item) => {
           const Icon = item.icon;
           return (
-            <Link key={item.href} href={item.href} className="group flex items-start gap-4 rounded-lg border border-line bg-white p-4 shadow-soft transition hover:border-mint">
+            <Link key={item.href} href={item.href} className="group flex items-start gap-4 rounded-xl border border-line bg-white p-4 shadow-soft transition hover:border-mint/50 hover:bg-white sm:p-5">
               <span className="icon-tile">
                 <Icon size={21} aria-hidden="true" />
               </span>
               <span>
                 <span className="block text-xl font-black tracking-normal text-ink">{item.label}</span>
-                <span className="mt-1 block text-sm font-bold leading-6 text-moss">{item.body}</span>
+                <span className="mt-1 block text-sm font-medium leading-6 text-moss">{item.body}</span>
               </span>
             </Link>
           );

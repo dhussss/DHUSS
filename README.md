@@ -18,10 +18,28 @@ Mobile-first PWA for a sole trader/subcontractor to track clients, projects, log
 - Prisma uses the Supabase transaction-mode pooler through `DATABASE_URL`.
 - Prisma migrations use the session-mode pooler through `DIRECT_URL`.
 - The root route config uses the Node.js runtime for Prisma, and `vercel.json` pins Vercel Functions to `syd1` to run close to the current Supabase `ap-southeast-2` project.
+- The app shows a subtle build label on every screen. Production defaults to `Approved Build`; local development and Vercel previews default to `Development Build`.
 - Dashboard totals ignore void invoices. Deleted invoices are gone from the database, and their linked time/items are returned to unbilled before deletion.
 - Dashboard and Insights analytics use owner-scoped, cached read helpers and short revalidation so the app stays responsive after time, project, client, and invoice mutations.
 - Project and client delete actions are guarded. Records with invoices or billed history should be archived, not deleted.
 - Tax and super set-aside figures are estimates only, not tax advice. Australian resident tax brackets are centralised in `src/lib/planning.ts` so the rates can be reviewed and updated in one place.
+
+## Continuous Improvement Workflow
+
+The day-to-day production app is the Approved Build. Automated improvement work should happen only in a Development Build until it is explicitly approved.
+
+- Approved Build: the live production version used day-to-day. Do not overwrite it automatically.
+- Development Build: the cumulative result of automated improvement cycles. It can continue to evolve across multiple cycles before approval.
+- Approval: deploy or promote a Development Build to production only after explicit user approval.
+- Version history: keep Vercel deployment history as the rollback trail for approved production releases.
+- Build label: every screen shows `Approved Build` or `Development Build` with the app version.
+
+Optional label overrides:
+
+```bash
+NEXT_PUBLIC_APP_VERSION="0.1.0"
+NEXT_PUBLIC_BUILD_CHANNEL="Approved Build"
+```
 
 ## Environment Variables
 
@@ -39,6 +57,11 @@ DIAGNOSTICS_TOKEN="change-this-long-random-token"
 
 # Public app URL used for secure client invoice links and MMS PDF delivery.
 APP_BASE_URL="https://<your-vercel-domain>"
+
+# Optional visible build label. Production defaults to "Approved Build" and
+# Vercel previews default to "Development Build" when this is omitted.
+# NEXT_PUBLIC_APP_VERSION="0.1.0"
+# NEXT_PUBLIC_BUILD_CHANNEL="Approved Build"
 
 # Optional one-step invoice email delivery with PDF attachment.
 # SMTP_HOST="smtp.example.com"
@@ -192,6 +215,25 @@ pnpm run db:migrate
 
 `db:migrate` runs `prisma migrate deploy`, which applies committed Prisma migration files without creating new ones.
 
+## Team and subcontractors
+
+The Team workflow lets an account owner invite hourly subcontractors who use their own login:
+
+1. Open **More > Team** and create an invitation with the default pay rate and client charge rate.
+2. Send the generated link or code to the subcontractor.
+3. The subcontractor signs in, accepts the invitation, and appears in the owner's Team register.
+4. Open the team member and assign them to one or more projects. Rates can be adjusted per assignment.
+5. The subcontractor opens **More > Team > Work assigned to me** and logs their hours.
+6. The owner approves or rejects submitted hours from **Team**.
+7. Only approved team hours appear in invoice drafts, unbilled totals, exports, dashboards, and insights.
+8. Approved entries can be marked paid from the team member page. Historical entries keep their original pay and charge rate snapshots.
+
+Before using Team in an existing environment, apply the committed additive migration:
+
+```bash
+pnpm exec prisma migrate deploy
+```
+
 After this pass, make sure production has applied:
 
 ```bash
@@ -206,12 +248,14 @@ The diagnostics page helps choose the next fix: if TCP/TLS connect is fast but P
 
 ## Invoice Delivery Setup
 
-The invoice page supports one-step delivery:
+The invoice page supports reviewed delivery:
 
-- `Email Invoice` sends the generated PDF as an email attachment through a configured SMTP account.
+- `Email Invoice` opens a review screen first, then sends the generated PDF as an email attachment through a configured SMTP account after confirmation.
 - `SMS Invoice` sends the generated PDF as MMS through Twilio.
 
 This is intentionally server-side delivery. Browser `mailto:` and `sms:` links cannot attach generated files, and the Web Share sheet can attach files but cannot reliably prefill recipient, subject, and body. One-step attachment delivery therefore requires either server-side sending or a native iOS app wrapper.
+
+SMTP email is sent by the app server, not by Apple Mail or Outlook on the device. A successful confirmation means the SMTP server accepted the message. The app also sends a hidden confirmation copy to the business profile email, falling back to `SMTP_FROM_EMAIL` or `SMTP_USER`, so the sender has a real email record even though the message will not automatically appear in Apple Mail's Sent folder.
 
 For email delivery, add SMTP settings locally and in Vercel:
 
@@ -293,15 +337,17 @@ Use `/diagnostics?token=<DIAGNOSTICS_TOKEN>` while logged in to open a private p
 - Detailed invoices show each labour line, hours, rate, notes, and expenses.
 - Draft invoices do not mark time entries or expense items as billed.
 - Marking a draft invoice sent or paid finalises it, marks linked entries/items billed, calculates GST from the current business profile, and stores business/client snapshots on the invoice.
+- Paid invoices can be marked unpaid, which returns them to sent and clears the payment date.
+- Sent invoices can be marked unsent, which returns them to draft, disables the public client link, and releases linked entries/items back to unbilled.
 - Sent and paid invoices do not silently mutate if the business profile or client changes later.
-- Invoice preview at `/invoices/<id>` has an `Email Invoice` action that sends the generated PDF as an SMTP email attachment when SMTP is configured.
+- Invoice preview at `/invoices/<id>` has an `Email Invoice` action that opens `/invoices/<id>/email` for review, then sends the generated PDF as an SMTP email attachment when confirmed.
 - Invoice preview also has an `SMS Invoice` action that sends the generated PDF as MMS when Twilio is configured.
 - Browser Print Preview remains available as a fallback, but the normal workflow does not rely on print-to-PDF.
 - Invoice preview uses a centred A4 print layout with `@page` margins and print-specific invoice containers so the saved PDF uses the printable page width instead of inheriting app/dashboard layout constraints.
 - The public invoice route `/public/invoices/<token>` uses the same print rules as the private invoice preview.
 - App navigation, action buttons, and app backgrounds are hidden in print.
-- Invoice preview supports one-step Email Invoice and SMS Invoice delivery. The editable email workflow at `/invoices/<id>/email` remains available for manual copy/review.
-- One-step email delivery works for draft, sent, and paid invoices when SMTP is configured. It does not require `RESEND_API_KEY` or `RESEND_FROM_EMAIL`.
+- Invoice preview supports reviewed Email Invoice delivery and one-step SMS Invoice delivery. The editable email workflow at `/invoices/<id>/email` is the normal email confirmation screen.
+- Reviewed email delivery works for draft, sent, and paid invoices when SMTP is configured. It does not require `RESEND_API_KEY` or `RESEND_FROM_EMAIL`. SMTP-sent messages will not automatically appear in the device mail app's Sent folder, so the app sends a hidden confirmation copy to the sender's configured email.
 - One-step SMS delivery works for draft, sent, and paid invoices when Twilio MMS is configured.
 - `APP_BASE_URL` is required for SMS/MMS PDF delivery and public invoice links.
 - Sent and paid invoices can create a secure client invoice link at `/public/invoices/<token>`. Links can be revoked or regenerated from the invoice page.

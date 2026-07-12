@@ -1,13 +1,13 @@
 export const themePresets = {
   emerald: {
     label: "Emerald",
-    accentRgb: "15 159 143",
-    secondaryRgb: "84 116 91"
+    accentRgb: "68 111 79",
+    secondaryRgb: "99 113 95"
   },
   blue: {
     label: "Blue",
-    accentRgb: "37 99 235",
-    secondaryRgb: "71 85 105"
+    accentRgb: "70 101 125",
+    secondaryRgb: "96 108 116"
   },
   slate: {
     label: "Slate",
@@ -16,13 +16,13 @@ export const themePresets = {
   },
   amber: {
     label: "Amber",
-    accentRgb: "180 83 9",
-    secondaryRgb: "120 113 108"
+    accentRgb: "164 99 62",
+    secondaryRgb: "116 108 99"
   },
   purple: {
     label: "Purple",
-    accentRgb: "124 58 237",
-    secondaryRgb: "91 73 119"
+    accentRgb: "111 81 118",
+    secondaryRgb: "104 94 108"
   }
 } as const;
 

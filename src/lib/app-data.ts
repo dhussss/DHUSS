@@ -17,6 +17,19 @@ export const CACHE_TAGS = {
 const SHORT_REVALIDATE_SECONDS = 20;
 
 export type DashboardData = {
+  profile: {
+    id: string;
+    tradingName: string;
+    contactName: string | null;
+    gstRegistered: boolean;
+    gstRate: unknown;
+    taxSetAsideEnabled: boolean;
+    customTaxPercentageOverride: unknown;
+    includeGstInTaxEstimate: boolean;
+    includeSuperInSetAsidePlanning: boolean;
+    superPlanningEnabled: boolean;
+    superContributionPercentage: unknown;
+  } | null;
   projects: { id: string; title: string; client: { businessName: string } }[];
   topActiveProjects: {
     id: string;
@@ -80,6 +93,7 @@ export type DashboardData = {
 };
 
 type DashboardRow = {
+  profile: DashboardData["profile"];
   projects: DashboardData["projects"];
   topActiveProjects: DashboardData["topActiveProjects"];
   invoiceSnapshots: DashboardData["invoiceSnapshots"];
@@ -186,6 +200,7 @@ export async function loadDashboardData(ownerId: string): Promise<DashboardData>
       JOIN "Project" p ON p.id = t."projectId"
       WHERE t."billingStatus" = 'UNBILLED'
         AND t."ownerId" = ${ownerId}
+        AND (t."teamMemberId" IS NULL OR t."approvalStatus" = 'APPROVED')
         AND p."ownerId" = ${ownerId}
         AND p.status = 'ACTIVE'
     ),
@@ -205,6 +220,7 @@ export async function loadDashboardData(ownerId: string): Promise<DashboardData>
       FROM "TimeEntry" t
       CROSS JOIN bounds b
       WHERE t."ownerId" = ${ownerId}
+        AND (t."teamMemberId" IS NULL OR t."approvalStatus" = 'APPROVED')
         AND t.date >= b.rolling_start_at
         AND t.date <= b.today_end_at
       GROUP BY t.date::date
@@ -248,6 +264,7 @@ export async function loadDashboardData(ownerId: string): Promise<DashboardData>
       JOIN "Client" c ON c.id = p."clientId"
       CROSS JOIN bounds b
       WHERE t.date >= b.previous_start_at AND t.date <= b.previous_end_at AND t."ownerId" = ${ownerId}
+        AND (t."teamMemberId" IS NULL OR t."approvalStatus" = 'APPROVED')
     ),
     current_week_entries AS (
       SELECT
@@ -271,6 +288,7 @@ export async function loadDashboardData(ownerId: string): Promise<DashboardData>
       JOIN "Project" p ON p.id = t."projectId"
       CROSS JOIN bounds b
       WHERE t.date >= b.current_start_at AND t.date <= b.current_end_at AND t."ownerId" = ${ownerId}
+        AND (t."teamMemberId" IS NULL OR t."approvalStatus" = 'APPROVED')
     ),
     top_project_rows AS (
       SELECT
@@ -290,12 +308,14 @@ export async function loadDashboardData(ownerId: string): Promise<DashboardData>
           COALESCE(SUM(ROUND(("durationMinutes"::numeric / 60) * "hourlyRateCentsSnapshot")), 0) AS value_cents
         FROM "TimeEntry"
         WHERE "billingStatus" = 'UNBILLED' AND "ownerId" = ${ownerId}
+          AND ("teamMemberId" IS NULL OR "approvalStatus" = 'APPROVED')
         GROUP BY "projectId"
       ) time_totals ON time_totals."projectId" = p.id
       LEFT JOIN (
         SELECT "projectId", COALESCE(SUM("totalCostCents"), 0) AS value_cents
         FROM "ExpenseItem"
         WHERE "billingStatus" = 'UNBILLED' AND "ownerId" = ${ownerId}
+          AND ("teamMemberId" IS NULL OR "approvalStatus" = 'APPROVED')
         GROUP BY "projectId"
       ) item_totals ON item_totals."projectId" = p.id
       WHERE p.status = 'ACTIVE' AND p."ownerId" = ${ownerId}
@@ -348,8 +368,27 @@ export async function loadDashboardData(ownerId: string): Promise<DashboardData>
       FROM "Invoice" i
       CROSS JOIN bounds b
       WHERE i."ownerId" = ${ownerId}
+    ),
+    business_profile AS (
+      SELECT jsonb_build_object(
+        'id', bp.id,
+        'tradingName', bp."tradingName",
+        'contactName', bp."contactName",
+        'gstRegistered', bp."gstRegistered",
+        'gstRate', bp."gstRate",
+        'taxSetAsideEnabled', bp."taxSetAsideEnabled",
+        'customTaxPercentageOverride', bp."customTaxPercentageOverride",
+        'includeGstInTaxEstimate', bp."includeGstInTaxEstimate",
+        'includeSuperInSetAsidePlanning', bp."includeSuperInSetAsidePlanning",
+        'superPlanningEnabled', bp."superPlanningEnabled",
+        'superContributionPercentage', bp."superContributionPercentage"
+      ) AS data
+      FROM "BusinessProfile" bp
+      WHERE bp."ownerId" = ${ownerId}
+      LIMIT 1
     )
     SELECT
+      business_profile.data AS "profile",
       active_projects.data AS "projects",
       top_active_projects.data AS "topActiveProjects",
       invoice_snapshots.data AS "invoiceSnapshots",
@@ -368,6 +407,7 @@ export async function loadDashboardData(ownerId: string): Promise<DashboardData>
       overdue_invoices.overdue_count AS "overdueInvoiceCount",
       overdue_invoices.overdue_total AS "overdueInvoiceCents"
     FROM active_projects, top_active_projects, invoice_snapshots, sent_invoices, overdue_invoices, unbilled_time, unbilled_items, rolling_30_work, previous_week_entries, current_week_entries
+    LEFT JOIN business_profile ON true
   `;
 
   const row = rows[0];
@@ -415,6 +455,7 @@ export async function loadDashboardData(ownerId: string): Promise<DashboardData>
   const currentWeekAverageDailyMinutes = numberValue(row?.totalCurrentWeekMinutes) / elapsedDays;
 
   return {
+    profile: row?.profile ?? null,
     projects: row?.projects ?? [],
     topActiveProjects: (row?.topActiveProjects ?? []).map((project) => ({
       ...project,
@@ -474,7 +515,7 @@ function weekdayLabel(date: Date, weekday: "short" | "long") {
 
 export const getDashboardData = unstable_cache(loadDashboardData, ["dashboard-data"], {
   revalidate: SHORT_REVALIDATE_SECONDS,
-  tags: [CACHE_TAGS.dashboard]
+  tags: [CACHE_TAGS.dashboard, CACHE_TAGS.profile]
 });
 
 export type ProjectListRow = {
@@ -667,13 +708,15 @@ export const getHoursExportData = unstable_cache(
           COALESCE(SUM(t."durationMinutes"), 0) AS "unbilledMinutes"
         FROM "Project" p
         JOIN "Client" c ON c.id = p."clientId"
-        LEFT JOIN "TimeEntry" t ON t."projectId" = p.id AND t."billingStatus" = 'UNBILLED'
+        LEFT JOIN "TimeEntry" t ON t."projectId" = p.id
+          AND t."billingStatus" = 'UNBILLED'
+          AND (t."teamMemberId" IS NULL OR t."approvalStatus" = 'APPROVED')
         WHERE p.status = 'ACTIVE' AND p."ownerId" = ${ownerId}
         GROUP BY p.id, p.title, c."businessName"
         ORDER BY p.title ASC
       `,
       prisma.timeEntry.findMany({
-        where: { ownerId },
+        where: { ownerId, OR: [{ teamMemberId: null }, { approvalStatus: "APPROVED" }] },
         select: { id: true, projectId: true, date: true, durationMinutes: true, notes: true },
         orderBy: { date: "asc" }
       })

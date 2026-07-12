@@ -1,8 +1,9 @@
 "use client";
 
+import Link from "next/link";
 import { useState } from "react";
 import { Mail, MessageSquare } from "lucide-react";
-import { sendInvoiceEmailAction, sendInvoiceSmsAction } from "@/app/actions";
+import { sendInvoiceSmsAction } from "@/app/actions";
 
 export function EmailInvoiceButton({
   invoiceId,
@@ -19,24 +20,6 @@ export function EmailInvoiceButton({
   const [error, setError] = useState("");
   const [isPreparing, setIsPreparing] = useState(false);
 
-  function emailInvoice() {
-    setMessage("");
-    setError("");
-    if (disabledReason) {
-      setError(disabledReason);
-      return;
-    }
-
-    setIsPreparing(true);
-
-    const formData = new FormData();
-    formData.set("invoiceId", invoiceId);
-    sendInvoiceEmailAction(formData)
-      .then((result) => setMessage(result.message))
-      .catch((emailError) => setError(emailError instanceof Error ? emailError.message : "Invoice email could not be sent."))
-      .finally(() => setIsPreparing(false));
-  }
-
   function smsInvoice() {
     setMessage("");
     setError("");
@@ -44,6 +27,7 @@ export function EmailInvoiceButton({
       setError(smsDisabledReason);
       return;
     }
+    if (!window.confirm("Send this invoice by SMS/MMS now?")) return;
 
     setIsPreparing(true);
 
@@ -57,10 +41,17 @@ export function EmailInvoiceButton({
 
   return (
     <div className="grid gap-2">
-      <button className={className} type="button" onClick={emailInvoice} disabled={Boolean(disabledReason) || isPreparing}>
-        <Mail size={20} aria-hidden="true" />
-        {isPreparing ? "Preparing..." : "Email Invoice"}
-      </button>
+      {disabledReason ? (
+        <button className={className} type="button" disabled>
+          <Mail size={20} aria-hidden="true" />
+          Email Invoice
+        </button>
+      ) : (
+        <Link className={className} href={`/invoices/${invoiceId}/email`}>
+          <Mail size={20} aria-hidden="true" />
+          Review & Email Invoice
+        </Link>
+      )}
       <button className="tap-secondary w-full" type="button" onClick={smsInvoice} disabled={Boolean(smsDisabledReason) || isPreparing}>
         <MessageSquare size={20} aria-hidden="true" />
         {isPreparing ? "Preparing..." : "SMS Invoice"}

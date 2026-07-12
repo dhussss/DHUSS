@@ -9,16 +9,19 @@ const config: Config = {
   theme: {
     extend: {
       colors: {
-        ink: "#20241f",
-        paper: "#f6f1e9",
-        line: "#ded6c8",
-        gum: "#f06f5d",
+        ink: "#252823",
+        paper: "#f5f3ed",
+        line: "#dcd8ce",
+        gum: "#c9694f",
         mint: "rgb(var(--color-accent-rgb) / <alpha-value>)",
         moss: "rgb(var(--color-secondary-rgb) / <alpha-value>)",
-        yolk: "#e7a82f"
+        yolk: "#c7933f"
       },
       boxShadow: {
-        soft: "0 18px 55px rgba(40, 34, 25, 0.09)"
+        soft: "0 10px 30px rgba(43, 47, 39, 0.055), 0 2px 8px rgba(43, 47, 39, 0.035)"
+      },
+      fontWeight: {
+        black: "700"
       }
     }
   },

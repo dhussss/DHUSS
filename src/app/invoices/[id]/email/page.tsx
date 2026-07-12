@@ -5,6 +5,7 @@ import { requireUserId } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { invoicePdfFileName } from "@/lib/invoice-data";
 import { buildPreparedInvoiceEmailBody, invoiceDueDate, renderTemplate } from "@/lib/invoice-documents";
+import { invoiceEmailConfirmationCopyAddress } from "@/lib/invoice-delivery";
 import type { InvoiceBusinessDetails, InvoiceClientDetails, InvoiceDocumentData } from "@/lib/invoice-documents";
 import { formatDateAU } from "@/lib/dates";
 import { formatMoney } from "@/lib/money";
@@ -63,6 +64,7 @@ export default async function InvoiceEmailPage({ params }: { params: Promise<{ i
     includePublicInvoiceLink: profile?.includePublicInvoiceLinkInEmail ?? true
   });
   const disabledReason = !client.email ? "Add an email address to this client before preparing the email." : "";
+  const confirmationCopyEmail = invoiceEmailConfirmationCopyAddress(business.email);
 
   return (
     <main className="page-shell">
@@ -93,6 +95,7 @@ export default async function InvoiceEmailPage({ params }: { params: Promise<{ i
           initialTo={client.email ?? ""}
           initialSubject={subject}
           initialBody={body}
+          confirmationCopyEmail={confirmationCopyEmail}
           disabledReason={disabledReason}
         />
 
@@ -139,9 +142,9 @@ export default async function InvoiceEmailPage({ params }: { params: Promise<{ i
             <div className="mt-4 grid gap-2 text-sm font-bold text-moss">
               <p className="flex items-center gap-2 text-ink">
                 <Mail size={18} aria-hidden="true" />
-                Your email app
+                App email delivery
               </p>
-              <p>The message opens in the signed-in device’s default mail app and sends from that user’s own email account.</p>
+              <p>The app sends this through your configured SMTP account with the invoice PDF attached. A hidden confirmation copy is sent to {confirmationCopyEmail ?? "your configured sender email"} so you have a real record.</p>
             </div>
           </section>
         </aside>

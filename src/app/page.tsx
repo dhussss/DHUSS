@@ -4,14 +4,11 @@ import {
   ArrowRight,
   Banknote,
   Building2,
-  Calculator,
   ClipboardList,
   Clock3,
   FileClock,
   FolderKanban,
   ReceiptText,
-  Sparkles,
-  Timer,
   TrendingUp,
   UsersRound
 } from "lucide-react";
@@ -23,8 +20,7 @@ import { requireUserId } from "@/lib/auth";
 import { getDashboardData, type DashboardData } from "@/lib/app-data";
 import { dateInputValue, formatDateAU, previousWeekMondayToSunday, todayInPerth } from "@/lib/dates";
 import { formatMoney } from "@/lib/money";
-import { calculateSetAsidePlanning, formatPercent } from "@/lib/planning";
-import { prisma } from "@/lib/prisma";
+import { calculateSetAsidePlanning } from "@/lib/planning";
 import { formatHours } from "@/lib/time";
 
 export const dynamic = "force-dynamic";
@@ -35,25 +31,8 @@ export default async function DashboardPage() {
   const previousWeek = previousWeekMondayToSunday(today);
   const previousWeekExportLink = `/hours-export?start=${dateInputValue(previousWeek.start)}&end=${dateInputValue(previousWeek.end)}`;
 
-  const [dashboardData, profile] = await Promise.all([
-    getDashboardData(ownerId),
-    prisma.businessProfile.findUnique({
-      where: { ownerId },
-      select: {
-        id: true,
-        tradingName: true,
-        contactName: true,
-        gstRegistered: true,
-        gstRate: true,
-        taxSetAsideEnabled: true,
-        customTaxPercentageOverride: true,
-        includeGstInTaxEstimate: true,
-        includeSuperInSetAsidePlanning: true,
-        superPlanningEnabled: true,
-        superContributionPercentage: true
-      }
-    })
-  ]);
+  const dashboardData = await getDashboardData(ownerId);
+  const profile = dashboardData.profile;
 
   const {
     projects,
@@ -65,8 +44,6 @@ export default async function DashboardPage() {
     totalCurrentWeekMinutes,
     totalCurrentWeekBillableCents,
     rolling30AverageDailyMinutes,
-    currentWeekAverageDailyMinutes,
-    weeklyAverageDeltaMinutes,
     currentWeekEntryCount,
     unbilledEntryCount,
     unbilledItemCount,
@@ -85,54 +62,51 @@ export default async function DashboardPage() {
     timeZone: "UTC"
   }).format(today);
   const setAside = calculateSetAsidePlanning(totalCurrentWeekBillableCents, profile, today);
+  const setupStepsComplete = [Boolean(profile), projects.length > 0, currentWeekEntryCount > 0].filter(Boolean).length;
+  const setupProgress = Math.round((setupStepsComplete / 3) * 100);
 
   return (
     <main className="page-shell max-w-[92rem]">
-      <section className="overflow-hidden rounded-lg border border-ink/15 bg-ink text-white shadow-soft">
-        <div className="command-hero-bg p-4 sm:p-6 lg:p-7">
-          <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-start">
+      <section className="command-hero-bg overflow-hidden rounded-2xl text-white shadow-[0_18px_55px_rgba(24,61,42,0.18)]">
+        <div className="p-5 sm:p-7 lg:p-8">
+          <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-center">
             <div>
-              <p className="inline-flex items-center gap-2 text-sm font-black uppercase text-mint">
-                <Sparkles size={17} aria-hidden="true" />
-                Dashboard
-              </p>
-              <h1 className="mt-2 text-4xl font-black tracking-normal sm:text-5xl">Morning, {displayName}</h1>
-              <p className="mt-3 max-w-2xl text-sm font-bold leading-6 text-white/75">
-                {todayLabel}. This is the live cockpit for hours, invoices, and work ready to bill.
-              </p>
+              <p className="text-sm font-semibold text-white/65">{todayLabel}</p>
+              <h1 className="mt-2 text-3xl font-black tracking-normal text-white sm:text-4xl">Good morning, {displayName}</h1>
             </div>
-            <div className="lg:w-[10rem]">
-              <LogTimeSheet projects={projects} buttonLabel="Log Work" />
+            <div className="grid gap-2 sm:grid-cols-3 lg:min-w-[31rem]">
+              <div className="[&_button]:w-full [&_button]:border-white/15 [&_button]:bg-white [&_button]:text-ink [&_button]:shadow-none [&_button:hover]:bg-paper">
+                <LogTimeSheet projects={projects} buttonLabel="Log Work" />
+              </div>
+              <Link className="inline-flex min-h-12 items-center justify-center gap-2 rounded-[10px] border border-white/20 bg-white/10 px-4 py-3 text-sm font-bold text-white transition hover:bg-white/18" href="/invoices/new">
+                <ReceiptText size={18} aria-hidden="true" /> New Invoice
+              </Link>
+              <Link className="inline-flex min-h-12 items-center justify-center gap-2 rounded-[10px] border border-white/20 bg-white/10 px-4 py-3 text-sm font-bold text-white transition hover:bg-white/18" href="/projects/new">
+                <FolderKanban size={18} aria-hidden="true" /> New Project
+              </Link>
             </div>
           </div>
 
-          <div className="mt-6 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+          <div className="mt-7 grid overflow-hidden rounded-xl border border-white/15 bg-white/[0.07] md:grid-cols-3">
             <HeroKpi
               icon={Clock3}
-              label="This Week's Hours"
+              label="This week"
               value={`${formatHours(totalCurrentWeekMinutes)}h`}
-              note={`${currentWeekEntryCount} logged entr${currentWeekEntryCount === 1 ? "y" : "ies"}`}
-              tone="mint"
-            />
-            <HeroKpi
-              icon={TrendingUp}
-              label="Weekly Billable"
-              value={formatMoney(totalCurrentWeekBillableCents)}
-              note="Labour value logged this week"
+              note={`${formatMoney(totalCurrentWeekBillableCents)} billable`}
               tone="mint"
             />
             <HeroKpi
               icon={Banknote}
-              label="Outstanding Invoices"
+              label="Outstanding"
               value={formatMoney(pendingPaymentCents)}
-              note={`${invoiceSnapshots.sent.count} sent, ${invoiceSnapshots.overdue.count} overdue`}
+              note={invoiceSnapshots.overdue.count ? `${invoiceSnapshots.overdue.count} overdue` : `${invoiceSnapshots.sent.count} sent invoice${invoiceSnapshots.sent.count === 1 ? "" : "s"}`}
               tone={overdueInvoiceCount ? "gum" : "mint"}
             />
             <HeroKpi
               icon={ReceiptText}
-              label="Unbilled Work"
+              label="Ready to invoice"
               value={formatMoney(pendingInvoicesCents)}
-              note={`${unbilledEntryCount} time entr${unbilledEntryCount === 1 ? "y" : "ies"} + ${unbilledItemCount} expense${unbilledItemCount === 1 ? "" : "s"}`}
+              note={`${unbilledEntryCount + unbilledItemCount} unbilled item${unbilledEntryCount + unbilledItemCount === 1 ? "" : "s"}`}
               tone="mint"
               href="/invoices/new"
             />
@@ -140,81 +114,60 @@ export default async function DashboardPage() {
         </div>
       </section>
 
-      <section className="mt-5 rounded-lg border border-line/80 bg-white/80 shadow-soft backdrop-blur">
-        <div className="grid gap-4 p-4 sm:p-5 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-center">
-          <div className="flex items-start gap-3">
-            <span className="icon-tile">
-              <Calculator size={20} aria-hidden="true" />
-            </span>
-            <div>
-              <p className="section-title">Tax to set aside this week</p>
-              <h2 className="mt-1 text-2xl font-black tracking-normal text-ink">{formatMoney(setAside.combinedWeeklyCents)} this week</h2>
-              <p className="mt-2 max-w-3xl text-sm font-bold leading-6 text-moss">
-                Estimate only, not tax advice. Based on {formatMoney(setAside.currentWeekEarningsCents)} current-week billable value annualised to{" "}
-                {formatMoney(setAside.estimatedAnnualIncomeCents)}.
-              </p>
-            </div>
-          </div>
-          <div className="grid gap-2 sm:grid-cols-3 lg:min-w-[34rem]">
-            <SnapshotMini label="Tax rate estimate" value={formatPercent(setAside.estimatedEffectiveTaxRate)} />
-            <SnapshotMini label="Tax this month" value={formatMoney(setAside.suggestedTaxMonthlyCents)} />
-            <SnapshotMini label="Super this week" value={formatMoney(setAside.suggestedSuperWeeklyCents)} />
-          </div>
-        </div>
-      </section>
+      <Link href="/insights" className="mt-4 flex items-center justify-between gap-4 rounded-xl border border-line bg-white px-4 py-3.5 text-sm shadow-soft transition hover:border-mint/50 sm:px-5">
+        <span className="font-semibold text-moss">Tax set-aside estimate</span>
+        <span className="inline-flex items-center gap-2 font-black text-ink">
+          {formatMoney(setAside.combinedWeeklyCents)}
+          <ArrowRight size={16} className="text-mint" aria-hidden="true" />
+        </span>
+      </Link>
 
       {showSetup ? (
-        <section className="mt-4 rounded-lg border border-mint/30 bg-mint/10 p-4">
-          <p className="section-title">Setup</p>
-          <h2 className="mt-1 text-xl font-black tracking-normal">Get ready to invoice</h2>
+        <section className="mt-4 rounded-xl border border-mint/25 bg-white p-4 shadow-soft sm:p-5">
+          <div className="flex items-start justify-between gap-4">
+            <div>
+              <p className="section-title">Getting started</p>
+              <h2 className="mt-1 text-xl font-black tracking-normal">You are {setupProgress}% ready to send your first invoice</h2>
+            </div>
+            <span className="text-2xl font-black text-mint">{setupStepsComplete}/3</span>
+          </div>
+          <div className="mt-4 h-2 overflow-hidden rounded-full bg-paper">
+            <div className="h-full rounded-full bg-mint transition-all" style={{ width: `${setupProgress}%` }} />
+          </div>
           <div className="mt-4 grid gap-2 sm:grid-cols-3">
             <Link className="tap-secondary bg-white" href="/business-profile">
               <Building2 size={18} aria-hidden="true" />
-              Business Profile
+              {profile ? "Profile complete" : "Complete profile"}
             </Link>
             <Link className="tap-secondary bg-white" href="/projects/new">
               <UsersRound size={18} aria-hidden="true" />
-              First Client / Project
+              {projects.length ? "Project added" : "Add first project"}
             </Link>
             <Link className="tap-secondary bg-white" href="/invoices/new">
               <ClipboardList size={18} aria-hidden="true" />
-              First Invoice
+              Create first invoice
             </Link>
           </div>
         </section>
       ) : null}
 
-      <section className="mt-5 rounded-lg border border-line/80 bg-white/[0.82] shadow-soft backdrop-blur">
-        <div className="rounded-t-lg border-b border-white/10 bg-ink p-5 text-white sm:p-6">
-          <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-end">
-            <div>
-              <p className="inline-flex items-center gap-2 text-sm font-black uppercase text-mint">
-                <Timer size={17} aria-hidden="true" />
-                Current week planner
-              </p>
-              <h2 className="mt-1 text-3xl font-black tracking-normal sm:text-4xl">Monday to Sunday</h2>
-              <p className="mt-2 text-sm font-bold text-white/70">
-                {formatDateAU(dashboardData.currentWeekStart)} - {formatDateAU(dashboardData.currentWeekEnd)}
-              </p>
-            </div>
-            <div className="grid gap-2 sm:grid-cols-2 lg:w-[28rem]">
-              <WeekSummaryCard label="This Week" value={`${formatHours(totalCurrentWeekMinutes)}h`} note="logged hours" />
-              <WeekSummaryCard label="Earned" value={formatMoney(totalCurrentWeekBillableCents)} note="billable value" />
-            </div>
+      <section className="mt-5 overflow-hidden rounded-xl border border-line bg-white shadow-soft">
+        <div className="border-b border-line bg-white p-5 sm:p-6">
+          <div>
+            <h2 className="text-2xl font-black tracking-normal text-ink">This week</h2>
+            <p className="mt-1 text-sm font-medium text-moss">
+              {formatDateAU(dashboardData.currentWeekStart)} - {formatDateAU(dashboardData.currentWeekEnd)}
+            </p>
           </div>
         </div>
         <WeeklyPerformanceChart
           days={currentWeekDays}
-          totalMinutes={totalCurrentWeekMinutes}
-          billableValueCents={totalCurrentWeekBillableCents}
           rollingAverageDailyMinutes={rolling30AverageDailyMinutes}
-          currentWeekAverageDailyMinutes={currentWeekAverageDailyMinutes}
-          averageDeltaMinutes={weeklyAverageDeltaMinutes}
           hasEntries={currentWeekEntryCount > 0}
         />
       </section>
 
-      <section className="mt-5 grid gap-4 xl:grid-cols-[1.05fr_0.95fr_0.9fr]">
+      <section className="mt-5 grid gap-4 lg:grid-cols-2 [&>section:last-child]:lg:col-span-2">
         <DashboardWidget
           title="Top Active Projects"
           actionHref="/projects"
@@ -224,7 +177,7 @@ export default async function DashboardPage() {
           accent="mint"
         >
           {topActiveProjects.map((project) => (
-            <Link key={project.id} href={`/projects/${project.id}`} className="group block rounded-lg border border-line bg-white p-4 transition hover:border-mint">
+            <Link key={project.id} href={`/projects/${project.id}`} className="group block rounded-[10px] border border-line bg-white p-4 transition hover:border-mint/60 hover:bg-paper/30">
               <div className="flex items-start justify-between gap-3">
                 <div>
                   <p className="text-lg font-black tracking-normal text-ink">{project.title}</p>
@@ -260,7 +213,7 @@ export default async function DashboardPage() {
           accent="mint"
         >
           {previousWeekEntries.slice(0, 4).map((entry) => (
-            <article key={entry.id} className="rounded-lg border border-line bg-white p-3">
+            <article key={entry.id} className="rounded-[10px] border border-line bg-white p-3">
               <div className="flex items-start justify-between gap-3">
                 <div>
                   <p className="font-black text-ink">{entry.project.title}</p>
@@ -296,22 +249,22 @@ function HeroKpi({
   href?: string;
 }) {
   const tones = {
-    mint: "from-mint/30 to-white/10 text-mint",
-    gum: "from-gum/30 to-white/10 text-gum"
+    mint: "text-white",
+    gum: "text-[#ffb39e]"
   };
   const card = (
-    <article className={`min-h-40 rounded-lg border border-white/15 bg-gradient-to-br ${tones[tone]} p-4 shadow-soft backdrop-blur`}>
+    <article className={`min-h-40 border-t border-white/15 p-4 first:border-t-0 md:border-l md:border-t-0 ${tones[tone]} sm:p-5`}>
       <div className="flex items-start justify-between gap-3">
-        <p className="text-xs font-black uppercase tracking-[0.12em] text-white/65">{label}</p>
-        <span className="grid size-10 place-items-center rounded-lg bg-white/12">
+        <p className="text-sm font-semibold text-white/68">{label}</p>
+        <span className="grid size-9 place-items-center rounded-lg bg-white/10">
           <Icon size={21} aria-hidden="true" />
         </span>
       </div>
-      <p className="mt-5 text-4xl font-black tracking-normal text-white sm:text-5xl">{value}</p>
-      <p className="mt-2 text-sm font-bold leading-5 text-white/70">{note}</p>
+      <p className="mt-5 text-3xl font-black tracking-normal text-white sm:text-4xl">{value}</p>
+      <p className="mt-2 text-sm font-medium leading-5 text-white/62">{note}</p>
       {href ? (
-        <span className="mt-4 inline-flex items-center gap-1 text-sm font-black text-white">
-          Start invoice <ArrowRight size={16} aria-hidden="true" />
+        <span className="mt-4 inline-flex items-center gap-1 text-sm font-bold text-white">
+          Review and invoice <ArrowRight size={16} aria-hidden="true" />
         </span>
       ) : null}
     </article>
@@ -323,16 +276,6 @@ function HeroKpi({
     </Link>
   ) : (
     card
-  );
-}
-
-function WeekSummaryCard({ label, value, note }: { label: string; value: string; note: string }) {
-  return (
-    <div className="rounded-lg border border-white/15 bg-white/10 p-4 shadow-soft">
-      <p className="text-xs font-black uppercase tracking-[0.12em] text-white/60">{label}</p>
-      <p className="mt-2 text-3xl font-black tracking-normal text-white">{value}</p>
-      <p className="mt-1 text-xs font-bold text-white/60">{note}</p>
-    </div>
   );
 }
 
@@ -361,10 +304,10 @@ function DashboardWidget({
   };
 
   return (
-    <section className="overflow-hidden rounded-lg border border-line/80 bg-white/80 shadow-soft backdrop-blur">
-      <div className="flex items-center justify-between gap-3 border-b border-line/80 bg-white/70 p-4">
+    <section className="overflow-hidden rounded-xl border border-line bg-white shadow-soft">
+      <div className="flex items-center justify-between gap-3 border-b border-line bg-white p-4">
         <div className="flex items-center gap-3">
-          <span className={`h-9 w-1.5 rounded-full ${accents[accent]}`} aria-hidden="true" />
+          <span className={`h-8 w-1 rounded-full ${accents[accent]}`} aria-hidden="true" />
           <h2 className="text-xl font-black tracking-normal">{title}</h2>
         </div>
         <Link className="inline-flex items-center gap-1 text-sm font-bold text-mint" href={actionHref}>
@@ -375,7 +318,7 @@ function DashboardWidget({
         {hasChildren ? (
           children
         ) : (
-          <article className="rounded-lg border border-line/80 bg-white/70 p-4 text-sm font-bold text-moss">
+          <article className="rounded-[10px] border border-line bg-paper/40 p-4 text-sm font-semibold text-moss">
             <span className="inline-flex items-center gap-3">
               <EmptyIcon size={20} aria-hidden="true" />
               {emptyText}
@@ -389,8 +332,8 @@ function DashboardWidget({
 
 function SnapshotMini({ label, value }: { label: string; value: string }) {
   return (
-    <div className="rounded-lg bg-paper p-2.5">
-      <p className="text-[0.68rem] font-black uppercase text-moss">{label}</p>
+    <div className="rounded-[10px] bg-paper/70 p-2.5">
+      <p className="text-[0.72rem] font-bold text-moss">{label}</p>
       <p className="mt-1 text-lg font-black leading-6 text-ink">{value}</p>
     </div>
   );

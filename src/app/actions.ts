@@ -11,7 +11,7 @@ import { dollarsToCents } from "@/lib/money";
 import { addDays, endOfDay, parseInputDate } from "@/lib/dates";
 import { expenseCategoryOptions, expenseStatusOptions } from "@/lib/expenses";
 import { buildInvoiceLineData, invoiceTotals, summaryText } from "@/lib/invoices";
-import { sendInvoiceEmailWithPdf, sendInvoiceMmsWithPdf } from "@/lib/invoice-delivery";
+import { sendInvoiceMmsWithPdf, sendPreparedInvoiceEmailWithPdf } from "@/lib/invoice-delivery";
 import { isQuarterHour, isQuarterHourClock, parseClockTime } from "@/lib/time";
 import { createClient } from "@/lib/supabase/server";
 
@@ -455,12 +455,13 @@ export async function updateTimeEntryAction(formData: FormData) {
   const projectId = text(formData, "projectId");
   const entry = await prisma.timeEntry.findUnique({
     where: { id: entryId },
-    select: { id: true, projectId: true, billingStatus: true }
+    select: { id: true, projectId: true, billingStatus: true, teamMemberId: true }
   });
 
   if (!entry || entry.projectId !== projectId) throw new Error("Time entry not found.");
   const project = await prisma.project.findFirst({ where: { id: projectId, ownerId }, select: { id: true } });
   if (!project) throw new Error("Time entry not found.");
+  if (entry.teamMemberId) throw new Error("Review subcontractor hours from the Team section.");
   if (entry.billingStatus !== "UNBILLED") throw new Error("Billed time entries cannot be edited.");
 
   await prisma.timeEntry.update({
@@ -482,12 +483,13 @@ export async function deleteTimeEntryAction(formData: FormData) {
   const projectId = text(formData, "projectId");
   const entry = await prisma.timeEntry.findUnique({
     where: { id: entryId },
-    select: { id: true, projectId: true, billingStatus: true }
+    select: { id: true, projectId: true, billingStatus: true, teamMemberId: true }
   });
 
   if (!entry || entry.projectId !== projectId) throw new Error("Time entry not found.");
   const project = await prisma.project.findFirst({ where: { id: projectId, ownerId }, select: { id: true } });
   if (!project) throw new Error("Time entry not found.");
+  if (entry.teamMemberId) throw new Error("Review subcontractor hours from the Team section.");
   if (entry.billingStatus !== "UNBILLED") throw new Error("Billed time entries cannot be deleted.");
 
   await prisma.timeEntry.delete({ where: { id: entryId } });
@@ -956,16 +958,19 @@ export async function unarchiveProjectAction(formData: FormData) {
 function projectDeleteBlockedMessage({
   invoiceCount,
   billedTimeCount,
-  billedExpenseCount
+  billedExpenseCount,
+  teamAssignmentCount
 }: {
   invoiceCount: number;
   billedTimeCount: number;
   billedExpenseCount: number;
+  teamAssignmentCount: number;
 }) {
   const reasons = [
     invoiceCount ? `${invoiceCount} invoice${invoiceCount === 1 ? "" : "s"}` : "",
     billedTimeCount ? `${billedTimeCount} billed time entr${billedTimeCount === 1 ? "y" : "ies"}` : "",
-    billedExpenseCount ? `${billedExpenseCount} billed expense item${billedExpenseCount === 1 ? "" : "s"}` : ""
+    billedExpenseCount ? `${billedExpenseCount} billed expense item${billedExpenseCount === 1 ? "" : "s"}` : "",
+    teamAssignmentCount ? `${teamAssignmentCount} subcontractor assignment${teamAssignmentCount === 1 ? "" : "s"}` : ""
   ].filter(Boolean);
 
   return reasons.length
@@ -991,20 +996,22 @@ export async function deleteProjectAction(formData: FormData) {
         invoiceCount: number;
         billedTimeCount: number;
         billedExpenseCount: number;
+        teamAssignmentCount: number;
       }
     | null = null;
 
   try {
     deleteResult = await prisma.$transaction(async (tx) => {
-      const [invoiceCount, billedTimeCount, billedExpenseCount] = await Promise.all([
+      const [invoiceCount, billedTimeCount, billedExpenseCount, teamAssignmentCount] = await Promise.all([
         tx.invoice.count({ where: { projectId, ownerId } }),
         tx.timeEntry.count({ where: { projectId, ownerId, billingStatus: "BILLED" } }),
-        tx.expenseItem.count({ where: { projectId, ownerId, billingStatus: "BILLED" } })
+        tx.expenseItem.count({ where: { projectId, ownerId, billingStatus: "BILLED" } }),
+        tx.projectAssignment.count({ where: { projectId, ownerId } })
       ]);
-      const blockedMessage = projectDeleteBlockedMessage({ invoiceCount, billedTimeCount, billedExpenseCount });
+      const blockedMessage = projectDeleteBlockedMessage({ invoiceCount, billedTimeCount, billedExpenseCount, teamAssignmentCount });
 
       if (blockedMessage) {
-        return { deleted: false, blockedMessage, invoiceCount, billedTimeCount, billedExpenseCount };
+        return { deleted: false, blockedMessage, invoiceCount, billedTimeCount, billedExpenseCount, teamAssignmentCount };
       }
 
       await tx.timeEntry.deleteMany({ where: { projectId, ownerId } });
@@ -1012,7 +1019,7 @@ export async function deleteProjectAction(formData: FormData) {
       await tx.rateHistory.deleteMany({ where: { projectId, ownerId } });
       await tx.project.deleteMany({ where: { id: projectId, ownerId } });
 
-      return { deleted: true, blockedMessage: "", invoiceCount, billedTimeCount, billedExpenseCount };
+      return { deleted: true, blockedMessage: "", invoiceCount, billedTimeCount, billedExpenseCount, teamAssignmentCount };
     });
   } catch (error) {
     console.error("Project deletion failed", error);
@@ -1047,7 +1054,7 @@ export async function deleteClientAction(formData: FormData) {
     });
     const projectIds = projects.map((project) => project.id);
 
-    const [invoiceCount, billedTimeCount, billedExpenseCount] = await Promise.all([
+    const [invoiceCount, billedTimeCount, billedExpenseCount, teamAssignmentCount] = await Promise.all([
       tx.invoice.count({
         where: {
           ownerId,
@@ -1055,11 +1062,12 @@ export async function deleteClientAction(formData: FormData) {
         }
       }),
       tx.timeEntry.count({ where: { ownerId, projectId: { in: projectIds }, billingStatus: "BILLED" } }),
-      tx.expenseItem.count({ where: { ownerId, projectId: { in: projectIds }, billingStatus: "BILLED" } })
+      tx.expenseItem.count({ where: { ownerId, projectId: { in: projectIds }, billingStatus: "BILLED" } }),
+      tx.projectAssignment.count({ where: { ownerId, projectId: { in: projectIds } } })
     ]);
 
-    if (invoiceCount || billedTimeCount || billedExpenseCount) {
-      throw new Error("This client has invoice or billed history. Archive their projects instead of deleting the client.");
+    if (invoiceCount || billedTimeCount || billedExpenseCount || teamAssignmentCount) {
+      throw new Error("This client has invoice, billed, or subcontractor assignment history. Archive their projects instead of deleting the client.");
     }
 
     await tx.timeEntry.deleteMany({
@@ -1144,6 +1152,7 @@ export async function createInvoiceDraftAction(formData: FormData) {
         projectId,
         ownerId,
         billingStatus: "UNBILLED",
+        OR: [{ teamMemberId: null }, { approvalStatus: "APPROVED" }],
         date: { gte: start, lte: end }
       },
       select: { id: true, date: true, durationMinutes: true, notes: true, hourlyRateCentsSnapshot: true },
@@ -1359,6 +1368,70 @@ export async function markInvoicePaidAction(formData: FormData) {
   await finaliseInvoice(ownerId, invoiceId, "PAID", text(formData, "confirmIncomplete") === "on");
   revalidatePath("/");
   revalidatePath("/invoices");
+  revalidateAppData();
+  redirect(`/invoices/${invoiceId}`);
+}
+
+export async function markInvoiceUnpaidAction(formData: FormData) {
+  const ownerId = await requireUserId();
+  const invoiceId = text(formData, "invoiceId");
+  const invoice = await prisma.invoice.findFirst({
+    where: { id: invoiceId, ownerId },
+    select: { id: true, status: true }
+  });
+
+  if (!invoice) throw new Error("Invoice not found.");
+  if (invoice.status !== "PAID") throw new Error("Only paid invoices can be marked unpaid.");
+
+  await prisma.invoice.update({
+    where: { id: invoiceId },
+    data: { status: "SENT", paymentDate: null }
+  });
+
+  revalidatePath("/");
+  revalidatePath("/invoices");
+  revalidateAppData();
+  redirect(`/invoices/${invoiceId}`);
+}
+
+export async function markInvoiceUnsentAction(formData: FormData) {
+  const ownerId = await requireUserId();
+  const invoiceId = text(formData, "invoiceId");
+  const invoice = await prisma.invoice.findUnique({
+    where: { id: invoiceId },
+    include: { lineItems: true }
+  });
+
+  if (!invoice) throw new Error("Invoice not found.");
+  if (invoice.ownerId !== ownerId) throw new Error("Invoice not found.");
+  if (invoice.status !== "SENT") throw new Error("Only sent invoices can be marked unsent.");
+
+  const timeEntryIds = invoice.lineItems
+    .map((line) => line.timeEntryId)
+    .filter((id): id is string => Boolean(id));
+  const expenseItemIds = invoice.lineItems
+    .map((line) => line.expenseItemId)
+    .filter((id): id is string => Boolean(id));
+
+  await prisma.$transaction([
+    prisma.timeEntry.updateMany({
+      where: { ownerId, id: { in: timeEntryIds }, invoiceId },
+      data: { billingStatus: "UNBILLED", invoiceId: null }
+    }),
+    prisma.expenseItem.updateMany({
+      where: { ownerId, id: { in: expenseItemIds }, invoiceId },
+      data: { billingStatus: "UNBILLED", invoiceId: null }
+    }),
+    prisma.invoice.update({
+      where: { id: invoiceId },
+      data: { status: "DRAFT", paymentDate: null, publicTokenEnabled: false }
+    })
+  ]);
+
+  revalidatePath("/");
+  revalidatePath("/projects");
+  revalidatePath("/invoices");
+  if (invoice.publicToken) revalidatePath(`/public/invoices/${invoice.publicToken}`);
   revalidateAppData();
   redirect(`/invoices/${invoiceId}`);
 }
@@ -1582,7 +1655,18 @@ export async function prepareInvoiceSmsAction(formData: FormData) {
 export async function sendInvoiceEmailAction(formData: FormData) {
   const ownerId = await requireUserId();
   const invoiceId = text(formData, "invoiceId");
-  const result = await sendInvoiceEmailWithPdf(ownerId, invoiceId);
+  const emails = parseEmailList(text(formData, "to"), "To", false);
+  const subject = text(formData, "subject");
+  const message = text(formData, "message");
+
+  if (formData.has("subject") && !subject) throw new Error("Email subject is required.");
+  if (formData.has("message") && !message) throw new Error("Email message is required.");
+
+  const result = await sendPreparedInvoiceEmailWithPdf(ownerId, invoiceId, {
+    to: emails.length ? emails.join(", ") : undefined,
+    subject: subject || undefined,
+    body: message || undefined
+  });
   revalidatePath(`/invoices/${invoiceId}`);
   revalidatePath("/invoices");
   revalidateAppData();

@@ -34,14 +34,27 @@ export async function loadInvoiceDeliveryData(ownerId: string, invoiceId: string
 }
 
 export async function sendInvoiceEmailWithPdf(ownerId: string, invoiceId: string) {
-  const data = await loadInvoiceDeliveryData(ownerId, invoiceId);
-  if (!data.client.email) throw new Error("Add an email address to this client before emailing the invoice.");
+  return sendPreparedInvoiceEmailWithPdf(ownerId, invoiceId, {});
+}
 
-  const { subject, body } = buildEmailMessage(data);
+export async function sendPreparedInvoiceEmailWithPdf(
+  ownerId: string,
+  invoiceId: string,
+  options: { to?: string; subject?: string; body?: string }
+) {
+  const data = await loadInvoiceDeliveryData(ownerId, invoiceId);
+  const to = options.to?.trim() || data.client.email;
+  if (!to) throw new Error("Add an email address to this client before emailing the invoice.");
+
+  const preview = buildInvoiceEmailMessage(data);
+  const subject = options.subject?.trim() || preview.subject;
+  const body = options.body?.trim() || preview.body;
+  const confirmationCopyEmail = invoiceEmailConfirmationCopyAddress(data.business.email);
   const pdf = await renderDeliveryPdf(data);
   const filename = invoicePdfFileName(data.invoice.invoiceNumber);
   await sendSmtpMail({
-    to: data.client.email,
+    to,
+    bcc: shouldSendConfirmationCopy(to, confirmationCopyEmail) ? confirmationCopyEmail : null,
     replyTo: data.business.email,
     fromName: data.business.name,
     subject,
@@ -57,7 +70,12 @@ export async function sendInvoiceEmailWithPdf(ownerId: string, invoiceId: string
     }
   });
 
-  return { ok: true, message: `Invoice emailed to ${data.client.email} with the PDF attached.` };
+  return {
+    ok: true,
+    message: confirmationCopyEmail
+      ? `Invoice email sent to ${to} with the PDF attached. A confirmation copy was sent to ${confirmationCopyEmail}.`
+      : `Invoice email sent to ${to} with the PDF attached.`
+  };
 }
 
 export async function sendInvoiceMmsWithPdf(ownerId: string, invoiceId: string) {
@@ -115,7 +133,7 @@ export async function publicInvoicePdfHeaders(token: string) {
   return pdfHeaders(mmsSafePdfFileName(invoice.invoiceNumber));
 }
 
-function buildEmailMessage(data: DeliveryData) {
+export function buildInvoiceEmailMessage(data: DeliveryData) {
   const { invoice, profile, business, client, publicInvoiceUrl } = data;
   const dueDate = invoiceDueDate(invoice);
   const templateValues = {
@@ -151,6 +169,10 @@ function buildEmailMessage(data: DeliveryData) {
   };
 }
 
+export function invoiceEmailConfirmationCopyAddress(businessEmail: string | null) {
+  return businessEmail || process.env.SMTP_FROM_EMAIL || process.env.SMTP_USER || null;
+}
+
 function buildSmsMessage(data: DeliveryData, mediaUrl: string) {
   const dueDate = invoiceDueDate(data.invoice);
   return [
@@ -167,6 +189,7 @@ async function renderDeliveryPdf(data: DeliveryData) {
 
 async function sendSmtpMail({
   to,
+  bcc,
   replyTo,
   fromName,
   subject,
@@ -174,6 +197,7 @@ async function sendSmtpMail({
   attachment
 }: {
   to: string;
+  bcc: string | null;
   replyTo: string | null;
   fromName: string;
   subject: string;
@@ -200,6 +224,7 @@ async function sendSmtpMail({
   await transporter.sendMail({
     from: formatEmailAddress(process.env.SMTP_FROM_NAME || fromName, fromEmail),
     to,
+    bcc: bcc || undefined,
     replyTo: replyTo || undefined,
     subject,
     text,
@@ -211,6 +236,15 @@ async function sendSmtpMail({
       }
     ]
   });
+}
+
+function shouldSendConfirmationCopy(to: string, confirmationCopyEmail: string | null) {
+  if (!confirmationCopyEmail) return false;
+  const recipients = to
+    .split(/[;,]/)
+    .map((email) => email.trim().toLowerCase())
+    .filter(Boolean);
+  return !recipients.includes(confirmationCopyEmail.toLowerCase());
 }
 
 async function sendTwilioMms({ to, body, mediaUrl }: { to: string; body: string; mediaUrl: string }) {

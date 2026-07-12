@@ -1,11 +1,12 @@
 import Link from "next/link";
-import { Banknote, Eye, Mail, Plus, Search } from "lucide-react";
-import { markInvoicePaidAction } from "@/app/actions";
+import { Banknote, Eye, Mail, Plus, RotateCcw, Search } from "lucide-react";
+import { markInvoicePaidAction, markInvoiceUnpaidAction } from "@/app/actions";
 import { requireUserId } from "@/lib/auth";
 import { getInvoicesPageData } from "@/lib/app-data";
 import { formatDateAU, todayInPerth } from "@/lib/dates";
 import { formatMoney } from "@/lib/money";
 import { formatHours } from "@/lib/time";
+import { ConfirmSubmitButton } from "@/components/ConfirmSubmitButton";
 import { InvoiceStatusPill } from "@/components/StatusPill";
 import { SubmitButton } from "@/components/SubmitButton";
 
@@ -85,31 +86,31 @@ export default async function InvoicesPage({
                 <p className="mt-1 text-sm font-bold text-moss">
                   {invoice.project.title} - {invoice.client.businessName}
                 </p>
-                <p className="mt-1 text-xs font-bold uppercase text-moss">{invoice.mode.toLowerCase()} invoice</p>
+                  <p className="mt-1 text-xs font-semibold text-moss">{invoice.mode.toLowerCase()} invoice</p>
               </div>
               <InvoiceStatusPill status={invoice.status} />
             </div>
             <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-5">
               <div>
-                <p className="text-xs font-bold uppercase text-moss">Date range</p>
+                <p className="text-xs font-semibold text-moss">Date range</p>
                 <p className="mt-1 text-sm font-bold">
                   {formatDateAU(invoice.dateRangeStart)} - {formatDateAU(invoice.dateRangeEnd)}
                 </p>
               </div>
               <div>
-                <p className="text-xs font-bold uppercase text-moss">Invoice date</p>
+                <p className="text-xs font-semibold text-moss">Invoice date</p>
                 <p className="mt-1 text-sm font-bold">{formatDateAU(invoice.invoiceDate)}</p>
               </div>
               <div>
-                <p className="text-xs font-bold uppercase text-moss">Due date</p>
+                <p className="text-xs font-semibold text-moss">Due date</p>
                 <p className={`mt-1 text-sm font-bold ${overdue ? "text-gum" : ""}`}>{dueDate ? formatDateAU(dueDate) : "Not set"}</p>
               </div>
               <div>
-                <p className="text-xs font-bold uppercase text-moss">Total</p>
+                <p className="text-xs font-semibold text-moss">Total</p>
                 <p className="mt-1 text-lg font-black">{formatMoney(invoice.grandTotalCents)}</p>
               </div>
               <div>
-                <p className="text-xs font-bold uppercase text-moss">Hours</p>
+                <p className="text-xs font-semibold text-moss">Hours</p>
                 <p className="mt-1 text-lg font-black">
                   {invoice.totalDurationMinutes ? formatHours(invoice.totalDurationMinutes) : Number(invoice.totalHours)}h
                 </p>
@@ -125,13 +126,28 @@ export default async function InvoicesPage({
                 <Mail size={18} aria-hidden="true" />
                 Email Invoice
               </Link>
-              <form action={markInvoicePaidAction} className="flex-1">
-                <input type="hidden" name="invoiceId" value={invoice.id} />
-                <SubmitButton className="tap-primary w-full bg-mint hover:bg-ink" pendingLabel="Marking paid..." disabled={invoice.status === "PAID" || invoice.status === "VOID"}>
-                  <Banknote size={18} aria-hidden="true" />
-                  Mark Paid
-                </SubmitButton>
-              </form>
+              {invoice.status === "PAID" ? (
+                <form action={markInvoiceUnpaidAction} className="flex-1">
+                  <input type="hidden" name="invoiceId" value={invoice.id} />
+                  <ConfirmSubmitButton
+                    className="tap-secondary w-full"
+                    message={`Mark ${invoice.invoiceNumber} as unpaid? It will move back to sent and appear as outstanding again.`}
+                    pendingLabel="Marking unpaid..."
+                    showDefaultIcon={false}
+                  >
+                    <RotateCcw size={18} aria-hidden="true" />
+                    Mark Unpaid
+                  </ConfirmSubmitButton>
+                </form>
+              ) : (
+                <form action={markInvoicePaidAction} className="flex-1">
+                  <input type="hidden" name="invoiceId" value={invoice.id} />
+                  <SubmitButton className="tap-primary w-full bg-mint hover:bg-ink" pendingLabel="Marking paid..." disabled={invoice.status === "VOID"}>
+                    <Banknote size={18} aria-hidden="true" />
+                    Mark Paid
+                  </SubmitButton>
+                </form>
+              )}
             </div>
           </article>
           );

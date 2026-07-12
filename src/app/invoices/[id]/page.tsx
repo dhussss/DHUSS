@@ -6,6 +6,8 @@ import {
   enableInvoicePublicLinkAction,
   markInvoicePaidAction,
   markInvoiceSentAction,
+  markInvoiceUnpaidAction,
+  markInvoiceUnsentAction,
   regenerateInvoicePublicLinkAction,
   revokeInvoicePublicLinkAction,
   unvoidInvoiceAction,
@@ -98,14 +100,14 @@ export default async function InvoiceDetailPage({ params }: { params: Promise<{ 
           <section className="card">
             <p className="section-title">Send workflow</p>
             <div className="mt-4 grid gap-2">
-              <p className="text-sm font-bold text-moss">Send the invoice PDF in one step.</p>
+              <p className="text-sm font-bold text-moss">Review the email first, then send the invoice PDF attachment.</p>
               <EmailInvoiceButton
                 invoiceId={invoice.id}
                 disabledReason={emailDisabledReason}
                 smsDisabledReason={smsDisabledReason}
               />
               <p className="rounded-lg border border-line bg-paper p-3 text-xs font-bold leading-5 text-moss">
-                Email sends through your configured SMTP account with the invoice PDF attached. SMS sends as MMS through Twilio with the invoice PDF attached.
+                Email sends through your configured SMTP account with a hidden confirmation copy to your email. SMS sends as MMS through Twilio with the invoice PDF attached.
               </p>
             </div>
           </section>
@@ -216,6 +218,34 @@ export default async function InvoiceDetailPage({ params }: { params: Promise<{ 
                 </SubmitButton>
               )}
             </form>
+            {invoice.status === "PAID" ? (
+              <form action={markInvoiceUnpaidAction}>
+                <input type="hidden" name="invoiceId" value={invoice.id} />
+                <ConfirmSubmitButton
+                  className="tap-secondary w-full"
+                  message={`Mark ${invoice.invoiceNumber} as unpaid? It will move back to sent and appear as outstanding again.`}
+                  pendingLabel="Marking unpaid..."
+                  showDefaultIcon={false}
+                >
+                  <RotateCcw size={20} aria-hidden="true" />
+                  Mark Unpaid
+                </ConfirmSubmitButton>
+              </form>
+            ) : null}
+            {invoice.status === "SENT" ? (
+              <form action={markInvoiceUnsentAction}>
+                <input type="hidden" name="invoiceId" value={invoice.id} />
+                <ConfirmSubmitButton
+                  className="tap-secondary w-full"
+                  message={`Mark ${invoice.invoiceNumber} as unsent? It will return to draft, the client link will be turned off, and linked work will become unbilled again.`}
+                  pendingLabel="Marking unsent..."
+                  showDefaultIcon={false}
+                >
+                  <RotateCcw size={20} aria-hidden="true" />
+                  Mark Unsent
+                </ConfirmSubmitButton>
+              </form>
+            ) : null}
             {invoice.status === "VOID" ? (
               <form action={unvoidInvoiceAction}>
                 <input type="hidden" name="invoiceId" value={invoice.id} />

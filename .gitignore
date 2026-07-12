@@ -5,3 +5,5 @@ node_modules
 *.db
 prisma/dev.db
 .pnpm-store
+.vercel
+.env*

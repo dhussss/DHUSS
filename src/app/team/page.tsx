@@ -1,0 +1,100 @@
+import Link from "next/link";
+import { ArrowRight, CheckCircle2, UserPlus, UsersRound, WalletCards, XCircle } from "lucide-react";
+import { createTeamInvitationAction, reviewSubcontractorTimeEntryAction, revokeTeamInvitationAction } from "@/app/team/actions";
+import { TeamInviteLink } from "@/components/TeamInviteLink";
+import { requireUser } from "@/lib/auth";
+import { formatDateAU } from "@/lib/dates";
+import { formatMoney } from "@/lib/money";
+import { prisma } from "@/lib/prisma";
+import { formatHours, labourTotalCents } from "@/lib/time";
+
+export const dynamic = "force-dynamic";
+
+export default async function TeamPage({ searchParams }: { searchParams?: Promise<Record<string, string | string[] | undefined>> }) {
+  const user = await requireUser();
+  const params = await searchParams;
+  const inviteCode = typeof params?.invite === "string" ? params.invite : "";
+  const [members, invitations, submittedEntries, workerAssignments] = await Promise.all([
+    prisma.teamMember.findMany({
+      where: { ownerId: user.id, status: "ACTIVE" },
+      include: { timeEntries: { where: { approvalStatus: "APPROVED", paymentStatus: "UNPAID" }, select: { durationMinutes: true, payRateCentsSnapshot: true } }, assignments: { where: { active: true }, select: { id: true } } },
+      orderBy: { displayName: "asc" }
+    }),
+    prisma.teamInvitation.findMany({ where: { ownerId: user.id, status: "PENDING", expiresAt: { gt: new Date() } }, orderBy: { createdAt: "desc" } }),
+    prisma.timeEntry.findMany({
+      where: { ownerId: user.id, approvalStatus: "SUBMITTED", teamMemberId: { not: null } },
+      include: { project: { select: { title: true } }, teamMember: { select: { displayName: true } } },
+      orderBy: [{ date: "desc" }, { createdAt: "desc" }]
+    }),
+    prisma.projectAssignment.count({ where: { active: true, teamMember: { userId: user.id, status: "ACTIVE" } } })
+  ]);
+  const baseUrl = (process.env.APP_BASE_URL || "https://dhuss.vercel.app").replace(/\/$/, "");
+
+  return (
+    <main className="page-shell">
+      <header className="page-header">
+        <p className="section-title">Team</p>
+        <h1 className="page-title">Subcontractors</h1>
+        <p className="page-subtitle">Invite your team, assign projects, review their hours, and keep payments clear.</p>
+      </header>
+
+      {workerAssignments ? (
+        <Link href="/team/work" className="mt-4 flex items-center justify-between gap-4 rounded-xl border border-mint/25 bg-mint/10 p-4 text-ink">
+          <span><span className="block font-black">Work assigned to me</span><span className="mt-1 block text-sm font-medium text-moss">Log hours on projects shared with you.</span></span>
+          <ArrowRight size={20} className="text-mint" aria-hidden="true" />
+        </Link>
+      ) : null}
+
+      {inviteCode ? <TeamInviteLink code={inviteCode} joinUrl={`${baseUrl}/team/join?code=${encodeURIComponent(inviteCode)}`} /> : null}
+
+      <section className="mt-5 grid gap-5 lg:grid-cols-[0.9fr_1.1fr]">
+        <form action={createTeamInvitationAction} className="card grid gap-4">
+          <div className="flex items-center gap-3"><span className="icon-tile"><UserPlus size={20} aria-hidden="true" /></span><div><p className="font-black">Invite subcontractor</p><p className="text-sm font-medium text-moss">Set the default rates now. You can override them per project.</p></div></div>
+          <label>Name<input name="subcontractorName" required /></label>
+          <label>Email (optional)<input name="subcontractorEmail" type="email" /></label>
+          <div className="grid grid-cols-2 gap-3">
+            <label>Pay rate<input name="payRate" type="number" min="0.01" step="0.01" inputMode="decimal" required /></label>
+            <label>Client rate<input name="chargeRate" type="number" min="0.01" step="0.01" inputMode="decimal" required /></label>
+          </div>
+          <button className="tap-primary" type="submit"><UserPlus size={19} aria-hidden="true" />Create invitation</button>
+        </form>
+
+        <section className="surface-panel">
+          <div className="surface-header flex items-center justify-between"><div><p className="section-title">People</p><h2 className="mt-1 text-xl font-black">Active team</h2></div><UsersRound className="text-mint" size={22} aria-hidden="true" /></div>
+          <div className="grid gap-3 p-3">
+            {members.length ? members.map((member) => {
+              const unpaidCents = member.timeEntries.reduce((sum, entry) => sum + labourTotalCents(entry.durationMinutes, entry.payRateCentsSnapshot || 0), 0);
+              const unpaidMinutes = member.timeEntries.reduce((sum, entry) => sum + entry.durationMinutes, 0);
+              return (
+                <Link key={member.id} href={`/team/${member.id}`} className="flex items-center justify-between gap-4 rounded-lg border border-line bg-white p-4 transition hover:border-mint/50">
+                  <span><span className="block font-black text-ink">{member.displayName}</span><span className="mt-1 block text-sm font-medium text-moss">{member.assignments.length} active project{member.assignments.length === 1 ? "" : "s"} · {formatHours(unpaidMinutes)}h unpaid</span></span>
+                  <span className="text-right"><span className="block font-black">{formatMoney(unpaidCents)}</span><ArrowRight className="ml-auto mt-1 text-mint" size={17} aria-hidden="true" /></span>
+                </Link>
+              );
+            }) : <p className="rounded-lg bg-paper p-4 text-sm font-medium text-moss">No linked subcontractors yet.</p>}
+          </div>
+        </section>
+      </section>
+
+      {submittedEntries.length ? (
+        <section className="mt-6 surface-panel">
+          <div className="surface-header"><p className="section-title">Needs review</p><h2 className="mt-1 text-xl font-black">Submitted hours</h2></div>
+          <div className="grid gap-3 p-3">
+            {submittedEntries.map((entry) => (
+              <article key={entry.id} className="rounded-lg border border-line bg-white p-4">
+                <div className="flex items-start justify-between gap-4"><div><p className="font-black">{entry.teamMember?.displayName}</p><p className="mt-1 text-sm font-medium text-moss">{entry.project.title} · {formatDateAU(entry.date)}</p>{entry.notes ? <p className="mt-2 text-sm text-moss">{entry.notes}</p> : null}</div><div className="text-right"><p className="text-xl font-black">{formatHours(entry.durationMinutes)}h</p><p className="text-sm font-semibold text-moss">Cost {formatMoney(labourTotalCents(entry.durationMinutes, entry.payRateCentsSnapshot || 0))}</p></div></div>
+                <form action={reviewSubcontractorTimeEntryAction} className="mt-4 grid grid-cols-2 gap-2"><input type="hidden" name="entryId" value={entry.id} /><button className="tap-primary" name="decision" value="approve" type="submit"><CheckCircle2 size={18} aria-hidden="true" />Approve</button><button className="tap-danger" name="decision" value="reject" type="submit"><XCircle size={18} aria-hidden="true" />Reject</button></form>
+              </article>
+            ))}
+          </div>
+        </section>
+      ) : null}
+
+      {invitations.length ? (
+        <section className="mt-6"><h2 className="text-xl font-black">Pending invitations</h2><div className="mt-3 grid gap-3">{invitations.map((invitation) => <article key={invitation.id} className="card flex items-center justify-between gap-4"><div><p className="font-black">{invitation.subcontractorName}</p><p className="mt-1 text-sm font-medium text-moss">Expires {formatDateAU(invitation.expiresAt)}</p></div><form action={revokeTeamInvitationAction}><input type="hidden" name="invitationId" value={invitation.id} /><button className="tap-danger" type="submit">Revoke</button></form></article>)}</div></section>
+      ) : null}
+
+      {!members.length && !submittedEntries.length ? <div className="mt-6 flex items-center gap-3 rounded-xl border border-line bg-white p-4 text-sm font-medium text-moss"><WalletCards size={20} aria-hidden="true" />Team payments will appear after approved hours are submitted.</div> : null}
+    </main>
+  );
+}

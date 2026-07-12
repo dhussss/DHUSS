@@ -267,6 +267,7 @@ export async function loadInsightsData(ownerId: string): Promise<InsightsData> {
       JOIN "Project" p ON p.id = t."projectId"
       CROSS JOIN bounds b
       WHERE t."ownerId" = ${ownerId}
+        AND (t."teamMemberId" IS NULL OR t."approvalStatus" = 'APPROVED')
         AND t.date >= b.current_start_at
         AND t.date <= b.current_end_at
     ),
@@ -277,6 +278,7 @@ export async function loadInsightsData(ownerId: string): Promise<InsightsData> {
       FROM "TimeEntry" t
       CROSS JOIN bounds b
       WHERE t."ownerId" = ${ownerId}
+        AND (t."teamMemberId" IS NULL OR t."approvalStatus" = 'APPROVED')
         AND t.date >= b.rolling_start_at
         AND t.date <= b.today_end_at
       GROUP BY t.date::date
@@ -307,6 +309,7 @@ export async function loadInsightsData(ownerId: string): Promise<InsightsData> {
       FROM "TimeEntry" t
       CROSS JOIN bounds b
       WHERE t."ownerId" = ${ownerId}
+        AND (t."teamMemberId" IS NULL OR t."approvalStatus" = 'APPROVED')
         AND t.date >= b.month_start_at
         AND t.date <= b.today_end_at
     ),
@@ -315,6 +318,7 @@ export async function loadInsightsData(ownerId: string): Promise<InsightsData> {
       FROM "TimeEntry" t
       CROSS JOIN bounds b
       WHERE t."ownerId" = ${ownerId}
+        AND (t."teamMemberId" IS NULL OR t."approvalStatus" = 'APPROVED')
         AND t.date >= b.quarter_start_at
         AND t.date <= b.today_end_at
     ),
@@ -326,6 +330,7 @@ export async function loadInsightsData(ownerId: string): Promise<InsightsData> {
           FROM "TimeEntry" t
           CROSS JOIN bounds b
           WHERE t."ownerId" = ${ownerId}
+            AND (t."teamMemberId" IS NULL OR t."approvalStatus" = 'APPROVED')
             AND t.date >= b.month_start_at
             AND t.date <= b.today_end_at
           GROUP BY t.date
@@ -343,6 +348,7 @@ export async function loadInsightsData(ownerId: string): Promise<InsightsData> {
           JOIN "Project" p ON p.id = t."projectId"
           CROSS JOIN bounds b
           WHERE t."ownerId" = ${ownerId}
+            AND (t."teamMemberId" IS NULL OR t."approvalStatus" = 'APPROVED')
             AND p."ownerId" = ${ownerId}
             AND t.date >= b.month_start_at
             AND t.date <= b.today_end_at
@@ -369,6 +375,7 @@ export async function loadInsightsData(ownerId: string): Promise<InsightsData> {
         JOIN "Project" p ON p.id = t."projectId"
         CROSS JOIN bounds b
         WHERE t."ownerId" = ${ownerId}
+          AND (t."teamMemberId" IS NULL OR t."approvalStatus" = 'APPROVED')
           AND p."ownerId" = ${ownerId}
           AND t.date >= b.quarter_start_at
           AND t.date <= b.today_end_at
@@ -400,6 +407,7 @@ export async function loadInsightsData(ownerId: string): Promise<InsightsData> {
       FROM "TimeEntry" t
       JOIN "Project" p ON p.id = t."projectId"
       WHERE t."ownerId" = ${ownerId}
+        AND (t."teamMemberId" IS NULL OR t."approvalStatus" = 'APPROVED')
         AND p."ownerId" = ${ownerId}
         AND p.status = 'ACTIVE'
         AND t."billingStatus" = 'UNBILLED'
@@ -426,7 +434,9 @@ export async function loadInsightsData(ownerId: string): Promise<InsightsData> {
           LEFT JOIN (
             SELECT "projectId", COALESCE(SUM(ROUND(("durationMinutes"::numeric / 60) * "hourlyRateCentsSnapshot")), 0) AS value_cents
             FROM "TimeEntry"
-            WHERE "ownerId" = ${ownerId} AND "billingStatus" = 'UNBILLED'
+            WHERE "ownerId" = ${ownerId}
+              AND "billingStatus" = 'UNBILLED'
+              AND ("teamMemberId" IS NULL OR "approvalStatus" = 'APPROVED')
             GROUP BY "projectId"
           ) time_values ON time_values."projectId" = p.id
           LEFT JOIN (
