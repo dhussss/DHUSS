@@ -1,11 +1,11 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ArrowLeft, BriefcaseBusiness, Clock3, PauseCircle, WalletCards } from "lucide-react";
-import { createProjectAssignmentAction, markTeamMemberPaidAction, stopProjectAssignmentAction } from "@/app/team/actions";
+import { createProjectAssignmentAction, markTeamMemberPaidAction, reverseWagePaymentAction, stopProjectAssignmentAction, updateWagePaymentAction } from "@/app/team/actions";
 import { ConfirmSubmitButton } from "@/components/ConfirmSubmitButton";
 import { LiveTeamRefresh } from "@/components/LiveTeamRefresh";
 import { requireUserId } from "@/lib/auth";
-import { formatDateAU } from "@/lib/dates";
+import { dateInputValue, formatDateAU } from "@/lib/dates";
 import { centsToDollars, formatMoney } from "@/lib/money";
 import { prisma } from "@/lib/prisma";
 import { formatHours, labourTotalCents } from "@/lib/time";
@@ -20,7 +20,8 @@ export default async function TeamMemberPage({ params }: { params: Promise<{ id:
       where: { id, ownerId },
       include: {
         assignments: { include: { project: { include: { client: true } } }, orderBy: { createdAt: "desc" } },
-        timeEntries: { include: { project: { select: { title: true } } }, orderBy: [{ date: "desc" }, { createdAt: "desc" }] }
+        timeEntries: { include: { project: { select: { title: true } } }, orderBy: [{ date: "desc" }, { createdAt: "desc" }] },
+        wagePayments: { include: { project: { select: { title: true } } }, orderBy: { paidAt: "desc" } }
       }
     }),
     prisma.project.findMany({ where: { ownerId, status: "ACTIVE" }, include: { client: true }, orderBy: { title: "asc" } })
@@ -85,6 +86,21 @@ export default async function TeamMemberPage({ params }: { params: Promise<{ id:
             )) : <p className="rounded-lg bg-paper p-4 text-sm font-medium text-moss">No projects assigned yet.</p>}
           </div>
         </section>
+      </section>
+
+      <section className="mt-7">
+        <h2 className="text-xl font-black">Payment history</h2>
+        <div className="mt-3 grid gap-3">
+          {member.wagePayments.length ? member.wagePayments.map((payment) => (
+            <article key={payment.id} className={`card ${payment.status === "VOID" ? "opacity-65" : ""}`}>
+              <div className="flex items-start justify-between gap-4"><div><p className="font-black">{payment.project.title}</p><p className="mt-1 text-sm font-semibold text-moss">{formatHours(payment.minutes)}h · {payment.status.toLowerCase()}</p></div><p className="text-xl font-black">{formatMoney(payment.amountCents)}</p></div>
+              {payment.status === "PAID" ? <div className="mt-4 grid gap-3 sm:grid-cols-2">
+                <form action={updateWagePaymentAction} className="grid gap-2 rounded-lg bg-paper p-3"><input type="hidden" name="paymentId" value={payment.id} /><label>Paid date<input type="date" name="paidAt" defaultValue={dateInputValue(payment.paidAt)} required /></label><label>Reference<input name="reference" defaultValue={payment.reference || ""} /></label><button className="tap-secondary" type="submit">Update payment</button></form>
+                <form action={reverseWagePaymentAction} className="grid gap-2 rounded-lg border border-gum/20 bg-gum/5 p-3"><input type="hidden" name="paymentId" value={payment.id} /><label>Reversal note<input name="reversalNote" placeholder="Reason for correction" required /></label><ConfirmSubmitButton className="tap-danger" message="Mark this wage payment unpaid? The source hours will return to unpaid and the expense record will be archived.">Mark unpaid</ConfirmSubmitButton></form>
+              </div> : <p className="mt-3 text-sm font-semibold text-moss">Reversed {payment.reversedAt ? formatDateAU(payment.reversedAt) : ""} · {payment.reversalNote}</p>}
+            </article>
+          )) : <p className="rounded-xl border border-line bg-white p-4 text-sm font-medium text-moss">No wage payments recorded yet.</p>}
+        </div>
       </section>
 
       <section className="mt-7">

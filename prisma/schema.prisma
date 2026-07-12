@@ -78,6 +78,11 @@ enum TeamPaymentStatus {
   PAID
 }
 
+enum WagePaymentStatus {
+  PAID
+  VOID
+}
+
 model Client {
   id           String    @id @default(cuid())
   ownerId      String?
@@ -116,6 +121,7 @@ model Project {
   invoices               Invoice[]
   rateHistory            RateHistory[]
   teamAssignments        ProjectAssignment[]
+  wagePayments           WagePayment[]
 
   @@index([clientId])
   @@index([status])
@@ -159,6 +165,7 @@ model TimeEntry {
   paymentStatus             TeamPaymentStatus?
   paidAt                    DateTime?
   paymentReference          String?
+  wagePaymentId             String?
   createdAt                 DateTime            @default(now())
   updatedAt                 DateTime            @updatedAt
   project                   Project             @relation(fields: [projectId], references: [id], onDelete: Restrict)
@@ -166,6 +173,7 @@ model TimeEntry {
   invoiceLineItems          InvoiceLineItem[]
   teamMember                TeamMember?         @relation(fields: [teamMemberId], references: [id], onDelete: Restrict)
   projectAssignment         ProjectAssignment?  @relation(fields: [projectAssignmentId], references: [id], onDelete: Restrict)
+  wagePayment               WagePayment?        @relation(fields: [wagePaymentId], references: [id], onDelete: SetNull)
 
   @@index([projectId, date])
   @@index([billingStatus])
@@ -181,6 +189,7 @@ model TimeEntry {
   @@index([ownerId, paymentStatus])
   @@index([teamMemberId, date])
   @@index([projectAssignmentId])
+  @@index([wagePaymentId])
 }
 
 model TeamInvitation {
@@ -216,6 +225,7 @@ model TeamMember {
   updatedAt              DateTime            @updatedAt
   assignments            ProjectAssignment[]
   timeEntries            TimeEntry[]
+  wagePayments           WagePayment[]
 
   @@unique([ownerId, userId])
   @@index([ownerId, status])
@@ -293,12 +303,38 @@ model WorkExpense {
   createdAt        DateTime            @default(now())
   updatedAt        DateTime            @updatedAt
   project          Project?            @relation(fields: [projectId], references: [id], onDelete: SetNull)
+  wagePayment      WagePayment?
 
   @@index([ownerId, date])
   @@index([ownerId, category])
   @@index([ownerId, projectId])
   @@index([ownerId, status])
   @@index([ownerId, archivedAt])
+}
+
+model WagePayment {
+  id            String            @id @default(cuid())
+  ownerId       String
+  teamMemberId  String
+  projectId     String
+  workExpenseId String?           @unique
+  paidAt        DateTime
+  reference     String?
+  minutes       Int
+  amountCents   Int
+  status        WagePaymentStatus @default(PAID)
+  reversedAt    DateTime?
+  reversalNote  String?
+  createdAt     DateTime          @default(now())
+  updatedAt     DateTime          @updatedAt
+  teamMember    TeamMember        @relation(fields: [teamMemberId], references: [id], onDelete: Restrict)
+  project       Project           @relation(fields: [projectId], references: [id], onDelete: Restrict)
+  workExpense   WorkExpense?      @relation(fields: [workExpenseId], references: [id], onDelete: SetNull)
+  timeEntries   TimeEntry[]
+
+  @@index([ownerId, status])
+  @@index([teamMemberId, paidAt])
+  @@index([projectId, paidAt])
 }
 
 model DayOffLog {

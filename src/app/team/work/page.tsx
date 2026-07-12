@@ -20,7 +20,7 @@ export default async function AssignedWorkPage() {
     }),
     prisma.timeEntry.findMany({
       where: { createdByUserId: user.id, teamMemberId: { not: null } },
-      include: { project: { select: { title: true } } },
+      include: { project: { select: { title: true } }, wagePayment: { select: { paidAt: true, reference: true, status: true } } },
       orderBy: [{ date: "desc" }, { createdAt: "desc" }],
       take: 30
     })
@@ -46,7 +46,7 @@ export default async function AssignedWorkPage() {
       <section className="mt-7">
         <div className="flex items-end justify-between gap-4"><div><p className="section-title">Recent entries</p><h2 className="mt-1 text-xl font-black">My submitted hours</h2></div><div className="text-right"><p className="text-sm font-semibold text-moss">Approved unpaid</p><p className="font-black">{formatMoney(unpaidCents)}</p></div></div>
         <div className="mt-3 grid gap-3">
-          {entries.length ? entries.map((entry) => <article key={entry.id} className="card flex items-start justify-between gap-4"><div><p className="font-black">{entry.project.title}</p><p className="mt-1 text-sm font-medium text-moss">{formatDateAU(entry.date)} · {entry.billingStatus.toLowerCase()}</p>{entry.notes ? <p className="mt-2 text-sm text-moss">{entry.notes}</p> : null}</div><div className="text-right"><p className="text-lg font-black">{formatHours(entry.durationMinutes)}h</p><p className="text-sm font-semibold text-moss">{formatMoney(labourTotalCents(entry.durationMinutes, entry.payRateCentsSnapshot || 0))}</p>{entry.paymentStatus === "PAID" ? <CheckCircle2 className="ml-auto mt-2 text-mint" size={17} aria-label="Paid" /> : null}</div></article>) : <p className="rounded-xl border border-line bg-white p-4 text-sm font-medium text-moss"><Clock3 className="mr-2 inline" size={18} aria-hidden="true" />No hours logged yet.</p>}
+          {entries.length ? entries.map((entry) => <article key={entry.id} className="card flex items-start justify-between gap-4"><div><p className="font-black">{entry.project.title}</p><p className="mt-1 text-sm font-medium text-moss">{formatDateAU(entry.date)} · {entry.billingStatus.toLowerCase()}</p>{entry.notes ? <p className="mt-2 text-sm text-moss">{entry.notes}</p> : null}{entry.wagePayment ? <p className="mt-2 text-xs font-bold text-mint">Paid {formatDateAU(entry.wagePayment.paidAt)}{entry.wagePayment.reference ? ` · Ref ${entry.wagePayment.reference}` : ""}</p> : null}</div><div className="text-right"><p className="text-lg font-black">{formatHours(entry.durationMinutes)}h</p><p className="text-sm font-semibold text-moss">{formatMoney(labourTotalCents(entry.durationMinutes, entry.payRateCentsSnapshot || 0))}</p>{entry.paymentStatus === "PAID" ? <CheckCircle2 className="ml-auto mt-2 text-mint" size={17} aria-label="Paid" /> : null}</div></article>) : <p className="rounded-xl border border-line bg-white p-4 text-sm font-medium text-moss"><Clock3 className="mr-2 inline" size={18} aria-hidden="true" />No hours logged yet.</p>}
         </div>
       </section>
     </main>

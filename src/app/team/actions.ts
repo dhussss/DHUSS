@@ -215,7 +215,7 @@ export async function markTeamMemberPaidAction(formData: FormData) {
     for (const [entryProjectId, projectEntries] of byProject) {
       const amountCents = projectEntries.reduce((sum, entry) => sum + Math.round((entry.durationMinutes / 60) * (entry.payRateCentsSnapshot || 0)), 0);
       const minutes = projectEntries.reduce((sum, entry) => sum + entry.durationMinutes, 0);
-      await tx.workExpense.create({
+      const expense = await tx.workExpense.create({
         data: {
           ownerId: user.id,
           projectId: entryProjectId,
@@ -230,14 +230,49 @@ export async function markTeamMemberPaidAction(formData: FormData) {
           status: "ALLOCATED"
         }
       });
+      const payment = await tx.wagePayment.create({
+        data: { ownerId: user.id, teamMemberId, projectId: entryProjectId, workExpenseId: expense.id, paidAt, reference: paymentReference, minutes, amountCents }
+      });
+      await tx.timeEntry.updateMany({
+        where: { id: { in: projectEntries.map((entry) => entry.id) }, ownerId: user.id, paymentStatus: "UNPAID" },
+        data: { paymentStatus: "PAID", paidAt, paymentReference, wagePaymentId: payment.id }
+      });
     }
-    await tx.timeEntry.updateMany({
-      where: { id: { in: entries.map((entry) => entry.id) }, ownerId: user.id, paymentStatus: "UNPAID" },
-      data: { paymentStatus: "PAID", paidAt, paymentReference }
-    });
   });
   revalidateTeam();
   revalidatePath("/expenses");
   revalidatePath("/insights");
   redirect(`/team/${teamMemberId}?paid=1`);
+}
+
+export async function updateWagePaymentAction(formData: FormData) {
+  const user = await requireUser();
+  const paymentId = value(formData, "paymentId");
+  const paidAt = parseInputDate(formData.get("paidAt"));
+  const reference = value(formData, "reference") || null;
+  const payment = await prisma.wagePayment.findFirst({ where: { id: paymentId, ownerId: user.id, status: "PAID" }, select: { id: true, teamMemberId: true, workExpenseId: true } });
+  if (!payment) throw new Error("Wage payment not found.");
+  await prisma.$transaction([
+    prisma.wagePayment.update({ where: { id: payment.id }, data: { paidAt, reference } }),
+    prisma.timeEntry.updateMany({ where: { wagePaymentId: payment.id, ownerId: user.id }, data: { paidAt, paymentReference: reference } }),
+    ...(payment.workExpenseId ? [prisma.workExpense.update({ where: { id: payment.workExpenseId }, data: { date: paidAt, receiptReference: reference } })] : [])
+  ]);
+  revalidateTeam();
+  redirect(`/team/${payment.teamMemberId}?paymentUpdated=1`);
+}
+
+export async function reverseWagePaymentAction(formData: FormData) {
+  const user = await requireUser();
+  const paymentId = value(formData, "paymentId");
+  const reversalNote = value(formData, "reversalNote") || "Payment marked unpaid";
+  const payment = await prisma.wagePayment.findFirst({ where: { id: paymentId, ownerId: user.id, status: "PAID" }, select: { id: true, teamMemberId: true, workExpenseId: true } });
+  if (!payment) throw new Error("Wage payment not found.");
+  const reversedAt = new Date();
+  await prisma.$transaction([
+    prisma.wagePayment.update({ where: { id: payment.id }, data: { status: "VOID", reversedAt, reversalNote } }),
+    prisma.timeEntry.updateMany({ where: { wagePaymentId: payment.id, ownerId: user.id }, data: { paymentStatus: "UNPAID", paidAt: null, paymentReference: null, wagePaymentId: null } }),
+    ...(payment.workExpenseId ? [prisma.workExpense.update({ where: { id: payment.workExpenseId }, data: { archivedAt: reversedAt, notes: `Reversed: ${reversalNote}` } })] : [])
+  ]);
+  revalidateTeam();
+  redirect(`/team/${payment.teamMemberId}?paymentReversed=1`);
 }
