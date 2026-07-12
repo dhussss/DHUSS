@@ -4,6 +4,7 @@ import { AlertTriangle, ArrowLeft, Banknote, CalendarDays, CheckCircle2, Clock3,
 import type { LucideIcon } from "lucide-react";
 import type { Prisma } from "@prisma/client";
 import { deleteExpenseItemAction, deleteTimeEntryAction, deleteWorkExpenseAction, unarchiveProjectAction } from "@/app/actions";
+import { deleteTeamTimeEntryAction } from "@/app/team/actions";
 import { requireUserId } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { addDays, dateInputValue, formatDateAU, startOfWeekMonday, todayInPerth } from "@/lib/dates";
@@ -284,6 +285,19 @@ export default async function ProjectDetailPage({ params }: { params: Promise<{ 
                           </ConfirmSubmitButton>
                         </form>
                       </div>
+                    ) : entry.billingStatus === "UNBILLED" && entry.teamMemberId && entry.paymentStatus !== "PAID" ? (
+                      <form action={deleteTeamTimeEntryAction}>
+                        <input type="hidden" name="entryId" value={entry.id} />
+                        <input type="hidden" name="returnTo" value={`/projects/${project.id}`} />
+                        <ConfirmSubmitButton
+                          className="tap-danger px-3"
+                          message={`Delete this ${formatHours(entry.durationMinutes)}h entry for ${entry.workerDisplayNameSnapshot || "this subcontractor"} on ${formatDateAU(entry.date)}? This permanently removes it.`}
+                        >
+                          Delete
+                        </ConfirmSubmitButton>
+                      </form>
+                    ) : entry.teamMemberId && entry.paymentStatus === "PAID" ? (
+                      <span className="text-xs font-bold text-moss">Paid - reverse payment to edit</span>
                     ) : null}
                   </div>
                 </article>
