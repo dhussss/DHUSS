@@ -200,12 +200,44 @@ export async function markTeamMemberPaidAction(formData: FormData) {
   const user = await requireUser();
   const teamMemberId = value(formData, "teamMemberId");
   const paymentReference = value(formData, "paymentReference") || null;
-  const member = await prisma.teamMember.findFirst({ where: { id: teamMemberId, ownerId: user.id }, select: { id: true } });
+  const projectId = value(formData, "projectId") || null;
+  const member = await prisma.teamMember.findFirst({ where: { id: teamMemberId, ownerId: user.id }, select: { id: true, displayName: true } });
   if (!member) throw new Error("Subcontractor not found.");
-  await prisma.timeEntry.updateMany({
-    where: { ownerId: user.id, teamMemberId, approvalStatus: "APPROVED", paymentStatus: "UNPAID" },
-    data: { paymentStatus: "PAID", paidAt: new Date(), paymentReference }
+  const entries = await prisma.timeEntry.findMany({
+    where: { ownerId: user.id, teamMemberId, approvalStatus: "APPROVED", paymentStatus: "UNPAID", ...(projectId ? { projectId } : {}) },
+    select: { id: true, projectId: true, durationMinutes: true, payRateCentsSnapshot: true, project: { select: { title: true } } }
+  });
+  if (!entries.length) throw new Error("There are no unpaid hours for this employee and project.");
+  const paidAt = new Date();
+  const byProject = new Map<string, typeof entries>();
+  for (const entry of entries) byProject.set(entry.projectId, [...(byProject.get(entry.projectId) || []), entry]);
+  await prisma.$transaction(async (tx) => {
+    for (const [entryProjectId, projectEntries] of byProject) {
+      const amountCents = projectEntries.reduce((sum, entry) => sum + Math.round((entry.durationMinutes / 60) * (entry.payRateCentsSnapshot || 0)), 0);
+      const minutes = projectEntries.reduce((sum, entry) => sum + entry.durationMinutes, 0);
+      await tx.workExpense.create({
+        data: {
+          ownerId: user.id,
+          projectId: entryProjectId,
+          date: paidAt,
+          category: "SUBCONTRACTOR",
+          description: `Wages - ${member.displayName}`,
+          amountCents,
+          gstIncluded: false,
+          gstAmountCents: 0,
+          receiptReference: paymentReference,
+          notes: `${minutes / 60} hours - ${projectEntries[0].project.title}`,
+          status: "ALLOCATED"
+        }
+      });
+    }
+    await tx.timeEntry.updateMany({
+      where: { id: { in: entries.map((entry) => entry.id) }, ownerId: user.id, paymentStatus: "UNPAID" },
+      data: { paymentStatus: "PAID", paidAt, paymentReference }
+    });
   });
   revalidateTeam();
+  revalidatePath("/expenses");
+  revalidatePath("/insights");
   redirect(`/team/${teamMemberId}?paid=1`);
 }

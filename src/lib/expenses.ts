@@ -10,7 +10,7 @@ export const expenseCategoryOptions: { value: WorkExpenseCategory; label: string
   { value: "TRAINING_TICKETS", label: "Training/Tickets" },
   { value: "INSURANCE", label: "Insurance" },
   { value: "SOFTWARE", label: "Software" },
-  { value: "SUBCONTRACTOR", label: "Subcontractor" },
+  { value: "SUBCONTRACTOR", label: "Wages" },
   { value: "OTHER", label: "Other" }
 ];
 

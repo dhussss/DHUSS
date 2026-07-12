@@ -4,17 +4,29 @@ import type { LucideIcon } from "lucide-react";
 import type { ReactNode } from "react";
 import { FinancialYearChart, InsightCards, QuarterTrendChart } from "@/components/AnalyticsCharts";
 import { requireUserId } from "@/lib/auth";
-import { formatDateAU } from "@/lib/dates";
+import { endOfDay, formatDateAU, todayInPerth } from "@/lib/dates";
 import { getInsightsData } from "@/lib/insights";
 import { formatMoney } from "@/lib/money";
 import { formatPercent } from "@/lib/planning";
-import { formatHours } from "@/lib/time";
+import { formatHours, labourTotalCents } from "@/lib/time";
+import { prisma } from "@/lib/prisma";
 
 export const dynamic = "force-dynamic";
 
 export default async function InsightsPage() {
   const ownerId = await requireUserId();
-  const insights = await getInsightsData(ownerId);
+  const today = todayInPerth();
+  const fyStart = new Date(Date.UTC(today.getUTCMonth() >= 6 ? today.getUTCFullYear() : today.getUTCFullYear() - 1, 6, 1));
+  const todayEnd = endOfDay(today);
+  const [insights, paidInvoices, billedEmployeeEntries, paidEmployeeEntries] = await Promise.all([
+    getInsightsData(ownerId),
+    prisma.invoice.aggregate({ where: { ownerId, status: "PAID", paymentDate: { gte: fyStart, lte: todayEnd } }, _sum: { grandTotalCents: true } }),
+    prisma.timeEntry.findMany({ where: { ownerId, teamMemberId: { not: null }, billingStatus: "BILLED", invoice: { status: { in: ["SENT", "PAID"] }, invoiceDate: { gte: fyStart, lte: todayEnd } } }, select: { durationMinutes: true, hourlyRateCentsSnapshot: true } }),
+    prisma.timeEntry.findMany({ where: { ownerId, teamMemberId: { not: null }, paymentStatus: "PAID", paidAt: { gte: fyStart, lte: todayEnd } }, select: { durationMinutes: true, payRateCentsSnapshot: true } })
+  ]);
+  const ytdPaidToMeCents = paidInvoices._sum.grandTotalCents || 0;
+  const ytdEmployeeEarningsCents = billedEmployeeEntries.reduce((sum, entry) => sum + labourTotalCents(entry.durationMinutes, entry.hourlyRateCentsSnapshot), 0);
+  const ytdPaidToEmployeesCents = paidEmployeeEntries.reduce((sum, entry) => sum + labourTotalCents(entry.durationMinutes, entry.payRateCentsSnapshot || 0), 0);
   const averageRate = insights.revenue.averageHourlyRateCents;
 
   return (
@@ -49,6 +61,12 @@ export default async function InsightsPage() {
 
       <section className="mt-5">
         <InsightCards cards={insights.insightCards} />
+      </section>
+
+      <section className="mt-5 grid gap-3 md:grid-cols-3">
+        <HeroMetric label="YTD paid to me" value={formatMoney(ytdPaidToMeCents)} />
+        <HeroMetric label="YTD earned from employees" value={formatMoney(ytdEmployeeEarningsCents)} />
+        <HeroMetric label="YTD paid to employees" value={formatMoney(ytdPaidToEmployeesCents)} />
       </section>
 
       <section className="mt-5 grid gap-4 xl:grid-cols-2">

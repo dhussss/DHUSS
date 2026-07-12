@@ -10,7 +10,8 @@ import {
   FolderKanban,
   ReceiptText,
   TrendingUp,
-  UsersRound
+  UsersRound,
+  WalletCards
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { Children, type ReactNode } from "react";
@@ -21,7 +22,10 @@ import { getDashboardData, type DashboardData } from "@/lib/app-data";
 import { dateInputValue, formatDateAU, previousWeekMondayToSunday, todayInPerth } from "@/lib/dates";
 import { formatMoney } from "@/lib/money";
 import { calculateSetAsidePlanning } from "@/lib/planning";
-import { formatHours } from "@/lib/time";
+import { formatHours, labourTotalCents } from "@/lib/time";
+import { prisma } from "@/lib/prisma";
+import { markTeamMemberPaidAction } from "@/app/team/actions";
+import { ConfirmSubmitButton } from "@/components/ConfirmSubmitButton";
 
 export const dynamic = "force-dynamic";
 
@@ -31,7 +35,31 @@ export default async function DashboardPage() {
   const previousWeek = previousWeekMondayToSunday(today);
   const previousWeekExportLink = `/hours-export?start=${dateInputValue(previousWeek.start)}&end=${dateInputValue(previousWeek.end)}`;
 
-  const dashboardData = await getDashboardData(ownerId);
+  const [dashboardData, unpaidTeamEntries] = await Promise.all([
+    getDashboardData(ownerId),
+    prisma.timeEntry.findMany({
+      where: { ownerId, teamMemberId: { not: null }, approvalStatus: "APPROVED", paymentStatus: "UNPAID" },
+      select: {
+        teamMemberId: true,
+        durationMinutes: true,
+        payRateCentsSnapshot: true,
+        billingStatus: true,
+        teamMember: { select: { displayName: true } },
+        project: { select: { id: true, title: true } }
+      },
+      orderBy: [{ date: "asc" }, { createdAt: "asc" }]
+    })
+  ]);
+  const unpaidWageGroups = new Map<string, { teamMemberId: string; employee: string; projectId: string; project: string; minutes: number; wagesCents: number; billedMinutes: number }>();
+  for (const entry of unpaidTeamEntries) {
+    if (!entry.teamMemberId || !entry.teamMember) continue;
+    const key = `${entry.teamMemberId}:${entry.project.id}`;
+    const group = unpaidWageGroups.get(key) || { teamMemberId: entry.teamMemberId, employee: entry.teamMember.displayName, projectId: entry.project.id, project: entry.project.title, minutes: 0, wagesCents: 0, billedMinutes: 0 };
+    group.minutes += entry.durationMinutes;
+    group.wagesCents += labourTotalCents(entry.durationMinutes, entry.payRateCentsSnapshot || 0);
+    if (entry.billingStatus === "BILLED") group.billedMinutes += entry.durationMinutes;
+    unpaidWageGroups.set(key, group);
+  }
   const profile = dashboardData.profile;
 
   const {
@@ -121,6 +149,24 @@ export default async function DashboardPage() {
           <ArrowRight size={16} className="text-mint" aria-hidden="true" />
         </span>
       </Link>
+
+      {unpaidWageGroups.size ? (
+        <section className="mt-4 overflow-hidden rounded-xl border border-gum/30 bg-white shadow-soft">
+          <div className="flex items-center justify-between gap-4 border-b border-line bg-gum/5 p-4 sm:p-5">
+            <div><p className="section-title text-gum">Employee pay due</p><h2 className="mt-1 text-xl font-black">Unpaid wages</h2></div>
+            <WalletCards size={22} className="text-gum" aria-hidden="true" />
+          </div>
+          <div className="grid gap-3 p-3 sm:p-4 lg:grid-cols-2">
+            {[...unpaidWageGroups.values()].map((group) => (
+              <article key={`${group.teamMemberId}:${group.projectId}`} className="rounded-[10px] border border-line bg-white p-4">
+                <div className="flex items-start justify-between gap-4"><div><p className="font-black">{group.employee}</p><Link href={`/projects/${group.projectId}`} className="mt-1 block text-sm font-bold text-mint">{group.project}</Link></div><p className="text-xl font-black">{formatMoney(group.wagesCents)}</p></div>
+                <p className="mt-3 text-sm font-semibold text-moss">{formatHours(group.minutes)}h unpaid · {formatHours(group.billedMinutes)}h already billed</p>
+                <form action={markTeamMemberPaidAction} className="mt-3"><input type="hidden" name="teamMemberId" value={group.teamMemberId} /><input type="hidden" name="projectId" value={group.projectId} /><ConfirmSubmitButton className="tap-primary w-full" message={`Mark ${formatMoney(group.wagesCents)} for ${group.employee} on ${group.project} as paid? This will add a wages expense.`}>Mark paid</ConfirmSubmitButton></form>
+              </article>
+            ))}
+          </div>
+        </section>
+      ) : null}
 
       {showSetup ? (
         <section className="mt-4 rounded-xl border border-mint/25 bg-white p-4 shadow-soft sm:p-5">
