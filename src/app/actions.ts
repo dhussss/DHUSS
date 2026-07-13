@@ -986,7 +986,7 @@ function projectDeleteBlockedMessage({
     invoiceCount ? `${invoiceCount} invoice${invoiceCount === 1 ? "" : "s"}` : "",
     billedTimeCount ? `${billedTimeCount} billed time entr${billedTimeCount === 1 ? "y" : "ies"}` : "",
     billedExpenseCount ? `${billedExpenseCount} billed expense item${billedExpenseCount === 1 ? "" : "s"}` : "",
-    wagePaymentCount ? `${wagePaymentCount} recorded wage payment${wagePaymentCount === 1 ? "" : "s"}` : ""
+    wagePaymentCount ? `${wagePaymentCount} active wage payment${wagePaymentCount === 1 ? "" : "s"}` : ""
   ].filter(Boolean);
 
   return reasons.length
@@ -1022,7 +1022,7 @@ export async function deleteProjectAction(formData: FormData) {
         tx.invoice.count({ where: { projectId, ownerId } }),
         tx.timeEntry.count({ where: { projectId, ownerId, billingStatus: "BILLED" } }),
         tx.expenseItem.count({ where: { projectId, ownerId, billingStatus: "BILLED" } }),
-        tx.wagePayment.count({ where: { projectId, ownerId } })
+        tx.wagePayment.count({ where: { projectId, ownerId, status: "PAID" } })
       ]);
       const blockedMessage = projectDeleteBlockedMessage({ invoiceCount, billedTimeCount, billedExpenseCount, wagePaymentCount });
 
@@ -1030,10 +1030,18 @@ export async function deleteProjectAction(formData: FormData) {
         return { deleted: false, blockedMessage, invoiceCount, billedTimeCount, billedExpenseCount, wagePaymentCount };
       }
 
+      const reversedWagePayments = await tx.wagePayment.findMany({
+        where: { projectId, ownerId, status: "VOID" },
+        select: { id: true, workExpenseId: true }
+      });
+      const reversedExpenseIds = reversedWagePayments.flatMap((payment) => payment.workExpenseId ? [payment.workExpenseId] : []);
+
       await tx.timeEntry.deleteMany({ where: { projectId, ownerId } });
       await tx.projectAssignment.deleteMany({ where: { projectId, ownerId } });
       await tx.expenseItem.deleteMany({ where: { projectId, ownerId } });
       await tx.rateHistory.deleteMany({ where: { projectId, ownerId } });
+      await tx.wagePayment.deleteMany({ where: { projectId, ownerId, status: "VOID" } });
+      if (reversedExpenseIds.length) await tx.workExpense.deleteMany({ where: { id: { in: reversedExpenseIds }, ownerId, archivedAt: { not: null } } });
       await tx.project.deleteMany({ where: { id: projectId, ownerId } });
 
       return { deleted: true, blockedMessage: "", invoiceCount, billedTimeCount, billedExpenseCount, wagePaymentCount };
@@ -1080,12 +1088,18 @@ export async function deleteClientAction(formData: FormData) {
       }),
       tx.timeEntry.count({ where: { ownerId, projectId: { in: projectIds }, billingStatus: "BILLED" } }),
       tx.expenseItem.count({ where: { ownerId, projectId: { in: projectIds }, billingStatus: "BILLED" } }),
-      tx.wagePayment.count({ where: { ownerId, projectId: { in: projectIds } } })
+      tx.wagePayment.count({ where: { ownerId, projectId: { in: projectIds }, status: "PAID" } })
     ]);
 
     if (invoiceCount || billedTimeCount || billedExpenseCount || wagePaymentCount) {
       throw new Error("This client has invoice, billed, or wage payment history. Archive their projects instead of deleting the client.");
     }
+
+    const reversedWagePayments = await tx.wagePayment.findMany({
+      where: { ownerId, projectId: { in: projectIds }, status: "VOID" },
+      select: { workExpenseId: true }
+    });
+    const reversedExpenseIds = reversedWagePayments.flatMap((payment) => payment.workExpenseId ? [payment.workExpenseId] : []);
 
     await tx.timeEntry.deleteMany({
       where: { ownerId, projectId: { in: projectIds } }
@@ -1099,6 +1113,8 @@ export async function deleteClientAction(formData: FormData) {
     await tx.rateHistory.deleteMany({
       where: { ownerId, projectId: { in: projectIds } }
     });
+    await tx.wagePayment.deleteMany({ where: { ownerId, projectId: { in: projectIds }, status: "VOID" } });
+    if (reversedExpenseIds.length) await tx.workExpense.deleteMany({ where: { id: { in: reversedExpenseIds }, ownerId, archivedAt: { not: null } } });
     await tx.project.deleteMany({
       where: { ownerId, id: { in: projectIds } }
     });
