@@ -50,6 +50,7 @@ export function LogTimeSheet({
   const selectedAssignmentId = selectedTimeProject.startsWith("assigned:") ? selectedTimeProject.slice("assigned:".length) : "";
   const selectedOwnedProjectId = selectedTimeProject.startsWith("owned:") ? selectedTimeProject.slice("owned:".length) : "";
   const isAssignedTime = Boolean(selectedAssignmentId);
+  const timeReturnTo = pathname === "/" ? (isAssignedTime ? "/?assignedTimeSaved=1" : "/?timeSaved=1") : pathname;
 
   const calculatedRange = useMemo(() => {
     const start = parseClockTime(startTime);
@@ -140,7 +141,7 @@ export function LogTimeSheet({
 
             {mode === "time" ? (
               <form action={isAssignedTime ? createSubcontractorTimeEntryAction : createTimeEntryAction} className="mt-5 grid gap-4">
-                <input type="hidden" name="returnTo" value={pathname} />
+                <input type="hidden" name="returnTo" value={timeReturnTo} />
                 {isAssignedTime ? <input type="hidden" name="assignmentId" value={selectedAssignmentId} /> : <input type="hidden" name="projectId" value={selectedOwnedProjectId} />}
                 {timeProjectSelect}
                 <label>

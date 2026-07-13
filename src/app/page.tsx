@@ -23,54 +23,26 @@ import { getDashboardData, type DashboardData } from "@/lib/app-data";
 import { dateInputValue, formatDateAU, previousWeekMondayToSunday, todayInPerth } from "@/lib/dates";
 import { formatMoney } from "@/lib/money";
 import { calculateSetAsidePlanning, formatPercent } from "@/lib/planning";
-import { formatHours, labourTotalCents } from "@/lib/time";
-import { prisma } from "@/lib/prisma";
+import { formatHours } from "@/lib/time";
 import { markTeamMemberPaidAction } from "@/app/team/actions";
 import { ConfirmSubmitButton } from "@/components/ConfirmSubmitButton";
 
 export const dynamic = "force-dynamic";
 
-export default async function DashboardPage({ searchParams }: { searchParams: Promise<{ wagePaid?: string }> }) {
-  const { wagePaid } = await searchParams;
+export default async function DashboardPage({ searchParams }: { searchParams: Promise<{ wagePaid?: string; timeSaved?: string; assignedTimeSaved?: string }> }) {
+  const { wagePaid, timeSaved, assignedTimeSaved } = await searchParams;
   const ownerId = await requireUserId();
   const today = todayInPerth();
   const previousWeek = previousWeekMondayToSunday(today);
   const previousWeekExportLink = `/hours-export?start=${dateInputValue(previousWeek.start)}&end=${dateInputValue(previousWeek.end)}`;
 
-  const [dashboardData, unpaidTeamEntries, assignedProjects] = await Promise.all([
-    getDashboardData(ownerId),
-    prisma.timeEntry.findMany({
-      where: { ownerId, teamMemberId: { not: null }, approvalStatus: "APPROVED", paymentStatus: "UNPAID" },
-      select: {
-        teamMemberId: true,
-        durationMinutes: true,
-        payRateCentsSnapshot: true,
-        billingStatus: true,
-        teamMember: { select: { displayName: true } },
-        project: { select: { id: true, title: true } }
-      },
-      orderBy: [{ date: "asc" }, { createdAt: "asc" }]
-    }),
-    prisma.projectAssignment.findMany({
-      where: { active: true, teamMember: { userId: ownerId, status: "ACTIVE" }, project: { status: "ACTIVE" } },
-      select: { id: true, project: { select: { id: true, title: true, client: { select: { businessName: true } } } } },
-      orderBy: { project: { title: "asc" } }
-    })
-  ]);
-  const unpaidWageGroups = new Map<string, { teamMemberId: string; employee: string; projectId: string; project: string; minutes: number; wagesCents: number; billedMinutes: number }>();
-  for (const entry of unpaidTeamEntries) {
-    if (!entry.teamMemberId || !entry.teamMember) continue;
-    const key = `${entry.teamMemberId}:${entry.project.id}`;
-    const group = unpaidWageGroups.get(key) || { teamMemberId: entry.teamMemberId, employee: entry.teamMember.displayName, projectId: entry.project.id, project: entry.project.title, minutes: 0, wagesCents: 0, billedMinutes: 0 };
-    group.minutes += entry.durationMinutes;
-    group.wagesCents += labourTotalCents(entry.durationMinutes, entry.payRateCentsSnapshot || 0);
-    if (entry.billingStatus === "BILLED") group.billedMinutes += entry.durationMinutes;
-    unpaidWageGroups.set(key, group);
-  }
+  const dashboardData = await getDashboardData(ownerId);
   const profile = dashboardData.profile;
 
   const {
     projects,
+    assignedProjects,
+    unpaidWageGroups,
     topActiveProjects,
     invoiceSnapshots,
     sentInvoices,
@@ -107,6 +79,12 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
         <div className="mb-4 flex items-center gap-3 rounded-xl border border-mint/25 bg-mint/10 p-4 text-sm font-bold text-ink" role="status">
           <WalletCards size={19} className="shrink-0 text-mint" aria-hidden="true" />
           Wage payment recorded. The employee ledger and wages expense are now up to date.
+        </div>
+      ) : null}
+      {timeSaved === "1" || assignedTimeSaved === "1" ? (
+        <div className="mb-4 flex items-center gap-3 rounded-xl border border-mint/25 bg-mint/10 p-4 text-sm font-bold text-ink" role="status">
+          <Clock3 size={19} className="shrink-0 text-mint" aria-hidden="true" />
+          {assignedTimeSaved === "1" ? "Hours submitted. They are now visible in the contractor's project, invoicing and wages ledger." : "Hours saved and included in your dashboard totals."}
         </div>
       ) : null}
       <section className="command-hero-bg relative overflow-hidden rounded-2xl text-white shadow-[0_1px_1px_rgba(15,43,34,0.4),0_24px_60px_-16px_rgba(15,43,34,0.55)]">
@@ -186,14 +164,14 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
         ) : null}
       </Link>
 
-      {unpaidWageGroups.size ? (
+      {unpaidWageGroups.length ? (
         <section className="mt-4 overflow-hidden rounded-2xl border border-gum/30 bg-white shadow-soft">
           <div className="flex items-center justify-between gap-4 border-b border-line bg-gum/5 p-4 sm:p-5">
             <div><p className="section-title text-gum">Employee pay due</p><h2 className="mt-1 text-xl font-black">Unpaid wages</h2></div>
             <WalletCards size={22} className="text-gum" aria-hidden="true" />
           </div>
           <div className="grid gap-3 p-3 sm:p-4 lg:grid-cols-2">
-            {[...unpaidWageGroups.values()].map((group) => (
+            {unpaidWageGroups.map((group) => (
               <article key={`${group.teamMemberId}:${group.projectId}`} className="rounded-[10px] border border-line bg-white p-4">
                 <div className="flex items-start justify-between gap-4"><div><p className="font-black">{group.employee}</p><Link href={`/projects/${group.projectId}`} className="mt-1 block text-sm font-bold text-mint">{group.project}</Link></div><p className="text-xl font-black">{formatMoney(group.wagesCents)}</p></div>
                 <p className="mt-3 text-sm font-semibold text-moss">{formatHours(group.minutes)}h unpaid · {formatHours(group.billedMinutes)}h already billed</p>

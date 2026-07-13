@@ -31,6 +31,16 @@ export type DashboardData = {
     superContributionPercentage: unknown;
   } | null;
   projects: { id: string; title: string; client: { businessName: string } }[];
+  assignedProjects: { id: string; project: { id: string; title: string; client: { businessName: string } } }[];
+  unpaidWageGroups: {
+    teamMemberId: string;
+    employee: string;
+    projectId: string;
+    project: string;
+    minutes: number;
+    wagesCents: number;
+    billedMinutes: number;
+  }[];
   topActiveProjects: {
     id: string;
     title: string;
@@ -119,6 +129,8 @@ type DashboardRow = {
   pendingInvoicesCents: bigint | number | null;
   overdueInvoiceCount: bigint | number | null;
   overdueInvoiceCents: bigint | number | null;
+  assignedProjects: DashboardData["assignedProjects"];
+  unpaidWageGroups: DashboardData["unpaidWageGroups"];
 };
 
 function numberValue(value: bigint | number | null | undefined) {
@@ -374,6 +386,65 @@ export async function loadDashboardData(ownerId: string): Promise<DashboardData>
       CROSS JOIN bounds b
       WHERE i."ownerId" = ${ownerId}
     ),
+    unpaid_wage_groups AS (
+      SELECT COALESCE(
+        jsonb_agg(
+          jsonb_build_object(
+            'teamMemberId', grouped."teamMemberId",
+            'employee', grouped.employee,
+            'projectId', grouped."projectId",
+            'project', grouped.project,
+            'minutes', grouped.minutes,
+            'wagesCents', grouped.wages_cents,
+            'billedMinutes', grouped.billed_minutes
+          )
+          ORDER BY grouped.wages_cents DESC, grouped.employee ASC
+        ),
+        '[]'::jsonb
+      ) AS data
+      FROM (
+        SELECT
+          t."teamMemberId",
+          tm."displayName" AS employee,
+          p.id AS "projectId",
+          p.title AS project,
+          COALESCE(SUM(t."durationMinutes"), 0) AS minutes,
+          COALESCE(SUM(ROUND((t."durationMinutes"::numeric / 60) * COALESCE(t."payRateCentsSnapshot", 0))), 0) AS wages_cents,
+          COALESCE(SUM(t."durationMinutes") FILTER (WHERE t."billingStatus" = 'BILLED'), 0) AS billed_minutes
+        FROM "TimeEntry" t
+        JOIN "TeamMember" tm ON tm.id = t."teamMemberId"
+        JOIN "Project" p ON p.id = t."projectId"
+        WHERE t."ownerId" = ${ownerId}
+          AND t."teamMemberId" IS NOT NULL
+          AND t."approvalStatus" = 'APPROVED'
+          AND t."paymentStatus" = 'UNPAID'
+        GROUP BY t."teamMemberId", tm."displayName", p.id, p.title
+      ) grouped
+    ),
+    assigned_projects AS (
+      SELECT COALESCE(
+        jsonb_agg(
+          jsonb_build_object(
+            'id', pa.id,
+            'project', jsonb_build_object(
+              'id', p.id,
+              'title', p.title,
+              'client', jsonb_build_object('businessName', c."businessName")
+            )
+          )
+          ORDER BY p.title ASC
+        ),
+        '[]'::jsonb
+      ) AS data
+      FROM "ProjectAssignment" pa
+      JOIN "TeamMember" tm ON tm.id = pa."teamMemberId"
+      JOIN "Project" p ON p.id = pa."projectId"
+      JOIN "Client" c ON c.id = p."clientId"
+      WHERE pa.active = true
+        AND tm."userId" = ${ownerId}
+        AND tm.status = 'ACTIVE'
+        AND p.status = 'ACTIVE'
+    ),
     business_profile AS (
       SELECT jsonb_build_object(
         'id', bp.id,
@@ -411,8 +482,10 @@ export async function loadDashboardData(ownerId: string): Promise<DashboardData>
       sent_invoices.invoice_total AS "pendingPaymentCents",
       (unbilled_time.entry_total + unbilled_items.item_total) AS "pendingInvoicesCents",
       overdue_invoices.overdue_count AS "overdueInvoiceCount",
-      overdue_invoices.overdue_total AS "overdueInvoiceCents"
-    FROM active_projects, top_active_projects, invoice_snapshots, sent_invoices, overdue_invoices, unbilled_time, unbilled_items, rolling_30_work, previous_week_entries, current_week_entries
+      overdue_invoices.overdue_total AS "overdueInvoiceCents",
+      assigned_projects.data AS "assignedProjects",
+      unpaid_wage_groups.data AS "unpaidWageGroups"
+    FROM active_projects, top_active_projects, invoice_snapshots, sent_invoices, overdue_invoices, unbilled_time, unbilled_items, rolling_30_work, previous_week_entries, current_week_entries, assigned_projects, unpaid_wage_groups
     LEFT JOIN business_profile ON true
   `;
 
@@ -466,6 +539,13 @@ export async function loadDashboardData(ownerId: string): Promise<DashboardData>
   return {
     profile: row?.profile ?? null,
     projects: row?.projects ?? [],
+    assignedProjects: row?.assignedProjects ?? [],
+    unpaidWageGroups: (row?.unpaidWageGroups ?? []).map((group) => ({
+      ...group,
+      minutes: numberValue(group.minutes),
+      wagesCents: numberValue(group.wagesCents),
+      billedMinutes: numberValue(group.billedMinutes)
+    })),
     topActiveProjects: (row?.topActiveProjects ?? []).map((project) => ({
       ...project,
       unbilledMinutes: numberValue(project.unbilledMinutes),

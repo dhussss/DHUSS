@@ -54,7 +54,9 @@ function revalidateTeam(projectId?: string) {
   revalidatePath("/projects");
   revalidatePath("/invoices/new");
   if (projectId) revalidatePath(`/projects/${projectId}`);
-  for (const tag of Object.values(CACHE_TAGS)) revalidateTag(tag);
+  for (const tag of [CACHE_TAGS.dashboard, CACHE_TAGS.projects, CACHE_TAGS.hoursExport, CACHE_TAGS.insights, CACHE_TAGS.expenses]) {
+    revalidateTag(tag);
+  }
 }
 
 export async function createTeamInvitationAction(formData: FormData) {
