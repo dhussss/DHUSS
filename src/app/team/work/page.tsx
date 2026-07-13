@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { ArrowLeft, BriefcaseBusiness, CheckCircle2, Clock3, Trash2 } from "lucide-react";
+import { ArrowLeft, BriefcaseBusiness, CheckCircle2, Clock3, RotateCcw, Trash2, WalletCards } from "lucide-react";
 import { deleteMyTimeEntryAction } from "@/app/team/actions";
 import { SubcontractorTimeForm } from "@/components/SubcontractorTimeForm";
 import { ConfirmSubmitButton } from "@/components/ConfirmSubmitButton";
@@ -14,7 +14,7 @@ export const dynamic = "force-dynamic";
 
 export default async function AssignedWorkPage() {
   const user = await requireUser();
-  const [assignments, entries] = await Promise.all([
+  const [assignments, entries, payments] = await Promise.all([
     prisma.projectAssignment.findMany({
       where: { active: true, teamMember: { userId: user.id, status: "ACTIVE" }, project: { status: "ACTIVE" } },
       select: { id: true, payRateCents: true, project: { select: { title: true, client: { select: { businessName: true } } }, }, teamMember: { select: { ownerId: true } } },
@@ -25,6 +25,23 @@ export default async function AssignedWorkPage() {
       include: { project: { select: { title: true } }, wagePayment: { select: { paidAt: true, reference: true, status: true } } },
       orderBy: [{ date: "desc" }, { createdAt: "desc" }],
       take: 30
+    }),
+    prisma.wagePayment.findMany({
+      where: { teamMember: { userId: user.id } },
+      select: {
+        id: true,
+        paidAt: true,
+        reference: true,
+        minutes: true,
+        amountCents: true,
+        status: true,
+        reversedAt: true,
+        reversalNote: true,
+        project: { select: { title: true } },
+        _count: { select: { timeEntries: true } }
+      },
+      orderBy: [{ paidAt: "desc" }, { createdAt: "desc" }],
+      take: 20
     })
   ]);
   const unpaidApproved = entries.filter((entry) => entry.approvalStatus === "APPROVED" && entry.paymentStatus === "UNPAID");
@@ -44,6 +61,26 @@ export default async function AssignedWorkPage() {
           <SubcontractorTimeForm assignments={assignments} />
         </>
       ) : <section className="mt-5 rounded-2xl border border-line bg-white p-5 text-center"><BriefcaseBusiness className="mx-auto text-moss" size={28} aria-hidden="true" /><h2 className="mt-3 text-xl font-black">No assigned projects</h2><p className="mt-2 text-sm font-medium text-moss">Your contractor needs to assign a project before you can log shared hours.</p></section>}
+
+      <section className="mt-7">
+        <div><p className="section-title">Payments</p><h2 className="mt-1 text-xl font-black">My payment history</h2><p className="mt-1 text-sm font-medium text-moss">A read-only record of payments and corrections made by your contractor.</p></div>
+        <div className="mt-3 grid gap-3 sm:grid-cols-2">
+          {payments.length ? payments.map((payment) => (
+            <article key={payment.id} className={`card ${payment.status === "VOID" ? "border-gum/25 bg-gum/5" : ""}`}>
+              <div className="flex items-start justify-between gap-3">
+                <div className="flex items-center gap-2">
+                  {payment.status === "PAID" ? <WalletCards className="text-mint" size={19} aria-hidden="true" /> : <RotateCcw className="text-gum" size={19} aria-hidden="true" />}
+                  <div><p className="font-black">{payment.project.title}</p><p className="text-xs font-bold uppercase text-moss">{payment.status === "PAID" ? "Paid" : "Reversed"}</p></div>
+                </div>
+                <p className="text-lg font-black">{formatMoney(payment.amountCents)}</p>
+              </div>
+              <p className="mt-3 text-sm font-semibold text-moss">{formatHours(payment.minutes)}h{payment.status === "PAID" ? ` · ${payment._count.timeEntries} ${payment._count.timeEntries === 1 ? "entry" : "entries"}` : " recorded"}</p>
+              <p className="mt-1 text-sm font-medium text-moss">Payment date {formatDateAU(payment.paidAt)}{payment.reference ? ` · Ref ${payment.reference}` : ""}</p>
+              {payment.status === "VOID" ? <p className="mt-2 text-xs font-bold text-gum">Reversed {payment.reversedAt ? formatDateAU(payment.reversedAt) : ""}{payment.reversalNote ? ` · ${payment.reversalNote}` : ""}</p> : null}
+            </article>
+          )) : <p className="rounded-2xl border border-line bg-white p-4 text-sm font-medium text-moss sm:col-span-2">No payments recorded yet.</p>}
+        </div>
+      </section>
 
       <section className="mt-7">
         <div className="flex items-end justify-between gap-4"><div><p className="section-title">Recent entries</p><h2 className="mt-1 text-xl font-black">My submitted hours</h2></div><div className="text-right"><p className="text-sm font-semibold text-moss">Approved unpaid</p><p className="font-black">{formatMoney(unpaidCents)}</p></div></div>

@@ -283,7 +283,7 @@ export async function markTeamMemberPaidAction(formData: FormData) {
   const projectId = value(formData, "projectId") || null;
   const member = await prisma.teamMember.findFirst({ where: { id: teamMemberId, ownerId: user.id }, select: { id: true, displayName: true } });
   if (!member) throw new Error("Subcontractor not found.");
-  const paidAt = todayInPerth();
+  const paidAt = formData.get("paidAt") ? parseInputDate(formData.get("paidAt")) : todayInPerth();
 
   await prisma.$transaction(async (tx) => {
     const entries = await tx.timeEntry.findMany({
@@ -314,16 +314,17 @@ export async function markTeamMemberPaidAction(formData: FormData) {
       const payment = await tx.wagePayment.create({
         data: { ownerId: user.id, teamMemberId, projectId: entryProjectId, workExpenseId: expense.id, paidAt, reference: paymentReference, minutes, amountCents }
       });
-      await tx.timeEntry.updateMany({
+      const updatedEntries = await tx.timeEntry.updateMany({
         where: { id: { in: projectEntries.map((entry) => entry.id) }, ownerId: user.id, paymentStatus: "UNPAID" },
         data: { paymentStatus: "PAID", paidAt, paymentReference, wagePaymentId: payment.id }
       });
+      if (updatedEntries.count !== projectEntries.length) throw new Error("These wages changed while the payment was being recorded. Refresh and try again.");
     }
   });
   revalidateTeam();
   revalidatePath("/expenses");
   revalidatePath("/insights");
-  redirect(`/team/${teamMemberId}?paid=1`);
+  redirect(safeReturnTo(formData, `/team/${teamMemberId}?paid=1`));
 }
 
 export async function updateWagePaymentAction(formData: FormData) {

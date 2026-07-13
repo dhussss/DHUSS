@@ -30,7 +30,8 @@ import { ConfirmSubmitButton } from "@/components/ConfirmSubmitButton";
 
 export const dynamic = "force-dynamic";
 
-export default async function DashboardPage() {
+export default async function DashboardPage({ searchParams }: { searchParams: Promise<{ wagePaid?: string }> }) {
+  const { wagePaid } = await searchParams;
   const ownerId = await requireUserId();
   const today = todayInPerth();
   const previousWeek = previousWeekMondayToSunday(today);
@@ -97,6 +98,12 @@ export default async function DashboardPage() {
 
   return (
     <main className="page-shell max-w-[92rem]">
+      {wagePaid === "1" ? (
+        <div className="mb-4 flex items-center gap-3 rounded-xl border border-mint/25 bg-mint/10 p-4 text-sm font-bold text-ink" role="status">
+          <WalletCards size={19} className="shrink-0 text-mint" aria-hidden="true" />
+          Wage payment recorded. The employee ledger and wages expense are now up to date.
+        </div>
+      ) : null}
       <section className="command-hero-bg relative overflow-hidden rounded-2xl text-white shadow-[0_1px_1px_rgba(15,43,34,0.4),0_24px_60px_-16px_rgba(15,43,34,0.55)]">
         <div className="pointer-events-none absolute -right-16 -top-24 size-72 rounded-full bg-white/[0.05] blur-3xl" aria-hidden="true" />
         <div className="relative p-5 sm:p-7 lg:p-8">
@@ -185,7 +192,7 @@ export default async function DashboardPage() {
               <article key={`${group.teamMemberId}:${group.projectId}`} className="rounded-[10px] border border-line bg-white p-4">
                 <div className="flex items-start justify-between gap-4"><div><p className="font-black">{group.employee}</p><Link href={`/projects/${group.projectId}`} className="mt-1 block text-sm font-bold text-mint">{group.project}</Link></div><p className="text-xl font-black">{formatMoney(group.wagesCents)}</p></div>
                 <p className="mt-3 text-sm font-semibold text-moss">{formatHours(group.minutes)}h unpaid · {formatHours(group.billedMinutes)}h already billed</p>
-                <form action={markTeamMemberPaidAction} className="mt-3"><input type="hidden" name="teamMemberId" value={group.teamMemberId} /><input type="hidden" name="projectId" value={group.projectId} /><ConfirmSubmitButton className="tap-primary w-full" message={`Mark ${formatMoney(group.wagesCents)} for ${group.employee} on ${group.project} as paid? This will add a wages expense.`}>Mark paid</ConfirmSubmitButton></form>
+                <form action={markTeamMemberPaidAction} className="mt-3"><input type="hidden" name="teamMemberId" value={group.teamMemberId} /><input type="hidden" name="projectId" value={group.projectId} /><input type="hidden" name="returnTo" value="/?wagePaid=1" /><ConfirmSubmitButton className="tap-primary w-full" message={`Mark ${formatMoney(group.wagesCents)} for ${group.employee} on ${group.project} as paid? This will add a wages expense.`} pendingLabel="Recording payment..." showDefaultIcon={false}><WalletCards size={18} aria-hidden="true" />Mark paid</ConfirmSubmitButton></form>
               </article>
             ))}
           </div>

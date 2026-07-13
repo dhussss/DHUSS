@@ -4,16 +4,18 @@ import { ArrowLeft, BriefcaseBusiness, Clock3, PauseCircle, RotateCcw, Trash2, U
 import { archiveTeamMemberAction, createProjectAssignmentAction, deleteTeamTimeEntryAction, markTeamMemberPaidAction, restoreTeamMemberAction, reverseWagePaymentAction, stopProjectAssignmentAction, updateWagePaymentAction } from "@/app/team/actions";
 import { ConfirmSubmitButton } from "@/components/ConfirmSubmitButton";
 import { LiveTeamRefresh } from "@/components/LiveTeamRefresh";
+import { SubmitButton } from "@/components/SubmitButton";
 import { requireUserId } from "@/lib/auth";
-import { dateInputValue, formatDateAU } from "@/lib/dates";
+import { dateInputValue, formatDateAU, todayInPerth } from "@/lib/dates";
 import { centsToDollars, formatMoney } from "@/lib/money";
 import { prisma } from "@/lib/prisma";
 import { formatHours, labourTotalCents } from "@/lib/time";
 
 export const dynamic = "force-dynamic";
 
-export default async function TeamMemberPage({ params }: { params: Promise<{ id: string }> }) {
+export default async function TeamMemberPage({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<{ paid?: string; paymentUpdated?: string; paymentReversed?: string }> }) {
   const { id } = await params;
+  const notices = await searchParams;
   const ownerId = await requireUserId();
   const [member, projects] = await Promise.all([
     prisma.teamMember.findFirst({
@@ -21,7 +23,7 @@ export default async function TeamMemberPage({ params }: { params: Promise<{ id:
       include: {
         assignments: { include: { project: { include: { client: true } } }, orderBy: { createdAt: "desc" } },
         timeEntries: { include: { project: { select: { title: true } } }, orderBy: [{ date: "desc" }, { createdAt: "desc" }] },
-        wagePayments: { include: { project: { select: { title: true } } }, orderBy: { paidAt: "desc" } }
+        wagePayments: { include: { project: { select: { title: true } }, _count: { select: { timeEntries: true } } }, orderBy: { paidAt: "desc" } }
       }
     }),
     prisma.project.findMany({ where: { ownerId, status: "ACTIVE" }, include: { client: true }, orderBy: { title: "asc" } })
@@ -36,11 +38,27 @@ export default async function TeamMemberPage({ params }: { params: Promise<{ id:
   const unpaidCents = approvedUnpaid.reduce((sum, entry) => sum + labourTotalCents(entry.durationMinutes, entry.payRateCentsSnapshot || 0), 0);
   const unbilledClientValueCents = unbilled.reduce((sum, entry) => sum + labourTotalCents(entry.durationMinutes, entry.hourlyRateCentsSnapshot), 0);
   const billedWagesDueCents = billedUnpaid.reduce((sum, entry) => sum + labourTotalCents(entry.durationMinutes, entry.payRateCentsSnapshot || 0), 0);
+  const unpaidByProject = Array.from(
+    approvedUnpaid.reduce((groups, entry) => {
+      const current = groups.get(entry.projectId) || { projectId: entry.projectId, project: entry.project.title, minutes: 0, amountCents: 0, entryCount: 0 };
+      current.minutes += entry.durationMinutes;
+      current.amountCents += labourTotalCents(entry.durationMinutes, entry.payRateCentsSnapshot || 0);
+      current.entryCount += 1;
+      groups.set(entry.projectId, current);
+      return groups;
+    }, new Map<string, { projectId: string; project: string; minutes: number; amountCents: number; entryCount: number }>()).values()
+  ).sort((a, b) => b.amountCents - a.amountCents);
 
   return (
     <main className="page-shell">
       <LiveTeamRefresh />
       <Link href="/team" className="mb-4 inline-flex items-center gap-2 text-sm font-bold text-mint"><ArrowLeft size={18} aria-hidden="true" />Team</Link>
+      {notices.paid === "1" || notices.paymentUpdated === "1" || notices.paymentReversed === "1" ? (
+        <div className="mb-4 flex items-center gap-3 rounded-xl border border-mint/25 bg-mint/10 p-4 text-sm font-bold text-ink" role="status">
+          <WalletCards size={19} className="shrink-0 text-mint" aria-hidden="true" />
+          {notices.paymentReversed === "1" ? "Payment reversed. The hours are unpaid again and the related wage expense was archived." : notices.paymentUpdated === "1" ? "Payment details updated across the wage ledger, source hours and expense record." : "Wage payment recorded and added to payment history."}
+        </div>
+      ) : null}
       <header className="page-header flex flex-wrap items-start justify-between gap-4">
         <div>
           <p className="section-title">Subcontractor</p>
@@ -83,12 +101,30 @@ export default async function TeamMemberPage({ params }: { params: Promise<{ id:
         <Metric label="Amount to pay" value={formatMoney(unpaidCents)} />
       </section>
 
-      {approvedUnpaid.length ? (
-        <form action={markTeamMemberPaidAction} className="card mt-4 grid gap-4 sm:grid-cols-[1fr_auto] sm:items-end">
-          <input type="hidden" name="teamMemberId" value={member.id} />
-          <label>Payment reference (optional)<input name="paymentReference" placeholder="Bank reference or note" /></label>
-          <ConfirmSubmitButton className="tap-primary" message={`Mark ${formatMoney(unpaidCents)} for ${member.displayName} as paid?`}><WalletCards size={19} aria-hidden="true" />Mark paid</ConfirmSubmitButton>
-        </form>
+      {unpaidByProject.length ? (
+        <section className="surface-panel mt-4">
+          <div className="surface-header flex flex-wrap items-end justify-between gap-3">
+            <div><p className="section-title">Pay runs</p><h2 className="mt-1 text-xl font-black">Outstanding wages by project</h2></div>
+            <p className="text-sm font-bold text-moss">Total due <span className="ml-1 text-lg text-ink">{formatMoney(unpaidCents)}</span></p>
+          </div>
+          <div className="grid gap-3 p-3 lg:grid-cols-2">
+            {unpaidByProject.map((group) => (
+              <form key={group.projectId} action={markTeamMemberPaidAction} className="rounded-lg border border-line bg-white p-4">
+                <input type="hidden" name="teamMemberId" value={member.id} />
+                <input type="hidden" name="projectId" value={group.projectId} />
+                <div className="flex items-start justify-between gap-3">
+                  <div><p className="font-black">{group.project}</p><p className="mt-1 text-sm font-semibold text-moss">{formatHours(group.minutes)}h across {group.entryCount} {group.entryCount === 1 ? "entry" : "entries"}</p></div>
+                  <p className="text-xl font-black">{formatMoney(group.amountCents)}</p>
+                </div>
+                <div className="mt-4 grid gap-3 sm:grid-cols-2">
+                  <label>Paid date<input name="paidAt" type="date" defaultValue={dateInputValue(todayInPerth())} required /></label>
+                  <label>Reference (optional)<input name="paymentReference" placeholder="Bank reference or note" /></label>
+                </div>
+                <ConfirmSubmitButton className="tap-primary mt-3 w-full" message={`Mark ${formatMoney(group.amountCents)} for ${member.displayName} on ${group.project} as paid? This will add a wages expense.`} pendingLabel="Recording payment..." showDefaultIcon={false}><WalletCards size={19} aria-hidden="true" />Mark project paid</ConfirmSubmitButton>
+              </form>
+            ))}
+          </div>
+        </section>
       ) : null}
 
       <section className="mt-6 grid gap-5 lg:grid-cols-[0.9fr_1.1fr]">
@@ -122,10 +158,10 @@ export default async function TeamMemberPage({ params }: { params: Promise<{ id:
         <div className="mt-3 grid gap-3">
           {member.wagePayments.length ? member.wagePayments.map((payment) => (
             <article key={payment.id} className={`card ${payment.status === "VOID" ? "opacity-65" : ""}`}>
-              <div className="flex items-start justify-between gap-4"><div><p className="font-black">{payment.project.title}</p><p className="mt-1 text-sm font-semibold text-moss">{formatHours(payment.minutes)}h · {payment.status.toLowerCase()}</p></div><p className="text-xl font-black">{formatMoney(payment.amountCents)}</p></div>
+              <div className="flex items-start justify-between gap-4"><div><p className="font-black">{payment.project.title}</p><p className="mt-1 text-sm font-semibold text-moss">{formatHours(payment.minutes)}h{payment.status === "PAID" ? ` across ${payment._count.timeEntries} ${payment._count.timeEntries === 1 ? "entry" : "entries"}` : " recorded"} · {payment.status.toLowerCase()}</p><p className="mt-1 text-xs font-bold text-moss">Payment date {formatDateAU(payment.paidAt)}{payment.reference ? ` · Ref ${payment.reference}` : ""}</p></div><p className="text-xl font-black">{formatMoney(payment.amountCents)}</p></div>
               {payment.status === "PAID" ? <div className="mt-4 grid gap-3 sm:grid-cols-2">
-                <form action={updateWagePaymentAction} className="grid gap-2 rounded-lg bg-paper p-3"><input type="hidden" name="paymentId" value={payment.id} /><label>Paid date<input type="date" name="paidAt" defaultValue={dateInputValue(payment.paidAt)} required /></label><label>Reference<input name="reference" defaultValue={payment.reference || ""} /></label><button className="tap-secondary" type="submit">Update payment</button></form>
-                <form action={reverseWagePaymentAction} className="grid gap-2 rounded-lg border border-gum/20 bg-gum/5 p-3"><input type="hidden" name="paymentId" value={payment.id} /><label>Reversal note<input name="reversalNote" placeholder="Reason for correction" required /></label><ConfirmSubmitButton className="tap-danger" message="Mark this wage payment unpaid? The source hours will return to unpaid and the expense record will be archived.">Mark unpaid</ConfirmSubmitButton></form>
+                <form action={updateWagePaymentAction} className="grid gap-2 rounded-lg bg-paper p-3"><input type="hidden" name="paymentId" value={payment.id} /><label>Paid date<input type="date" name="paidAt" defaultValue={dateInputValue(payment.paidAt)} required /></label><label>Reference<input name="reference" defaultValue={payment.reference || ""} /></label><SubmitButton className="tap-secondary" pendingLabel="Updating payment...">Update payment</SubmitButton></form>
+                <form action={reverseWagePaymentAction} className="grid gap-2 rounded-lg border border-gum/20 bg-gum/5 p-3"><input type="hidden" name="paymentId" value={payment.id} /><label>Reversal note<input name="reversalNote" placeholder="Reason for correction" required /></label><ConfirmSubmitButton className="tap-danger" message="Mark this wage payment unpaid? The source hours will return to unpaid and the expense record will be archived." pendingLabel="Reversing payment...">Mark unpaid</ConfirmSubmitButton></form>
               </div> : <p className="mt-3 text-sm font-semibold text-moss">Reversed {payment.reversedAt ? formatDateAU(payment.reversedAt) : ""} · {payment.reversalNote}</p>}
             </article>
           )) : <p className="rounded-2xl border border-line bg-white p-4 text-sm font-medium text-moss">No wage payments recorded yet.</p>}
