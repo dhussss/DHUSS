@@ -4,6 +4,7 @@ import { useMemo, useState } from "react";
 import { usePathname } from "next/navigation";
 import { CalendarPlus, ClipboardPlus, Clock3, PackagePlus, X } from "lucide-react";
 import { createExpenseItemAction, createTimeEntryAction } from "@/app/actions";
+import { createSubcontractorTimeEntryAction } from "@/app/team/actions";
 import { todayInputValue } from "@/lib/dates";
 import { formatHours, parseClockTime } from "@/lib/time";
 import { SubmitButton } from "@/components/SubmitButton";
@@ -14,12 +15,19 @@ type ProjectOption = {
   client: { businessName: string };
 };
 
+type AssignedProjectOption = {
+  id: string;
+  project: ProjectOption;
+};
+
 export function LogTimeSheet({
   projects,
+  assignedProjects = [],
   defaultProjectId,
   buttonLabel = "Log Time"
 }: {
   projects: ProjectOption[];
+  assignedProjects?: AssignedProjectOption[];
   defaultProjectId?: string;
   buttonLabel?: string;
 }) {
@@ -31,6 +39,17 @@ export function LogTimeSheet({
   const [endTime, setEndTime] = useState("15:00");
   const [durationHours, setDurationHours] = useState("8");
   const [logDayOff, setLogDayOff] = useState(false);
+  const initialTimeProject = defaultProjectId
+    ? `owned:${defaultProjectId}`
+    : projects[0]
+      ? `owned:${projects[0].id}`
+      : assignedProjects[0]
+        ? `assigned:${assignedProjects[0].id}`
+        : "";
+  const [selectedTimeProject, setSelectedTimeProject] = useState(initialTimeProject);
+  const selectedAssignmentId = selectedTimeProject.startsWith("assigned:") ? selectedTimeProject.slice("assigned:".length) : "";
+  const selectedOwnedProjectId = selectedTimeProject.startsWith("owned:") ? selectedTimeProject.slice("owned:".length) : "";
+  const isAssignedTime = Boolean(selectedAssignmentId);
 
   const calculatedRange = useMemo(() => {
     const start = parseClockTime(startTime);
@@ -39,15 +58,36 @@ export function LogTimeSheet({
     return formatHours(end - start);
   }, [startTime, endTime]);
 
-  const projectSelect = (
+  const timeProjectSelect = (
     <label>
       Project
-      <select name="projectId" defaultValue={defaultProjectId ?? projects[0]?.id ?? ""} required>
+      <select
+        value={selectedTimeProject}
+        onChange={(event) => {
+          setSelectedTimeProject(event.target.value);
+          if (event.target.value.startsWith("assigned:")) setLogDayOff(false);
+        }}
+        required
+      >
         {projects.map((project) => (
-          <option key={project.id} value={project.id}>
+          <option key={project.id} value={`owned:${project.id}`}>
             {project.title} - {project.client.businessName}
           </option>
         ))}
+        {assignedProjects.map((assignment) => (
+          <option key={assignment.id} value={`assigned:${assignment.id}`}>
+            {assignment.project.title} - {assignment.project.client.businessName} (Assigned)
+          </option>
+        ))}
+      </select>
+    </label>
+  );
+
+  const ownedProjectSelect = (
+    <label>
+      Project
+      <select name="projectId" defaultValue={defaultProjectId ?? projects[0]?.id ?? ""} required>
+        {projects.map((project) => <option key={project.id} value={project.id}>{project.title} - {project.client.businessName}</option>)}
       </select>
     </label>
   );
@@ -90,6 +130,8 @@ export function LogTimeSheet({
                 type="button"
                 className={`min-h-11 rounded-md text-sm font-bold ${mode === "item" ? "bg-ink text-white" : "text-moss"}`}
                 onClick={() => setMode("item")}
+                disabled={!projects.length}
+                title={!projects.length ? "Items can only be added to your own projects" : undefined}
               >
                 <PackagePlus className="mx-auto mb-1" size={18} aria-hidden="true" />
                 Item
@@ -97,15 +139,16 @@ export function LogTimeSheet({
             </div>
 
             {mode === "time" ? (
-              <form action={createTimeEntryAction} className="mt-5 grid gap-4">
+              <form action={isAssignedTime ? createSubcontractorTimeEntryAction : createTimeEntryAction} className="mt-5 grid gap-4">
                 <input type="hidden" name="returnTo" value={pathname} />
-                {projectSelect}
+                {isAssignedTime ? <input type="hidden" name="assignmentId" value={selectedAssignmentId} /> : <input type="hidden" name="projectId" value={selectedOwnedProjectId} />}
+                {timeProjectSelect}
                 <label>
                   Date
                   <input name="date" type="date" defaultValue={todayInputValue()} required />
                 </label>
 
-                <label className="flex min-h-12 grid-cols-none flex-row items-center gap-3 rounded-lg border border-line bg-white px-3">
+                {!isAssignedTime ? <label className="flex min-h-12 grid-cols-none flex-row items-center gap-3 rounded-lg border border-line bg-white px-3">
                   <input
                     className="size-5 min-h-0 w-auto"
                     type="checkbox"
@@ -114,7 +157,7 @@ export function LogTimeSheet({
                     onChange={(event) => setLogDayOff(event.target.checked)}
                   />
                   Log day off
-                </label>
+                </label> : <p className="rounded-lg border border-mint/20 bg-mint/10 p-3 text-sm font-bold text-moss">These hours will be submitted directly to the assigning contractor.</p>}
 
                 {logDayOff ? (
                   <div className="rounded-lg border border-mint/25 bg-mint/10 p-3 text-sm font-bold leading-6 text-moss">
@@ -200,7 +243,7 @@ export function LogTimeSheet({
             ) : (
               <form action={createExpenseItemAction} className="mt-5 grid gap-4">
                 <input type="hidden" name="returnTo" value={pathname} />
-                {projectSelect}
+                {ownedProjectSelect}
                 <label>
                   Date purchased
                   <input name="datePurchased" type="date" defaultValue={todayInputValue()} required />

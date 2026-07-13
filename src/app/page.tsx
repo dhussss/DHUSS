@@ -37,7 +37,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
   const previousWeek = previousWeekMondayToSunday(today);
   const previousWeekExportLink = `/hours-export?start=${dateInputValue(previousWeek.start)}&end=${dateInputValue(previousWeek.end)}`;
 
-  const [dashboardData, unpaidTeamEntries] = await Promise.all([
+  const [dashboardData, unpaidTeamEntries, assignedProjects] = await Promise.all([
     getDashboardData(ownerId),
     prisma.timeEntry.findMany({
       where: { ownerId, teamMemberId: { not: null }, approvalStatus: "APPROVED", paymentStatus: "UNPAID" },
@@ -50,6 +50,11 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
         project: { select: { id: true, title: true } }
       },
       orderBy: [{ date: "asc" }, { createdAt: "asc" }]
+    }),
+    prisma.projectAssignment.findMany({
+      where: { active: true, teamMember: { userId: ownerId, status: "ACTIVE" }, project: { status: "ACTIVE" } },
+      select: { id: true, project: { select: { id: true, title: true, client: { select: { businessName: true } } } } },
+      orderBy: { project: { title: "asc" } }
     })
   ]);
   const unpaidWageGroups = new Map<string, { teamMemberId: string; employee: string; projectId: string; project: string; minutes: number; wagesCents: number; billedMinutes: number }>();
@@ -114,7 +119,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
             </div>
             <div className="grid gap-2 sm:grid-cols-3 lg:min-w-[31rem]">
               <div className="[&_button]:w-full [&_button]:rounded-xl [&_button]:border-white/15 [&_button]:bg-white [&_button]:text-ink [&_button]:shadow-none [&_button:hover]:bg-paper">
-                <LogTimeSheet projects={projects} buttonLabel="Log Work" />
+                <LogTimeSheet projects={projects} assignedProjects={assignedProjects} buttonLabel="Log Work" />
               </div>
               <Link className="inline-flex min-h-12 items-center justify-center gap-2 rounded-xl border border-white/15 bg-white/10 px-4 py-3 text-sm font-bold text-white transition hover:border-white/25 hover:bg-white/[0.16]" href="/invoices/new">
                 <ReceiptText size={18} aria-hidden="true" /> New Invoice
