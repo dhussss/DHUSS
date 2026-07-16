@@ -3,7 +3,7 @@ import { unstable_cache } from "next/cache";
 import { getUser } from "@/lib/auth";
 import { CACHE_TAGS } from "@/lib/app-data";
 import { prisma } from "@/lib/prisma";
-import { normaliseThemePreset, themePresets } from "@/lib/themes";
+import { normaliseRgbValue, normaliseThemePreset, themePresets } from "@/lib/themes";
 
 const getThemePreference = unstable_cache(
   async (ownerId: string) =>
@@ -25,7 +25,7 @@ export async function ThemeVars() {
 
   const profile = await getThemePreference(user.id);
   const preset = themePresets[normaliseThemePreset(profile?.themeAccent)];
-  const secondaryRgb = profile?.themeSecondary || preset.secondaryRgb;
+  const secondaryRgb = normaliseRgbValue(profile?.themeSecondary, preset.secondaryRgb);
   const mode = profile?.themeMode === "dark" ? "dark" : profile?.themeMode === "light" ? "light" : "light dark";
 
   return (

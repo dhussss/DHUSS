@@ -13,7 +13,13 @@ export function AuthForm({ mode }: { mode: "login" | "signup" }) {
   const [message, setMessage] = useState("");
   const [pending, setPending] = useState(false);
   const isSignup = mode === "signup";
-  const next = searchParams.get("next") || (isSignup ? "/onboarding" : "/");
+  const requestedNext = searchParams.get("next");
+  const callbackError = searchParams.get("error") === "auth_callback_failed"
+    ? "That sign-in link could not be completed. Please try logging in again."
+    : "";
+  const next = requestedNext?.startsWith("/") && !requestedNext.startsWith("//")
+    ? requestedNext
+    : isSignup ? "/onboarding" : "/";
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -63,13 +69,19 @@ export function AuthForm({ mode }: { mode: "login" | "signup" }) {
         <input name="password" type="password" autoComplete={isSignup ? "new-password" : "current-password"} minLength={8} required />
       </label>
 
-      {error ? <p className="rounded-lg border border-gum/30 bg-gum/10 p-3 text-sm font-bold text-gum">{error}</p> : null}
+      {error || callbackError ? <p className="rounded-lg border border-gum/30 bg-gum/10 p-3 text-sm font-bold text-gum">{error || callbackError}</p> : null}
       {message ? <p className="rounded-lg border border-mint/30 bg-mint/10 p-3 text-sm font-bold text-mint">{message}</p> : null}
 
       <button className="tap-primary" type="submit" disabled={pending}>
         {isSignup ? <UserPlus size={20} aria-hidden="true" /> : <LogIn size={20} aria-hidden="true" />}
         {pending ? "Please wait..." : isSignup ? "Create Account" : "Log In"}
       </button>
+
+      {!isSignup ? (
+        <Link className="text-center text-sm font-bold text-mint" href="/forgot-password">
+          Forgot password?
+        </Link>
+      ) : null}
 
       <p className="text-center text-sm font-medium text-moss">
         {isSignup ? "Already have an account? " : "Need an account? "}

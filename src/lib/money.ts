@@ -4,15 +4,17 @@ export function dollarsToCents(value: FormDataEntryValue | string | number | nul
     .trim();
 
   if (!raw) return 0;
+  if (!/^-?(?:\d+(?:\.\d{0,2})?|\.\d{1,2})$/.test(raw)) return 0;
 
-  const sign = raw.startsWith("-") ? -1 : 1;
-  const normalised = raw.replace(/^-/, "");
-  const [dollarsPart, centsPart = ""] = normalised.split(".");
-  const dollars = Number.parseInt(dollarsPart || "0", 10);
-  const cents = Number.parseInt((centsPart + "00").slice(0, 2), 10);
+  const negative = raw.startsWith("-");
+  const unsigned = negative ? raw.slice(1) : raw;
+  const [dollarsPart = "0", centsPart = ""] = unsigned.split(".");
+  const dollars = Number(dollarsPart || "0");
+  const cents = Number(centsPart.padEnd(2, "0"));
+  const total = dollars * 100 + cents;
 
-  if (Number.isNaN(dollars) || Number.isNaN(cents)) return 0;
-  return sign * (dollars * 100 + cents);
+  if (!Number.isSafeInteger(total)) return 0;
+  return negative ? -total : total;
 }
 
 export function formatMoney(cents: number): string {

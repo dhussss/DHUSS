@@ -47,7 +47,7 @@ export function InvoiceDocumentView({
           )}
           <div className="min-w-0">
             <p className="text-xs font-black uppercase tracking-[0.18em] text-mint">{invoiceTitle}</p>
-            <h1 className="mt-2 text-2xl font-black tracking-tight text-ink sm:text-3xl">{business.name}</h1>
+            <h1 className="mt-2 text-2xl font-black text-ink sm:text-3xl">{business.name}</h1>
             {business.legalName ? <p className="mt-1 text-sm font-bold text-moss">{business.legalName}</p> : null}
             {business.abn ? <p className="mt-1 text-sm font-bold text-moss">ABN {business.abn}</p> : null}
           </div>
@@ -60,7 +60,7 @@ export function InvoiceDocumentView({
             </div>
           ) : null}
           <p className="text-xs font-bold uppercase text-moss">Invoice number</p>
-          <p className="text-3xl font-black tracking-tight text-ink">{invoice.invoiceNumber}</p>
+          <p className="text-3xl font-black text-ink">{invoice.invoiceNumber}</p>
           <p className="text-sm font-bold text-moss">Issued {formatDateAU(invoice.invoiceDate)}</p>
         </div>
       </header>
@@ -98,7 +98,7 @@ export function InvoiceDocumentView({
         <div className="mb-3 flex items-end justify-between gap-3">
           <div>
             <p className="text-xs font-black uppercase tracking-[0.18em] text-moss">Line items</p>
-            <h2 className="mt-1 text-xl font-black tracking-tight text-ink">{invoice.mode === "SIMPLE" ? "Invoice summary" : "Detailed work summary"}</h2>
+            <h2 className="mt-1 text-xl font-black text-ink">{invoice.mode === "SIMPLE" ? "Invoice summary" : "Detailed work summary"}</h2>
           </div>
           <span className="status-pill border-line bg-paper text-moss">{invoice.mode.toLowerCase()}</span>
         </div>

@@ -132,7 +132,7 @@ export function HoursExportClient({
           </span>
           <div>
             <p className="section-title">Generated text</p>
-            <h2 className="text-xl font-black tracking-tight">Weekly hours report</h2>
+            <h2 className="text-xl font-black">Weekly hours report</h2>
           </div>
         </div>
         <pre className="mt-4 min-h-44 whitespace-pre-wrap rounded-lg border border-line bg-[#fffdfa] p-4 text-sm leading-7 text-ink">

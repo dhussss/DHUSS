@@ -1,12 +1,21 @@
 export function parseInputDate(value: FormDataEntryValue | string | null): Date {
-  const raw = String(value ?? "");
-  const [year, month, day] = raw.split("-").map((part) => Number.parseInt(part, 10));
-
-  if (!year || !month || !day) {
+  const raw = String(value ?? "").trim();
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(raw)) {
     throw new Error("Enter a valid date.");
   }
 
-  return new Date(Date.UTC(year, month - 1, day));
+  const [year, month, day] = raw.split("-").map((part) => Number.parseInt(part, 10));
+  const date = new Date(Date.UTC(year, month - 1, day));
+
+  if (
+    date.getUTCFullYear() !== year ||
+    date.getUTCMonth() !== month - 1 ||
+    date.getUTCDate() !== day
+  ) {
+    throw new Error("Enter a valid date.");
+  }
+
+  return date;
 }
 
 export function dateInputValue(date: Date | string | number): string {
@@ -15,7 +24,7 @@ export function dateInputValue(date: Date | string | number): string {
 }
 
 export function todayInputValue(): string {
-  return dateInputValue(new Date());
+  return dateInputValue(todayInPerth());
 }
 
 export function formatDateAU(date: Date | string | number): string {

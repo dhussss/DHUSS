@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
+import { createBusinessLogoSignedUrl } from "@/lib/business-logos";
 import { prisma } from "@/lib/prisma";
-import { createClient } from "@/lib/supabase/server";
 import { invoiceBusinessDetails, invoiceClientDetails } from "@/lib/invoice-data";
 import { InvoiceDocumentView } from "@/components/InvoiceDocumentView";
 
@@ -42,9 +42,7 @@ export default async function PublicInvoicePage({ params }: { params: Promise<{ 
   let logoUrl: string | null = null;
 
   if (business.logoPath) {
-    const supabase = await createClient();
-    const { data } = await supabase.storage.from("business-logos").createSignedUrl(business.logoPath, 60 * 10);
-    logoUrl = data?.signedUrl ?? null;
+    logoUrl = await createBusinessLogoSignedUrl(business.logoPath, 60 * 10);
   }
 
   return (

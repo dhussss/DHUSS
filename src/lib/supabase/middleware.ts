@@ -26,7 +26,7 @@ export async function updateSession(request: NextRequest) {
   } = await supabase.auth.getUser();
 
   const path = request.nextUrl.pathname;
-  const isAuthPage = path === "/login" || path === "/signup";
+  const isAuthPage = path === "/login" || path === "/signup" || path === "/forgot-password";
   const isAuthCallback = path.startsWith("/auth/callback");
   const isPublicInvoice = path.startsWith("/public/invoices/");
   const isPublicAsset =
@@ -39,11 +39,11 @@ export async function updateSession(request: NextRequest) {
   if (!user && !isAuthPage && !isAuthCallback && !isPublicInvoice && !isPublicAsset) {
     const url = request.nextUrl.clone();
     url.pathname = "/login";
-    url.searchParams.set("next", path);
+    url.searchParams.set("next", `${path}${request.nextUrl.search}`);
     return NextResponse.redirect(url);
   }
 
-  if (user && isAuthPage) {
+  if (user && isAuthPage && path !== "/forgot-password") {
     return NextResponse.redirect(new URL("/", request.url));
   }
 

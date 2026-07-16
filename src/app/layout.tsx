@@ -12,7 +12,7 @@ export const preferredRegion = "syd1";
 
 export const metadata: Metadata = {
   title: "Trade Invoice Tracker",
-  description: "Mobile-first time, item, invoice and hours export tracker for sole traders.",
+  description: "Mobile-first work, expense, team and invoice tracking for Australian tradespeople.",
   manifest: "/manifest.webmanifest",
   appleWebApp: {
     capable: true,

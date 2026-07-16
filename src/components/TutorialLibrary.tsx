@@ -87,7 +87,7 @@ export function TutorialLibrary({ showTeam }: { showTeam: boolean }) {
           return (
             <button key={tutorial.key} type="button" onClick={() => setActiveKey(tutorial.key)} className="group flex min-h-40 items-start gap-4 rounded-2xl border border-line bg-white p-5 text-left shadow-soft transition hover:border-mint/50">
               <span className="icon-tile shrink-0"><Icon size={21} aria-hidden="true" /></span>
-              <span><span className="block text-xl font-black tracking-tight text-ink">{tutorial.title}</span><span className="mt-2 block text-sm font-medium leading-6 text-moss">{tutorial.summary}</span><span className="mt-3 block text-sm font-black text-mint">Open tutorial</span></span>
+              <span><span className="block text-xl font-black text-ink">{tutorial.title}</span><span className="mt-2 block text-sm font-medium leading-6 text-moss">{tutorial.summary}</span><span className="mt-3 block text-sm font-black text-mint">Open tutorial</span></span>
             </button>
           );
         })}
@@ -97,7 +97,7 @@ export function TutorialLibrary({ showTeam }: { showTeam: boolean }) {
         <div className="fixed inset-0 z-50 flex items-end bg-ink/45 p-3 backdrop-blur-sm sm:items-center sm:justify-center" onMouseDown={(event) => { if (event.target === event.currentTarget) setActiveKey(null); }}>
           <section className="max-h-[90vh] w-full max-w-xl overflow-auto rounded-2xl border border-line bg-paper shadow-lift" role="dialog" aria-modal="true" aria-labelledby="tutorial-title">
             <div className="flex items-start justify-between gap-4 border-b border-line bg-white p-5 sm:p-6">
-              <div><p className="section-title">Tutorial</p><h2 id="tutorial-title" className="mt-1 text-2xl font-black tracking-tight text-ink">{active.title}</h2><p className="mt-2 text-sm font-medium leading-6 text-moss">{active.summary}</p></div>
+              <div><p className="section-title">Tutorial</p><h2 id="tutorial-title" className="mt-1 text-2xl font-black text-ink">{active.title}</h2><p className="mt-2 text-sm font-medium leading-6 text-moss">{active.summary}</p></div>
               <button type="button" className="grid size-10 shrink-0 place-items-center rounded-xl border border-line bg-white" onClick={() => setActiveKey(null)} aria-label="Close tutorial"><X size={19} aria-hidden="true" /></button>
             </div>
             <ol className="grid gap-3 p-5 sm:p-6">

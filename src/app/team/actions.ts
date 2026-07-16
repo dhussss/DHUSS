@@ -41,7 +41,7 @@ function durationFromForm(formData: FormData) {
     return { startTime, endTime, durationMinutes: end - start };
   }
 
-  const hours = Number.parseFloat(value(formData, "durationHours"));
+  const hours = Number(value(formData, "durationHours"));
   const durationMinutes = Math.round(hours * 60);
   if (!Number.isFinite(hours) || !isQuarterHour(durationMinutes)) throw new Error("Hours must be greater than zero and use 15-minute increments.");
   return { startTime: null, endTime: null, durationMinutes };
@@ -66,6 +66,9 @@ export async function createTeamInvitationAction(formData: FormData) {
   const defaultPayRateCents = positiveRate(formData, "payRate", "Pay rate");
   const defaultChargeRateCents = positiveRate(formData, "chargeRate", "Charge rate");
   if (!subcontractorName) throw new Error("Subcontractor name is required.");
+  if (subcontractorEmail && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(subcontractorEmail)) {
+    throw new Error("Enter a valid subcontractor email address.");
+  }
   if (defaultChargeRateCents < defaultPayRateCents) throw new Error("Charge rate cannot be lower than the pay rate.");
 
   const token = randomBytes(8).toString("hex").toUpperCase();
@@ -104,6 +107,17 @@ export async function acceptTeamInvitationAction(formData: FormData) {
   if (invitation.ownerId === user.id) throw new Error("You cannot join your own team invitation.");
 
   await prisma.$transaction(async (tx) => {
+    const claimed = await tx.teamInvitation.updateMany({
+      where: {
+        id: invitation.id,
+        status: "PENDING",
+        acceptedByUserId: null,
+        expiresAt: { gt: new Date() }
+      },
+      data: { status: "ACCEPTED", acceptedByUserId: user.id, acceptedAt: new Date() }
+    });
+    if (claimed.count !== 1) throw new Error("This invitation has already been used or has expired.");
+
     await tx.teamMember.upsert({
       where: { ownerId_userId: { ownerId: invitation.ownerId, userId: user.id } },
       create: {
@@ -121,10 +135,6 @@ export async function acceptTeamInvitationAction(formData: FormData) {
         defaultChargeRateCents: invitation.defaultChargeRateCents,
         status: "ACTIVE"
       }
-    });
-    await tx.teamInvitation.update({
-      where: { id: invitation.id },
-      data: { status: "ACCEPTED", acceptedByUserId: user.id, acceptedAt: new Date() }
     });
   });
 

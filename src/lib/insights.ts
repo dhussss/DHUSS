@@ -107,6 +107,9 @@ export type InsightsData = {
     start: string;
     end: string;
     points: FinancialYearPoint[];
+    paidToMeCents: number;
+    employeeEarningsCents: number;
+    paidToEmployeesCents: number;
   };
   insightCards: InsightCard[];
 };
@@ -132,6 +135,9 @@ type InsightRow = {
   billableThisMonthCents: Numeric;
   paidThisMonthCents: Numeric;
   paidThisMonthCount: Numeric;
+  paidFinancialYearCents: Numeric;
+  employeeEarningsFinancialYearCents: Numeric;
+  paidToEmployeesFinancialYearCents: Numeric;
   outstandingCents: Numeric;
   outstandingCount: Numeric;
   overdueCents: Numeric;
@@ -390,6 +396,7 @@ export async function loadInsightsData(ownerId: string): Promise<InsightsData> {
       SELECT
         COUNT(*) FILTER (WHERE i.status = 'PAID' AND i."paymentDate" >= b.month_start_at AND i."paymentDate" <= b.today_end_at) AS paid_this_month_count,
         COALESCE(SUM(i."grandTotalCents") FILTER (WHERE i.status = 'PAID' AND i."paymentDate" >= b.month_start_at AND i."paymentDate" <= b.today_end_at), 0) AS paid_this_month,
+        COALESCE(SUM(i."grandTotalCents") FILTER (WHERE i.status = 'PAID' AND i."paymentDate" >= b.fy_start_at AND i."paymentDate" <= b.today_end_at), 0) AS paid_financial_year,
         COUNT(*) FILTER (WHERE i.status = 'SENT') AS outstanding_count,
         COALESCE(SUM(i."grandTotalCents") FILTER (WHERE i.status = 'SENT'), 0) AS outstanding_total,
         COUNT(*) FILTER (
@@ -403,6 +410,30 @@ export async function loadInsightsData(ownerId: string): Promise<InsightsData> {
       FROM "Invoice" i
       CROSS JOIN bounds b
       WHERE i."ownerId" = ${ownerId}
+    ),
+    team_financial_year AS (
+      SELECT
+        COALESCE((
+          SELECT SUM(line."totalAmountCents")
+          FROM "InvoiceLineItem" line
+          JOIN "Invoice" invoice ON invoice.id = line."invoiceId"
+          CROSS JOIN bounds b
+          WHERE line."ownerId" = ${ownerId}
+            AND line."teamMemberId" IS NOT NULL
+            AND invoice."ownerId" = ${ownerId}
+            AND invoice.status IN ('SENT', 'PAID')
+            AND invoice."invoiceDate" >= b.fy_start_at
+            AND invoice."invoiceDate" <= b.today_end_at
+        ), 0) AS employee_earnings,
+        COALESCE((
+          SELECT SUM(payment."amountCents")
+          FROM "WagePayment" payment
+          CROSS JOIN bounds b
+          WHERE payment."ownerId" = ${ownerId}
+            AND payment.status = 'PAID'
+            AND payment."paidAt" >= b.fy_start_at
+            AND payment."paidAt" <= b.today_end_at
+        ), 0) AS paid_to_employees
     ),
     unbilled_time AS (
       SELECT
@@ -553,6 +584,9 @@ export async function loadInsightsData(ownerId: string): Promise<InsightsData> {
       month_work.billable_value AS "billableThisMonthCents",
       revenue_summary.paid_this_month AS "paidThisMonthCents",
       revenue_summary.paid_this_month_count AS "paidThisMonthCount",
+      revenue_summary.paid_financial_year AS "paidFinancialYearCents",
+      team_financial_year.employee_earnings AS "employeeEarningsFinancialYearCents",
+      team_financial_year.paid_to_employees AS "paidToEmployeesFinancialYearCents",
       revenue_summary.outstanding_total AS "outstandingCents",
       revenue_summary.outstanding_count AS "outstandingCount",
       revenue_summary.overdue_total AS "overdueCents",
@@ -571,7 +605,7 @@ export async function loadInsightsData(ownerId: string): Promise<InsightsData> {
       largest_expense_category.data AS "largestExpenseCategoryThisMonth",
       expenses_by_category.data AS "expensesByCategoryThisMonth",
       expenses_by_project.data AS "expensesByProjectThisMonth"
-    FROM current_week_entries, rolling_30, month_work, quarter_work, revenue_summary, unbilled_time, unbilled_items, best_day, busiest_project, top_unbilled, quarter_daily, fy_paid_monthly, expense_summary, largest_expense_category, expenses_by_category, expenses_by_project
+    FROM current_week_entries, rolling_30, month_work, quarter_work, revenue_summary, team_financial_year, unbilled_time, unbilled_items, best_day, busiest_project, top_unbilled, quarter_daily, fy_paid_monthly, expense_summary, largest_expense_category, expenses_by_category, expenses_by_project
   `,
     prisma.businessProfile.findUnique({
       where: { ownerId },
@@ -845,7 +879,10 @@ export async function loadInsightsData(ownerId: string): Promise<InsightsData> {
     financialYear: {
       start: dateInputValue(fy.start),
       end: dateInputValue(fy.end),
-      points: fyPoints
+      points: fyPoints,
+      paidToMeCents: numberValue(row?.paidFinancialYearCents),
+      employeeEarningsCents: numberValue(row?.employeeEarningsFinancialYearCents),
+      paidToEmployeesCents: numberValue(row?.paidToEmployeesFinancialYearCents)
     },
     insightCards
   };

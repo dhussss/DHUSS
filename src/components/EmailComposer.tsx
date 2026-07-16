@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
+import { useRouter } from "next/navigation";
 import { Clipboard, Download, Mail } from "lucide-react";
 import { sendInvoiceEmailAction } from "@/app/actions";
 
@@ -12,6 +13,8 @@ export function EmailComposer({
   initialSubject,
   initialBody,
   confirmationCopyEmail,
+  invoiceStatus,
+  confirmIncomplete,
   disabledReason
 }: {
   invoiceId: string;
@@ -21,19 +24,28 @@ export function EmailComposer({
   initialSubject: string;
   initialBody: string;
   confirmationCopyEmail: string | null;
+  invoiceStatus: string;
+  confirmIncomplete: boolean;
   disabledReason?: string;
 }) {
+  const router = useRouter();
   const [to, setTo] = useState(initialTo);
   const [subject, setSubject] = useState(initialSubject);
   const [body, setBody] = useState(initialBody);
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
+  const [hasDelivered, setHasDelivered] = useState(false);
+  const [hasWarning, setHasWarning] = useState(false);
   const [isDownloading, setIsDownloading] = useState(false);
   const [isPending, startTransition] = useTransition();
 
   function sendEmail() {
     setError("");
     setMessage("");
+    setHasWarning(false);
+
+    const statusNote = invoiceStatus === "DRAFT" ? " It will also be marked sent and its work recorded as billed." : "";
+    if (!window.confirm(`Send this invoice to ${to || "the client"} with the PDF attached?${statusNote}`)) return;
 
     startTransition(async () => {
       try {
@@ -42,8 +54,12 @@ export function EmailComposer({
         formData.set("to", to);
         formData.set("subject", subject);
         formData.set("message", body);
+        if (confirmIncomplete) formData.set("confirmIncomplete", "on");
         const result = await sendInvoiceEmailAction(formData);
         setMessage(result.message);
+        setHasWarning(Boolean(result.warning));
+        setHasDelivered(true);
+        router.refresh();
       } catch (openError) {
         setError(openError instanceof Error ? openError.message : "The invoice email could not be sent.");
       }
@@ -107,7 +123,11 @@ export function EmailComposer({
     <section className="grid gap-4">
       {(message || error || disabledReason) ? (
         <div className="grid gap-2">
-          {message ? <p className="rounded-lg border border-mint/30 bg-mint/10 p-3 text-sm font-bold text-moss">{message}</p> : null}
+          {message ? (
+            <p className={`rounded-lg border p-3 text-sm font-bold ${hasWarning ? "border-gum/30 bg-gum/10 text-gum" : "border-mint/30 bg-mint/10 text-moss"}`}>
+              {message}
+            </p>
+          ) : null}
           {error || disabledReason ? (
             <p className="rounded-lg border border-gum/30 bg-gum/10 p-3 text-sm font-bold text-gum">{error || disabledReason}</p>
           ) : null}
@@ -117,9 +137,10 @@ export function EmailComposer({
       <div className="card grid gap-4">
         <div>
           <p className="section-title">Review email</p>
-          <h2 className="mt-1 text-2xl font-black tracking-tight text-ink">Confirm before sending</h2>
+          <h2 className="mt-1 text-2xl font-black text-ink">Confirm before sending</h2>
           <p className="mt-2 text-sm font-bold leading-6 text-moss">
             This sends the email from the app through your configured SMTP account with the invoice PDF attached. A confirmation copy will be sent to your email so you have a real record.
+            {invoiceStatus === "DRAFT" ? " Sending will also mark this invoice as sent and record its included work as billed." : ""}
           </p>
         </div>
 
@@ -148,9 +169,11 @@ export function EmailComposer({
         </div>
 
         <div className="grid gap-2 lg:grid-cols-3">
-          <button className="tap-primary w-full lg:col-span-2" type="button" onClick={sendEmail} disabled={Boolean(disabledReason) || isPending}>
+          <button className="tap-primary w-full lg:col-span-2" type="button" onClick={sendEmail} disabled={Boolean(disabledReason) || isPending || hasDelivered}>
             {isPending ? (
               "Sending..."
+            ) : hasDelivered ? (
+              "Email accepted"
             ) : (
               <>
                 <Mail size={20} aria-hidden="true" />

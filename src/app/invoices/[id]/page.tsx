@@ -19,9 +19,9 @@ import { InvoiceDocumentView } from "@/components/InvoiceDocumentView";
 import { CopyTextButton } from "@/components/InvoiceExportActions";
 import { SubmitButton } from "@/components/SubmitButton";
 import { requireUserId } from "@/lib/auth";
+import { createBusinessLogoSignedUrl } from "@/lib/business-logos";
 import { invoiceBusinessDetails, invoiceClientDetails } from "@/lib/invoice-data";
 import { prisma } from "@/lib/prisma";
-import { createClient } from "@/lib/supabase/server";
 import { formatMoney } from "@/lib/money";
 import { formatHours, labourTotalCents } from "@/lib/time";
 
@@ -49,9 +49,7 @@ export default async function InvoiceDetailPage({ params }: { params: Promise<{ 
   let logoUrl: string | null = null;
 
   if (business.logoPath) {
-    const supabase = await createClient();
-    const { data } = await supabase.storage.from("business-logos").createSignedUrl(business.logoPath, 60 * 10);
-    logoUrl = data?.signedUrl ?? null;
+    logoUrl = await createBusinessLogoSignedUrl(business.logoPath, 60 * 10);
   }
 
   const finaliseWarnings = invoice.status === "DRAFT" ? invoiceWarnings(profile, client) : [];
@@ -127,6 +125,8 @@ export default async function InvoiceDetailPage({ params }: { params: Promise<{ 
               <p className="text-sm font-bold text-moss">Review the email first, then send the invoice PDF attachment.</p>
               <EmailInvoiceButton
                 invoiceId={invoice.id}
+                invoiceStatus={invoice.status}
+                confirmIncomplete={finaliseWarnings.length > 0}
                 disabledReason={emailDisabledReason}
                 smsDisabledReason={smsDisabledReason}
               />
@@ -199,7 +199,8 @@ export default async function InvoiceDetailPage({ params }: { params: Promise<{ 
           </section>
 
           <section className="grid gap-2">
-            <p className="section-title">2. Mark status</p>
+            <p className="section-title">Invoice status</p>
+            <p className="text-xs font-bold leading-5 text-moss">Use these controls for invoices delivered outside the app or when correcting their payment state.</p>
             <form action={markInvoiceSentAction}>
               <input type="hidden" name="invoiceId" value={invoice.id} />
               {finaliseWarnings.length ? <input type="hidden" name="confirmIncomplete" value="on" /> : null}

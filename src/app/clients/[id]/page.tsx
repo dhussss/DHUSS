@@ -129,7 +129,7 @@ export default async function ClientDetailPage({
             <div className="surface-header flex items-center justify-between gap-3">
               <div>
                 <p className="section-title">Projects</p>
-                <h2 className="mt-1 text-xl font-black tracking-tight">Linked jobs</h2>
+                <h2 className="mt-1 text-xl font-black">Linked jobs</h2>
               </div>
               <Link href={addProjectHref} className="text-sm font-bold text-mint">
                 Add Project
@@ -157,7 +157,7 @@ export default async function ClientDetailPage({
           <section className="surface-panel">
             <div className="surface-header">
               <p className="section-title">Invoices</p>
-              <h2 className="mt-1 text-xl font-black tracking-tight">Recent invoices</h2>
+              <h2 className="mt-1 text-xl font-black">Recent invoices</h2>
             </div>
             <div className="grid gap-3 p-3">
               {client.invoices.length ? (
@@ -190,7 +190,7 @@ function SummaryTile({ label, value }: { label: string; value: string }) {
   return (
     <article className="card">
       <p className="text-xs font-black uppercase text-moss">{label}</p>
-      <p className="mt-3 text-3xl font-black tracking-tight text-ink">{value}</p>
+      <p className="mt-3 text-3xl font-black text-ink">{value}</p>
     </article>
   );
 }

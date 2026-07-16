@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { Prisma } from "@prisma/client";
 import { Archive, BriefcaseBusiness, Plus, RotateCcw, Search } from "lucide-react";
 import { unarchiveProjectAction } from "@/app/actions";
 import { requireUserId } from "@/lib/auth";
@@ -19,36 +20,42 @@ export default async function ProjectsPage({
   const params = await searchParams;
   const ownerId = await requireUserId();
   const q = typeof params?.q === "string" ? params.q.trim() : "";
+  const assignedSearch = q
+    ? Prisma.sql`AND (project.title ILIKE ${`%${q}%`} OR client."businessName" ILIKE ${`%${q}%`})`
+    : Prisma.empty;
 
   const [rows, assignedRows] = await Promise.all([
     getProjectsPageData(ownerId, q),
-    prisma.projectAssignment.findMany({
-      where: {
-        active: true,
-        teamMember: { userId: ownerId, status: "ACTIVE" },
-        project: {
-          status: "ACTIVE",
-          ...(q
-            ? { OR: [{ title: { contains: q, mode: "insensitive" } }, { client: { businessName: { contains: q, mode: "insensitive" } } }] }
-            : {})
-        }
-      },
-      select: {
-        id: true,
-        ownerId: true,
-        payRateCents: true,
-        project: { select: { id: true, title: true, client: { select: { businessName: true } } } }
-      },
-      orderBy: { project: { title: "asc" } }
-    })
+    prisma.$queryRaw<Array<{
+      id: string;
+      ownerId: string;
+      payRateCents: number;
+      employerName: string | null;
+      projectId: string;
+      projectTitle: string;
+      clientBusinessName: string;
+    }>>`
+      SELECT
+        assignment.id,
+        assignment."ownerId",
+        assignment."payRateCents",
+        profile."tradingName" AS "employerName",
+        project.id AS "projectId",
+        project.title AS "projectTitle",
+        client."businessName" AS "clientBusinessName"
+      FROM "ProjectAssignment" assignment
+      JOIN "TeamMember" member ON member.id = assignment."teamMemberId"
+      JOIN "Project" project ON project.id = assignment."projectId"
+      JOIN "Client" client ON client.id = project."clientId"
+      LEFT JOIN "BusinessProfile" profile ON profile."ownerId" = assignment."ownerId"
+      WHERE assignment.active = true
+        AND member."userId" = ${ownerId}
+        AND member.status = 'ACTIVE'
+        AND project.status = 'ACTIVE'
+        ${assignedSearch}
+      ORDER BY project.title ASC
+    `
   ]);
-  const employerProfiles = assignedRows.length
-    ? await prisma.businessProfile.findMany({
-        where: { ownerId: { in: [...new Set(assignedRows.map((assignment) => assignment.ownerId))] } },
-        select: { ownerId: true, tradingName: true }
-      })
-    : [];
-  const employerNames = new Map(employerProfiles.map((profile) => [profile.ownerId, profile.tradingName]));
   const projects = rows.filter((project) => project.status === "ACTIVE");
   const archivedProjects = rows.filter((project) => project.status === "ARCHIVED");
 
@@ -82,7 +89,7 @@ export default async function ProjectsPage({
             <Link key={project.id} href={`/projects/${project.id}`} className="card block transition hover:border-mint">
               <div className="flex items-start justify-between gap-3">
                 <div>
-                  <h2 className="text-xl font-black tracking-tight">{project.title}</h2>
+                  <h2 className="text-xl font-black">{project.title}</h2>
                   <p className="mt-1 text-sm font-bold text-moss">{project.clientBusinessName}</p>
                 </div>
                 <ProjectStatusPill status={project.status} />
@@ -111,20 +118,20 @@ export default async function ProjectsPage({
         <section className="mt-9">
           <div className="mb-3 flex items-center gap-2">
             <BriefcaseBusiness size={20} className="text-mint" aria-hidden="true" />
-            <h2 className="text-xl font-black tracking-tight">Assigned projects</h2>
+            <h2 className="text-xl font-black">Assigned projects</h2>
           </div>
           <div className="grid gap-3 md:grid-cols-2">
             {assignedRows.map((assignment) => (
-              <Link key={assignment.id} href={`/projects/${assignment.project.id}`} className="card block border-mint/25 transition hover:border-mint">
+              <Link key={assignment.id} href={`/projects/${assignment.projectId}`} className="card block border-mint/25 transition hover:border-mint">
                 <div className="flex items-start justify-between gap-3">
                   <div>
-                    <h3 className="text-xl font-black tracking-tight">{assignment.project.title}</h3>
-                    <p className="mt-1 text-sm font-bold text-moss">{assignment.project.client.businessName}</p>
+                    <h3 className="text-xl font-black">{assignment.projectTitle}</h3>
+                    <p className="mt-1 text-sm font-bold text-moss">{assignment.clientBusinessName}</p>
                   </div>
                   <span className="status-pill border-mint/30 bg-mint/10 text-mint">Assigned</span>
                 </div>
                 <p className="mt-4 rounded-lg bg-paper p-3 text-sm font-semibold text-moss">
-                  Assigned by <strong className="text-ink">{employerNames.get(assignment.ownerId) || "Employer"}</strong>
+                  Assigned by <strong className="text-ink">{assignment.employerName || "Employer"}</strong>
                 </p>
                 <p className="mt-3 text-sm font-bold text-moss">Your pay rate</p>
                 <p className="mt-1 text-2xl font-black">{formatMoney(assignment.payRateCents)}/h</p>
@@ -137,7 +144,7 @@ export default async function ProjectsPage({
       <section className="mt-9">
         <div className="mb-3 flex items-center gap-2">
           <Archive size={20} className="text-moss" aria-hidden="true" />
-          <h2 className="text-xl font-black tracking-tight">Archived projects</h2>
+          <h2 className="text-xl font-black">Archived projects</h2>
         </div>
 
         <div className="grid gap-3 md:grid-cols-2">
@@ -148,7 +155,7 @@ export default async function ProjectsPage({
                   <Link href={`/projects/${project.id}`} className="block">
                     <div className="flex items-start justify-between gap-3">
                       <div>
-                        <h3 className="text-lg font-black tracking-tight">{project.title}</h3>
+                        <h3 className="text-lg font-black">{project.title}</h3>
                         <p className="mt-1 text-sm font-bold text-moss">{project.clientBusinessName}</p>
                       </div>
                       <ProjectStatusPill status={project.status} />

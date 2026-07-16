@@ -19,7 +19,7 @@ type TimingResult<T> = {
 };
 
 function isAuthorised(token: string) {
-  const configuredToken = process.env.DIAGNOSTICS_TOKEN;
+  const configuredToken = process.env.DIAGNOSTICS_TOKEN || process.env.BACKUP_EXPORT_TOKEN;
   if (!configuredToken && process.env.NODE_ENV === "production") return false;
   if (!configuredToken) return true;
 
@@ -148,7 +148,7 @@ export default async function DiagnosticsPage({
     return (
       <main className="page-shell">
         <p className="section-title">Diagnostics</p>
-        <h1 className="mt-2 text-3xl font-black tracking-tight">Not authorised</h1>
+        <h1 className="mt-2 text-3xl font-black">Not authorised</h1>
         <p className="mt-4 rounded-lg border border-line bg-white p-4 text-sm font-bold text-moss">
           Open this page with /diagnostics?token=&lt;DIAGNOSTICS_TOKEN&gt;.
         </p>
@@ -183,7 +183,7 @@ export default async function DiagnosticsPage({
     <main className="page-shell">
       <header>
         <p className="section-title">Private Diagnostics</p>
-        <h1 className="mt-2 text-3xl font-black tracking-tight">App performance</h1>
+        <h1 className="mt-2 text-3xl font-black">App performance</h1>
       </header>
 
       <section className="mt-6 grid gap-3 md:grid-cols-3">
@@ -222,12 +222,12 @@ export default async function DiagnosticsPage({
       </section>
 
       <section className="card mt-6">
-        <h2 className="text-xl font-black tracking-tight">Diagnosis</h2>
+        <h2 className="text-xl font-black">Diagnosis</h2>
         <p className="mt-3 text-sm font-bold leading-6 text-moss">{diagnosisText}</p>
       </section>
 
       <section className="card mt-6 overflow-x-auto">
-        <h2 className="text-xl font-black tracking-tight">Core timings</h2>
+        <h2 className="text-xl font-black">Core timings</h2>
         <table className="mt-4 w-full min-w-[560px] border-collapse">
           <thead>
             <tr className="text-left text-xs font-bold uppercase text-moss">
@@ -251,7 +251,7 @@ export default async function DiagnosticsPage({
       </section>
 
       <section className="card mt-6 overflow-x-auto">
-        <h2 className="text-xl font-black tracking-tight">Dashboard query timings</h2>
+        <h2 className="text-xl font-black">Dashboard query timings</h2>
         <table className="mt-4 w-full min-w-[560px] border-collapse">
           <thead>
             <tr className="text-left text-xs font-bold uppercase text-moss">

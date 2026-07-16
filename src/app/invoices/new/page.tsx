@@ -32,10 +32,17 @@ export default async function NewInvoicePage({
       title: true,
       client: { select: { businessName: true, email: true } },
       timeEntries: {
-        where: { billingStatus: "UNBILLED", OR: [{ teamMemberId: null }, { approvalStatus: "APPROVED" }] },
+        where: {
+          billingStatus: "UNBILLED",
+          invoiceLineItems: { none: { invoice: { status: "DRAFT" } } },
+          OR: [{ teamMemberId: null }, { approvalStatus: "APPROVED" }]
+        },
         select: { durationMinutes: true }
       },
-      expenseItems: { where: { billingStatus: "UNBILLED" }, select: { id: true } }
+      expenseItems: {
+        where: { billingStatus: "UNBILLED", invoiceLineItems: { none: { invoice: { status: "DRAFT" } } } },
+        select: { id: true }
+      }
     },
     orderBy: { title: "asc" }
   });
@@ -76,6 +83,7 @@ export default async function NewInvoicePage({
               projectId,
               ownerId,
               billingStatus: "UNBILLED",
+              invoiceLineItems: { none: { invoice: { status: "DRAFT" } } },
               OR: [{ teamMemberId: null }, { approvalStatus: "APPROVED" }],
               date: { gte: start, lte: end }
             },
@@ -83,7 +91,13 @@ export default async function NewInvoicePage({
             orderBy: [{ date: "asc" }, { createdAt: "asc" }]
           }),
           prisma.expenseItem.findMany({
-            where: { projectId, ownerId, billingStatus: "UNBILLED", datePurchased: { gte: start, lte: end } },
+            where: {
+              projectId,
+              ownerId,
+              billingStatus: "UNBILLED",
+              invoiceLineItems: { none: { invoice: { status: "DRAFT" } } },
+              datePurchased: { gte: start, lte: end }
+            },
             select: {
               id: true,
               datePurchased: true,
@@ -191,7 +205,7 @@ export default async function NewInvoicePage({
       <section className="mt-6">
         <div className="mb-3">
           <p className="section-title">Review</p>
-          <h2 className="text-2xl font-black tracking-tight">
+          <h2 className="text-2xl font-black">
             {selectedProject ? selectedProject.title : "Select a project"}
           </h2>
           {selectedProject ? (

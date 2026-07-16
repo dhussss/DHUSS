@@ -79,7 +79,7 @@ export default async function InvoiceEmailPage({ params }: { params: Promise<{ i
         <div>
           <p className="section-title">Email invoice</p>
           <h1 className="page-title">Prepare email</h1>
-          <p className="mt-1 text-xl font-black tracking-tight">{invoice.invoiceNumber}</p>
+          <p className="mt-1 text-xl font-black">{invoice.invoiceNumber}</p>
           <p className="mt-1 text-sm font-bold text-moss">
             {invoice.project.title} - {client.businessName}
           </p>
@@ -96,6 +96,8 @@ export default async function InvoiceEmailPage({ params }: { params: Promise<{ i
           initialSubject={subject}
           initialBody={body}
           confirmationCopyEmail={confirmationCopyEmail}
+          invoiceStatus={invoice.status}
+          confirmIncomplete={invoice.status === "DRAFT" && hasFinaliseWarnings(profile)}
           disabledReason={disabledReason}
         />
 
@@ -104,7 +106,7 @@ export default async function InvoiceEmailPage({ params }: { params: Promise<{ i
             <p className="section-title">Invoice summary</p>
             <div className="mt-3 rounded-lg border border-mint/25 bg-mint/10 p-4">
               <p className="text-xs font-black uppercase tracking-[0.16em] text-moss">Amount due</p>
-              <p className="mt-1 text-3xl font-black tracking-tight text-ink">{formatMoney(invoice.grandTotalCents)}</p>
+              <p className="mt-1 text-3xl font-black text-ink">{formatMoney(invoice.grandTotalCents)}</p>
               <div className="mt-3">
                 <InvoiceStatusPill status={invoice.status} />
               </div>
@@ -159,6 +161,26 @@ function SummaryLine({ label, value, strong = false }: { label: string; value: s
       <dt className="text-moss">{label}</dt>
       <dd className={strong ? "text-lg font-black text-ink" : "text-right text-ink"}>{value}</dd>
     </div>
+  );
+}
+
+function hasFinaliseWarnings(
+  profile: {
+    tradingName: string;
+    abn: string | null;
+    gstRegistered: boolean;
+    bankAccountName: string | null;
+    bsb: string | null;
+    accountNumber: string | null;
+  } | null
+) {
+  return Boolean(
+    !profile ||
+      !profile.tradingName ||
+      (profile.gstRegistered && !profile.abn) ||
+      !profile.bankAccountName ||
+      !profile.bsb ||
+      !profile.accountNumber
   );
 }
 

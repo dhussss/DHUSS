@@ -39,7 +39,7 @@ export function QuarterTrendChart({ points }: { points: QuarterTrendPoint[] }) {
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
           <p className="section-title">Quarter trend</p>
-          <h2 className="mt-1 text-2xl font-black tracking-tight">Daily hours and 7-day average</h2>
+          <h2 className="mt-1 text-2xl font-black">Daily hours and 7-day average</h2>
           <p className="mt-2 max-w-2xl text-sm font-bold leading-6 text-moss">
             Shows daily logged hours for the current quarter with a rolling 7-day average to reveal workload pace.
           </p>
@@ -135,7 +135,7 @@ export function FinancialYearChart({ points, start, end }: { points: FinancialYe
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
           <p className="section-title">Financial year</p>
-          <h2 className="mt-1 text-2xl font-black tracking-tight">Monthly paid income</h2>
+          <h2 className="mt-1 text-2xl font-black">Monthly paid income</h2>
           <p className="mt-2 max-w-2xl text-sm font-bold leading-6 text-moss">
             Shows paid invoice income by month across the Australian financial year. The line shows cumulative paid income.
           </p>
@@ -238,7 +238,7 @@ export function InsightCards({ cards }: { cards: InsightCard[] }) {
       {cards.map((card) => (
         <article key={card.title} className={`rounded-lg border p-4 shadow-soft ${tones[card.tone]}`}>
           <p className="text-xs font-black uppercase tracking-[0.12em] text-moss">{card.title}</p>
-          <p className="mt-3 text-3xl font-black tracking-tight text-ink">{card.value}</p>
+          <p className="mt-3 text-3xl font-black text-ink">{card.value}</p>
           <p className="mt-2 text-sm font-bold leading-6 text-moss">{card.body}</p>
         </article>
       ))}
@@ -252,7 +252,7 @@ function EmptyChart({ icon: Icon, title, body }: { icon: LucideIcon; title: stri
       <span className="icon-tile">
         <Icon size={20} aria-hidden="true" />
       </span>
-      <p className="mt-4 text-xl font-black tracking-tight text-ink">{title}</p>
+      <p className="mt-4 text-xl font-black text-ink">{title}</p>
       <p className="mt-2 text-sm font-bold leading-6 text-moss">{body}</p>
     </div>
   );

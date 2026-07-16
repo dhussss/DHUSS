@@ -1,9 +1,13 @@
 node_modules
 .next
+.DS_Store
+.claude/
 .env
 .env.local
 *.db
 prisma/dev.db
 .pnpm-store
 .vercel
+*.tsbuildinfo
 .env*
+!.env.example

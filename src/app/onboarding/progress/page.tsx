@@ -43,7 +43,7 @@ export default async function OnboardingProgressPage() {
           <div className="p-5 text-center sm:p-8">
             <span className="mx-auto grid size-14 place-items-center rounded-2xl bg-mint text-white shadow-soft"><Check size={28} aria-hidden="true" /></span>
             <p className="section-title mt-5">First workflow complete</p>
-            <h1 className="mt-2 text-3xl font-black tracking-tight sm:text-4xl">You have done the whole job flow</h1>
+            <h1 className="mt-2 text-3xl font-black sm:text-4xl">You have done the whole job flow</h1>
             <p className="mx-auto mt-3 max-w-lg text-sm font-medium leading-6 text-moss">Your invoice is still a draft, so nothing has been sent. You can now use the app normally and revisit any guide from More.</p>
 
             <div className="mx-auto mt-6 grid max-w-lg gap-2 text-left">

@@ -1,11 +1,11 @@
 import crypto from "node:crypto";
 import nodemailer from "nodemailer";
+import { loadBusinessLogoBuffer } from "@/lib/business-logos";
 import { invoiceBusinessDetails, invoiceClientDetails, invoicePdfFileName } from "@/lib/invoice-data";
 import { buildPreparedInvoiceEmailBody, invoiceDueDate, renderTemplate } from "@/lib/invoice-documents";
 import { renderInvoicePdf } from "@/lib/invoice-pdf";
 import { formatMoney } from "@/lib/money";
 import { prisma } from "@/lib/prisma";
-import { createClient } from "@/lib/supabase/server";
 
 type DeliveryData = Awaited<ReturnType<typeof loadInvoiceDeliveryData>>;
 
@@ -73,8 +73,8 @@ export async function sendPreparedInvoiceEmailWithPdf(
   return {
     ok: true,
     message: confirmationCopyEmail
-      ? `Invoice email sent to ${to} with the PDF attached. A confirmation copy was sent to ${confirmationCopyEmail}.`
-      : `Invoice email sent to ${to} with the PDF attached.`
+      ? `Your email provider accepted the invoice for ${to} with the PDF attached. A confirmation copy was addressed to ${confirmationCopyEmail}.`
+      : `Your email provider accepted the invoice for ${to} with the PDF attached.`
   };
 }
 
@@ -88,7 +88,7 @@ export async function sendInvoiceMmsWithPdf(ownerId: string, invoiceId: string) 
   const to = normalisePhoneForMessaging(data.client.phone);
   await sendTwilioMms({ to, body, mediaUrl });
 
-  return { ok: true, message: `Invoice SMS/MMS sent to ${data.client.phone} with the PDF attached.` };
+  return { ok: true, message: `Twilio accepted the invoice SMS/MMS for ${data.client.phone} with the PDF attached.` };
 }
 
 export async function renderPublicInvoicePdf(token: string) {
@@ -110,7 +110,7 @@ export async function renderPublicInvoicePdf(token: string) {
   const profile = invoice.ownerId ? await prisma.businessProfile.findUnique({ where: { ownerId: invoice.ownerId } }) : null;
   const business = invoiceBusinessDetails(invoice, profile);
   const client = invoiceClientDetails(invoice);
-  const logo = await loadLogoBuffer(business.logoPath);
+  const logo = await loadBusinessLogoBuffer(business.logoPath);
   const pdf = await renderInvoicePdf({ invoice, business, client, logo });
 
   return {
@@ -183,7 +183,7 @@ function buildSmsMessage(data: DeliveryData, mediaUrl: string) {
 }
 
 async function renderDeliveryPdf(data: DeliveryData) {
-  const logo = await loadLogoBuffer(data.business.logoPath);
+  const logo = await loadBusinessLogoBuffer(data.business.logoPath);
   return renderInvoicePdf({ invoice: data.invoice, business: data.business, client: data.client, logo });
 }
 
@@ -308,26 +308,6 @@ export function pdfHeaders(filename: string) {
     "Content-Disposition": `inline; filename="${filename}"`,
     "Cache-Control": "no-store"
   };
-}
-
-async function loadLogoBuffer(logoPath: string | null) {
-  if (!logoPath) return null;
-
-  try {
-    const supabase = await createClient();
-    const { data } = await supabase.storage.from("business-logos").createSignedUrl(logoPath, 60 * 5);
-    if (!data?.signedUrl) return null;
-
-    const response = await fetch(data.signedUrl);
-    const contentType = response.headers.get("content-type") ?? "";
-    if (!response.ok || (!contentType.includes("png") && !contentType.includes("jpeg") && !contentType.includes("jpg"))) {
-      return null;
-    }
-
-    return Buffer.from(await response.arrayBuffer());
-  } catch {
-    return null;
-  }
 }
 
 function absoluteAppUrl(path: string) {

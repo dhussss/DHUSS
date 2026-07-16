@@ -31,3 +31,9 @@ export type ThemePreset = keyof typeof themePresets;
 export function normaliseThemePreset(value: string | null | undefined): ThemePreset {
   return value && value in themePresets ? (value as ThemePreset) : "emerald";
 }
+
+export function normaliseRgbValue(value: string | null | undefined, fallback: string) {
+  if (!value || !/^\d{1,3} \d{1,3} \d{1,3}$/.test(value)) return fallback;
+  const channels = value.split(" ").map(Number);
+  return channels.every((channel) => Number.isInteger(channel) && channel >= 0 && channel <= 255) ? value : fallback;
+}

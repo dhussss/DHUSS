@@ -4,29 +4,17 @@ import type { LucideIcon } from "lucide-react";
 import type { ReactNode } from "react";
 import { FinancialYearChart, InsightCards, QuarterTrendChart } from "@/components/AnalyticsCharts";
 import { requireUserId } from "@/lib/auth";
-import { endOfDay, formatDateAU, todayInPerth } from "@/lib/dates";
+import { formatDateAU } from "@/lib/dates";
 import { getInsightsData } from "@/lib/insights";
 import { formatMoney } from "@/lib/money";
 import { formatPercent } from "@/lib/planning";
-import { formatHours, labourTotalCents } from "@/lib/time";
-import { prisma } from "@/lib/prisma";
+import { formatHours } from "@/lib/time";
 
 export const dynamic = "force-dynamic";
 
 export default async function InsightsPage() {
   const ownerId = await requireUserId();
-  const today = todayInPerth();
-  const fyStart = new Date(Date.UTC(today.getUTCMonth() >= 6 ? today.getUTCFullYear() : today.getUTCFullYear() - 1, 6, 1));
-  const todayEnd = endOfDay(today);
-  const [insights, paidInvoices, billedEmployeeEntries, paidEmployeeEntries] = await Promise.all([
-    getInsightsData(ownerId),
-    prisma.invoice.aggregate({ where: { ownerId, status: "PAID", paymentDate: { gte: fyStart, lte: todayEnd } }, _sum: { grandTotalCents: true } }),
-    prisma.timeEntry.findMany({ where: { ownerId, teamMemberId: { not: null }, billingStatus: "BILLED", invoice: { status: { in: ["SENT", "PAID"] }, invoiceDate: { gte: fyStart, lte: todayEnd } } }, select: { durationMinutes: true, hourlyRateCentsSnapshot: true } }),
-    prisma.timeEntry.findMany({ where: { ownerId, teamMemberId: { not: null }, paymentStatus: "PAID", paidAt: { gte: fyStart, lte: todayEnd } }, select: { durationMinutes: true, payRateCentsSnapshot: true } })
-  ]);
-  const ytdPaidToMeCents = paidInvoices._sum.grandTotalCents || 0;
-  const ytdEmployeeEarningsCents = billedEmployeeEntries.reduce((sum, entry) => sum + labourTotalCents(entry.durationMinutes, entry.hourlyRateCentsSnapshot), 0);
-  const ytdPaidToEmployeesCents = paidEmployeeEntries.reduce((sum, entry) => sum + labourTotalCents(entry.durationMinutes, entry.payRateCentsSnapshot || 0), 0);
+  const insights = await getInsightsData(ownerId);
   const averageRate = insights.revenue.averageHourlyRateCents;
   const setAside = insights.taxSetAside;
 
@@ -58,7 +46,7 @@ export default async function InsightsPage() {
                 <BarChart3 size={17} aria-hidden="true" />
                 Insights
               </p>
-              <h1 className="mt-2 text-4xl font-black tracking-tight text-white sm:text-5xl">Business tracking</h1>
+              <h1 className="mt-2 text-4xl font-black text-white sm:text-5xl">Business tracking</h1>
               <p className="mt-3 max-w-2xl text-sm font-medium leading-6 text-white/65">
                 Clear workload, invoice, and financial-year signals based on your logged data.
               </p>
@@ -77,9 +65,9 @@ export default async function InsightsPage() {
       </section>
 
       <section className="mt-5 grid gap-3 md:grid-cols-3">
-        <StatTile label="YTD paid to me" value={formatMoney(ytdPaidToMeCents)} icon={Banknote} />
-        <StatTile label="YTD earned from employees" value={formatMoney(ytdEmployeeEarningsCents)} icon={TrendingUp} />
-        <StatTile label="YTD paid to employees" value={formatMoney(ytdPaidToEmployeesCents)} icon={PiggyBank} />
+        <StatTile label="YTD paid to me" value={formatMoney(insights.financialYear.paidToMeCents)} icon={Banknote} />
+        <StatTile label="YTD earned from employees" value={formatMoney(insights.financialYear.employeeEarningsCents)} icon={TrendingUp} />
+        <StatTile label="YTD paid to employees" value={formatMoney(insights.financialYear.paidToEmployeesCents)} icon={PiggyBank} />
       </section>
 
       <section className="mt-5 grid gap-4 xl:grid-cols-2">
@@ -216,7 +204,7 @@ function HeroMetric({ label, value }: { label: string; value: string }) {
   return (
     <div className="rounded-xl border border-white/12 bg-white/[0.06] p-4">
       <p className="text-xs font-bold text-white/60">{label}</p>
-      <p className="mt-2 text-2xl font-black tabular-nums tracking-tight text-white sm:text-3xl">{value}</p>
+      <p className="mt-2 text-2xl font-black tabular-nums text-white sm:text-3xl">{value}</p>
     </div>
   );
 }
@@ -228,7 +216,7 @@ function Panel({ title, icon: Icon, children }: { title: string; icon: LucideIco
         <span className="icon-tile">
           <Icon size={20} aria-hidden="true" />
         </span>
-        <h2 className="text-2xl font-black tracking-tight">{title}</h2>
+        <h2 className="text-2xl font-black">{title}</h2>
       </div>
       <div className="grid gap-4 p-4">{children}</div>
     </section>
@@ -257,7 +245,7 @@ function StatTile({
         <p className="text-xs font-bold text-moss">{label}</p>
         {Icon ? <Icon size={16} className="text-moss" aria-hidden="true" /> : null}
       </div>
-      <p className={`mt-1.5 font-black tabular-nums tracking-tight ${toneClass} ${compact ? "text-lg" : "text-2xl"}`}>{value}</p>
+      <p className={`mt-1.5 font-black tabular-nums ${toneClass} ${compact ? "text-lg" : "text-2xl"}`}>{value}</p>
       {hint ? <p className="mt-0.5 text-xs font-semibold text-moss">{hint}</p> : null}
     </div>
   );

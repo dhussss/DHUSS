@@ -1,6 +1,6 @@
 export function parseClockTime(value: FormDataEntryValue | string | null): number | null {
-  const raw = String(value ?? "");
-  if (!raw) return null;
+  const raw = String(value ?? "").trim();
+  if (!raw || !/^\d{2}:\d{2}$/.test(raw)) return null;
   const [hourRaw, minuteRaw] = raw.split(":");
   const hour = Number.parseInt(hourRaw, 10);
   const minute = Number.parseInt(minuteRaw, 10);

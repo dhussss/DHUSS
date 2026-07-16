@@ -20,7 +20,7 @@ export function SummaryCard({
         </span>
       </div>
       <div>
-        <p className="mt-4 text-3xl font-black tabular-nums tracking-tight text-ink">{value}</p>
+        <p className="mt-4 text-3xl font-black tabular-nums text-ink">{value}</p>
         {note ? <p className="mt-1 text-sm text-moss">{note}</p> : null}
       </div>
     </article>

@@ -12,7 +12,7 @@ export function WeeklyPaidChart({
       <div className="flex items-end justify-between gap-3">
         <div>
           <p className="section-title">Paid this quarter</p>
-          <h2 className="mt-1 text-xl font-black tracking-tight text-ink">Weekly paid totals</h2>
+          <h2 className="mt-1 text-xl font-black text-ink">Weekly paid totals</h2>
         </div>
         <p className="text-sm font-bold text-moss">{formatMoney(weeks.reduce((sum, week) => sum + week.totalCents, 0))}</p>
       </div>

@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { usePathname } from "next/navigation";
 import { CalendarPlus, ClipboardPlus, Clock3, PackagePlus, X } from "lucide-react";
 import { createExpenseItemAction, createTimeEntryAction } from "@/app/actions";
@@ -41,6 +41,7 @@ export function LogTimeSheet({
   const [endTime, setEndTime] = useState("15:00");
   const [durationHours, setDurationHours] = useState("8");
   const [logDayOff, setLogDayOff] = useState(false);
+  const closeButtonRef = useRef<HTMLButtonElement>(null);
   const initialTimeProject = defaultProjectId
     ? `owned:${defaultProjectId}`
     : projects[0]
@@ -53,6 +54,23 @@ export function LogTimeSheet({
   const selectedOwnedProjectId = selectedTimeProject.startsWith("owned:") ? selectedTimeProject.slice("owned:".length) : "";
   const isAssignedTime = Boolean(selectedAssignmentId);
   const timeReturnTo = returnTo ?? (pathname === "/" ? (isAssignedTime ? "/?assignedTimeSaved=1" : "/?timeSaved=1") : pathname);
+
+  useEffect(() => {
+    if (!open) return;
+
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    closeButtonRef.current?.focus();
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setOpen(false);
+    };
+    window.addEventListener("keydown", closeOnEscape);
+
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      window.removeEventListener("keydown", closeOnEscape);
+    };
+  }, [open]);
 
   const calculatedRange = useMemo(() => {
     const start = parseClockTime(startTime);
@@ -103,15 +121,27 @@ export function LogTimeSheet({
       </button>
 
       {open ? (
-        <div className="fixed inset-0 z-50 flex items-end bg-ink/40 p-3 backdrop-blur-sm sm:items-center sm:justify-center">
-          <div className="max-h-[92vh] w-full max-w-lg overflow-auto rounded-lg bg-paper p-4 shadow-soft">
+        <div
+          className="fixed inset-0 z-50 flex items-end bg-ink/40 p-3 backdrop-blur-sm sm:items-center sm:justify-center"
+          onMouseDown={(event) => {
+            if (event.target === event.currentTarget) setOpen(false);
+          }}
+        >
+          <div
+            className="w-full max-w-lg overflow-auto rounded-2xl border border-line bg-paper p-4 pb-[max(1rem,env(safe-area-inset-bottom))] text-ink shadow-lift"
+            style={{ maxHeight: "calc(100dvh - 1.5rem)" }}
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="log-work-title"
+          >
             <div className="flex items-center justify-between gap-4">
               <div>
                 <p className="section-title">Quick entry</p>
-                <h2 className="text-2xl font-black tracking-tight">Log work</h2>
+                <h2 id="log-work-title" className="text-2xl font-black text-ink">Log work</h2>
               </div>
               <button
                 type="button"
+                ref={closeButtonRef}
                 className="grid size-11 place-items-center rounded-lg border border-line bg-white text-ink"
                 onClick={() => setOpen(false)}
                 aria-label="Close log form"

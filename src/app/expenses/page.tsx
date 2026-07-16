@@ -72,7 +72,7 @@ export default async function ExpensesPage({
             </span>
             <div>
               <p className="section-title">New expense</p>
-              <h2 className="text-xl font-black tracking-tight">Log a work cost</h2>
+              <h2 className="text-xl font-black">Log a work cost</h2>
             </div>
           </div>
           <WorkExpenseForm action={createWorkExpenseAction} projects={projects} returnTo="/expenses?saved=expense-created" submitLabel="Add Expense" />
@@ -81,7 +81,7 @@ export default async function ExpensesPage({
         <section className="surface-panel">
           <div className="surface-header">
             <p className="section-title">Register</p>
-            <h2 className="mt-1 text-2xl font-black tracking-tight">Logged expenses</h2>
+            <h2 className="mt-1 text-2xl font-black">Logged expenses</h2>
           </div>
           <div className="grid gap-3 p-3">
             {expenses.length ? (
@@ -182,7 +182,7 @@ function SummaryTile({ label, value }: { label: string; value: string }) {
   return (
     <article className="card">
       <p className="text-sm font-semibold text-moss">{label}</p>
-      <p className="mt-3 text-3xl font-black tracking-tight text-ink">{value}</p>
+      <p className="mt-3 text-3xl font-black text-ink">{value}</p>
     </article>
   );
 }

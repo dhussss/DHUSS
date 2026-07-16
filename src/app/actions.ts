@@ -9,8 +9,9 @@ import { prisma } from "@/lib/prisma";
 import { requireUserId } from "@/lib/auth";
 import { CACHE_TAGS } from "@/lib/app-data";
 import { dollarsToCents } from "@/lib/money";
-import { addDays, endOfDay, parseInputDate } from "@/lib/dates";
+import { addDays, endOfDay, parseInputDate, todayInPerth } from "@/lib/dates";
 import { expenseCategoryOptions, expenseStatusOptions } from "@/lib/expenses";
+import { nextInvoiceNumberFromExisting } from "@/lib/invoice-numbers";
 import { buildInvoiceLineData, invoiceTotals, summaryText } from "@/lib/invoices";
 import { sendInvoiceMmsWithPdf, sendPreparedInvoiceEmailWithPdf } from "@/lib/invoice-delivery";
 import { isQuarterHour, isQuarterHourClock, parseClockTime } from "@/lib/time";
@@ -34,15 +35,16 @@ function optionalPositiveCents(formData: FormData, key: string) {
 function optionalInt(formData: FormData, key: string, fallback: number) {
   const raw = text(formData, key);
   if (!raw) return fallback;
-  const value = Number.parseInt(raw, 10);
-  if (!Number.isFinite(value) || value < 0) throw new Error(`${key} must be a valid number.`);
+  if (!/^\d+$/.test(raw)) throw new Error(`${key} must be a valid whole number.`);
+  const value = Number(raw);
+  if (!Number.isSafeInteger(value)) throw new Error(`${key} must be a valid whole number.`);
   return value;
 }
 
 function optionalDecimal(formData: FormData, key: string, fallback: number) {
   const raw = text(formData, key);
   if (!raw) return fallback;
-  const value = Number.parseFloat(raw);
+  const value = Number(raw);
   if (!Number.isFinite(value) || value < 0) throw new Error(`${key} must be a valid number.`);
   return value;
 }
@@ -50,7 +52,7 @@ function optionalDecimal(formData: FormData, key: string, fallback: number) {
 function optionalPercentage(formData: FormData, key: string) {
   const raw = text(formData, key);
   if (!raw) return null;
-  const value = Number.parseFloat(raw);
+  const value = Number(raw);
   if (!Number.isFinite(value) || value < 0 || value > 100) {
     throw new Error(`${key} must be between 0 and 100.`);
   }
@@ -59,7 +61,7 @@ function optionalPercentage(formData: FormData, key: string) {
 
 function returnTo(formData: FormData) {
   const value = text(formData, "returnTo");
-  return value.startsWith("/") ? value : "/";
+  return value.startsWith("/") && !value.startsWith("//") ? value : "/";
 }
 
 function revalidateAppData() {
@@ -584,7 +586,7 @@ export async function createExpenseItemAction(formData: FormData) {
   const projectId = text(formData, "projectId");
   const datePurchased = parseInputDate(formData.get("datePurchased"));
   const description = text(formData, "description");
-  const quantity = Number.parseFloat(text(formData, "quantity"));
+  const quantity = Number(text(formData, "quantity"));
   const unitCostCents = dollarsToCents(formData.get("unitCost"));
   const notes = text(formData, "itemNotes") || null;
 
@@ -612,14 +614,14 @@ export async function createExpenseItemAction(formData: FormData) {
 
   revalidatePath("/");
   revalidatePath("/projects");
-  revalidateDataTags(CACHE_TAGS.dashboard, CACHE_TAGS.projects);
+  revalidateDataTags(CACHE_TAGS.dashboard, CACHE_TAGS.projects, CACHE_TAGS.insights);
   redirect(returnTo(formData));
 }
 
 function expenseItemDataFromForm(formData: FormData) {
   const datePurchased = parseInputDate(formData.get("datePurchased"));
   const description = text(formData, "description");
-  const quantity = Number.parseFloat(text(formData, "quantity"));
+  const quantity = Number(text(formData, "quantity"));
   const unitCostCents = dollarsToCents(formData.get("unitCost"));
   const notes = text(formData, "itemNotes") || null;
 
@@ -660,7 +662,7 @@ export async function updateExpenseItemAction(formData: FormData) {
   revalidatePath("/projects");
   revalidatePath(`/projects/${projectId}`);
   revalidatePath("/invoices");
-  revalidateDataTags(CACHE_TAGS.dashboard, CACHE_TAGS.projects);
+  revalidateDataTags(CACHE_TAGS.dashboard, CACHE_TAGS.projects, CACHE_TAGS.insights);
   redirect(returnTo(formData));
 }
 
@@ -684,7 +686,7 @@ export async function deleteExpenseItemAction(formData: FormData) {
   revalidatePath("/projects");
   revalidatePath(`/projects/${projectId}`);
   revalidatePath("/invoices");
-  revalidateDataTags(CACHE_TAGS.dashboard, CACHE_TAGS.projects);
+  revalidateDataTags(CACHE_TAGS.dashboard, CACHE_TAGS.projects, CACHE_TAGS.insights);
   redirect(returnTo(formData));
 }
 
@@ -1212,12 +1214,18 @@ export async function deleteClientAction(formData: FormData) {
 }
 
 async function nextInvoiceNumber(ownerId: string, prefix: string, attempt = 0) {
-  const year = new Date().getUTCFullYear();
-  const count = await prisma.invoice.count({
-    where: { ownerId, invoiceNumber: { startsWith: `${prefix}${year}-` } }
+  const year = todayInPerth().getUTCFullYear();
+  const existing = await prisma.invoice.findMany({
+    where: { ownerId, invoiceNumber: { startsWith: `${prefix}${year}-` } },
+    select: { invoiceNumber: true }
   });
 
-  return `${prefix}${year}-${String(count + 1 + attempt).padStart(4, "0")}`;
+  return nextInvoiceNumberFromExisting(
+    existing.map((invoice) => invoice.invoiceNumber),
+    prefix,
+    year,
+    attempt
+  );
 }
 
 function isUniqueInvoiceNumberViolation(error: unknown) {
@@ -1278,6 +1286,7 @@ export async function createInvoiceDraftAction(formData: FormData) {
         projectId,
         ownerId,
         billingStatus: "UNBILLED",
+        invoiceLineItems: { none: { invoice: { status: "DRAFT" } } },
         OR: [{ teamMemberId: null }, { approvalStatus: "APPROVED" }],
         date: { gte: start, lte: end }
       },
@@ -1289,6 +1298,7 @@ export async function createInvoiceDraftAction(formData: FormData) {
         projectId,
         ownerId,
         billingStatus: "UNBILLED",
+        invoiceLineItems: { none: { invoice: { status: "DRAFT" } } },
         datePurchased: { gte: start, lte: end }
       },
       select: {
@@ -1314,9 +1324,9 @@ export async function createInvoiceDraftAction(formData: FormData) {
     registered: profile?.gstRegistered ?? false,
     rate: gstRate
   });
-  const invoiceDate = new Date();
+  const invoiceDate = todayInPerth();
   const invoicePrefix = profile?.invoicePrefix || "INV-";
-  const maxAttempts = 5;
+  const maxAttempts = 10;
   let invoice: Awaited<ReturnType<typeof prisma.invoice.create>> | null = null;
 
   for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
@@ -1380,46 +1390,24 @@ async function finaliseInvoice(ownerId: string, invoiceId: string, status: "SENT
 
   if (invoice.status === "SENT") {
     if (status !== "PAID") throw new Error("Sent invoices cannot be resent.");
-    await prisma.invoice.update({
-      where: { id: invoiceId },
+    const updated = await prisma.invoice.updateMany({
+      where: { id: invoiceId, ownerId, status: "SENT" },
       data: { status: "PAID", paymentDate: new Date() }
     });
+    if (updated.count !== 1) throw new Error("Invoice status changed. Refresh the page and try again.");
     return;
   }
 
-  const timeEntryIds = invoice.lineItems
-    .map((line) => line.timeEntryId)
-    .filter((id): id is string => Boolean(id));
-  const expenseItemIds = invoice.lineItems
-    .map((line) => line.expenseItemId)
-    .filter((id): id is string => Boolean(id));
-
-  const [blockedEntries, blockedExpenses] = await Promise.all([
-    timeEntryIds.length
-      ? prisma.timeEntry.count({
-          where: {
-            ownerId,
-            id: { in: timeEntryIds },
-            billingStatus: "BILLED",
-            invoiceId: { not: invoiceId }
-          }
-        })
-      : 0,
-    expenseItemIds.length
-      ? prisma.expenseItem.count({
-          where: {
-            ownerId,
-            id: { in: expenseItemIds },
-            billingStatus: "BILLED",
-            invoiceId: { not: invoiceId }
-          }
-        })
-      : 0
-  ]);
-
-  if (blockedEntries || blockedExpenses) {
-    throw new Error("One or more invoice items have already been billed elsewhere.");
-  }
+  const timeEntryIds = [...new Set(
+    invoice.lineItems
+      .map((line) => line.timeEntryId)
+      .filter((id): id is string => Boolean(id))
+  )];
+  const expenseItemIds = [...new Set(
+    invoice.lineItems
+      .map((line) => line.expenseItemId)
+      .filter((id): id is string => Boolean(id))
+  )];
 
   const profile = await prisma.businessProfile.findUnique({ where: { ownerId } });
   const profileIssues = criticalInvoiceProfileIssues(profile);
@@ -1442,17 +1430,48 @@ async function finaliseInvoice(ownerId: string, invoiceId: string, status: "SENT
   const paymentTermsDays = profile?.paymentTermsDays ?? invoice.paymentTermsDays;
   const invoiceDate = invoice.invoiceDate;
 
-  await prisma.$transaction([
-    prisma.timeEntry.updateMany({
-      where: { ownerId, id: { in: timeEntryIds } },
-      data: { billingStatus: "BILLED", invoiceId }
-    }),
-    prisma.expenseItem.updateMany({
-      where: { ownerId, id: { in: expenseItemIds } },
-      data: { billingStatus: "BILLED", invoiceId }
-    }),
-    prisma.invoice.update({
-      where: { id: invoiceId },
+  await prisma.$transaction(async (tx) => {
+    const currentInvoice = await tx.invoice.findFirst({
+      where: { id: invoiceId, ownerId },
+      select: { status: true }
+    });
+    if (currentInvoice?.status !== "DRAFT") {
+      throw new Error("Invoice status changed. Refresh the page and try again.");
+    }
+
+    const updatedEntries = timeEntryIds.length
+      ? await tx.timeEntry.updateMany({
+          where: {
+            ownerId,
+            id: { in: timeEntryIds },
+            OR: [
+              { billingStatus: "UNBILLED", invoiceId: null },
+              { billingStatus: "BILLED", invoiceId }
+            ]
+          },
+          data: { billingStatus: "BILLED", invoiceId }
+        })
+      : { count: 0 };
+    const updatedExpenses = expenseItemIds.length
+      ? await tx.expenseItem.updateMany({
+          where: {
+            ownerId,
+            id: { in: expenseItemIds },
+            OR: [
+              { billingStatus: "UNBILLED", invoiceId: null },
+              { billingStatus: "BILLED", invoiceId }
+            ]
+          },
+          data: { billingStatus: "BILLED", invoiceId }
+        })
+      : { count: 0 };
+
+    if (updatedEntries.count !== timeEntryIds.length || updatedExpenses.count !== expenseItemIds.length) {
+      throw new Error("One or more invoice items have already been billed elsewhere.");
+    }
+
+    const updatedInvoice = await tx.invoice.updateMany({
+      where: { id: invoiceId, ownerId, status: "DRAFT" },
       data: {
         status,
         dueDate: invoice.dueDate ?? addDays(invoiceDate, paymentTermsDays),
@@ -1490,8 +1509,11 @@ async function finaliseInvoice(ownerId: string, invoiceId: string, status: "SENT
         clientAbnSnapshot: client.abn,
         paymentDate: status === "PAID" ? new Date() : invoice.paymentDate
       }
-    })
-  ]);
+    });
+    if (updatedInvoice.count !== 1) {
+      throw new Error("Invoice status changed. Refresh the page and try again.");
+    }
+  });
 
 }
 
@@ -1800,25 +1822,100 @@ export async function sendInvoiceEmailAction(formData: FormData) {
   const emails = parseEmailList(text(formData, "to"), "To", false);
   const subject = text(formData, "subject");
   const message = text(formData, "message");
+  const confirmedIncomplete = text(formData, "confirmIncomplete") === "on";
 
   if (formData.has("subject") && !subject) throw new Error("Email subject is required.");
   if (formData.has("message") && !message) throw new Error("Email message is required.");
+
+  const invoice = await prisma.invoice.findFirst({
+    where: { id: invoiceId, ownerId },
+    select: { status: true }
+  });
+  if (!invoice) throw new Error("Invoice not found.");
+
+  if (invoice.status === "DRAFT" && !confirmedIncomplete) {
+    const profile = await prisma.businessProfile.findUnique({ where: { ownerId } });
+    const profileIssues = criticalInvoiceProfileIssues(profile);
+    if (profileIssues.length) {
+      throw new Error(`Invoice is missing important business details: ${profileIssues.join(" ")}`);
+    }
+  }
 
   const result = await sendPreparedInvoiceEmailWithPdf(ownerId, invoiceId, {
     to: emails.length ? emails.join(", ") : undefined,
     subject: subject || undefined,
     body: message || undefined
   });
+  const finaliseResult = await finaliseDeliveredDraft(ownerId, invoiceId, invoice.status, confirmedIncomplete);
+
   revalidatePath(`/invoices/${invoiceId}`);
   revalidatePath("/invoices");
-  return result;
+  revalidatePath("/");
+  revalidateDataTags(CACHE_TAGS.dashboard, CACHE_TAGS.projects, CACHE_TAGS.invoices, CACHE_TAGS.hoursExport, CACHE_TAGS.insights);
+
+  return {
+    ...result,
+    warning: finaliseResult.warning,
+    message: finaliseResult.warning
+      ? `${result.message} ${finaliseResult.warning}`
+      : invoice.status === "DRAFT"
+        ? `${result.message} The invoice is now marked sent and its work is recorded as billed.`
+        : result.message
+  };
 }
 
 export async function sendInvoiceSmsAction(formData: FormData) {
   const ownerId = await requireUserId();
   const invoiceId = text(formData, "invoiceId");
+  const confirmedIncomplete = text(formData, "confirmIncomplete") === "on";
+  const invoice = await prisma.invoice.findFirst({
+    where: { id: invoiceId, ownerId },
+    select: { status: true }
+  });
+  if (!invoice) throw new Error("Invoice not found.");
+
+  if (invoice.status === "DRAFT" && !confirmedIncomplete) {
+    const profile = await prisma.businessProfile.findUnique({ where: { ownerId } });
+    const profileIssues = criticalInvoiceProfileIssues(profile);
+    if (profileIssues.length) {
+      throw new Error(`Invoice is missing important business details: ${profileIssues.join(" ")}`);
+    }
+  }
+
   const result = await sendInvoiceMmsWithPdf(ownerId, invoiceId);
+  const finaliseResult = await finaliseDeliveredDraft(ownerId, invoiceId, invoice.status, confirmedIncomplete);
+
   revalidatePath(`/invoices/${invoiceId}`);
   revalidatePath("/invoices");
-  return result;
+  revalidatePath("/");
+  revalidateDataTags(CACHE_TAGS.dashboard, CACHE_TAGS.projects, CACHE_TAGS.invoices, CACHE_TAGS.hoursExport, CACHE_TAGS.insights);
+
+  return {
+    ...result,
+    warning: finaliseResult.warning,
+    message: finaliseResult.warning
+      ? `${result.message} ${finaliseResult.warning}`
+      : invoice.status === "DRAFT"
+        ? `${result.message} The invoice is now marked sent and its work is recorded as billed.`
+        : result.message
+  };
+}
+
+async function finaliseDeliveredDraft(
+  ownerId: string,
+  invoiceId: string,
+  statusBeforeDelivery: string,
+  confirmedIncomplete: boolean
+) {
+  if (statusBeforeDelivery !== "DRAFT") return { warning: "" };
+
+  try {
+    await finaliseInvoice(ownerId, invoiceId, "SENT", confirmedIncomplete);
+    return { warning: "" };
+  } catch (error) {
+    const detail = error instanceof Error ? error.message : "The invoice status could not be updated.";
+    return {
+      warning: `The delivery provider accepted this invoice, but its status could not be updated: ${detail} Refresh the invoice before trying anything else; do not resend unless the client confirms they did not receive it.`
+    };
+  }
 }

@@ -70,7 +70,7 @@ export default async function MorePage() {
                 <Icon size={21} aria-hidden="true" />
               </span>
               <span>
-                <span className="block text-xl font-black tracking-tight text-ink">{item.label}</span>
+                <span className="block text-xl font-black text-ink">{item.label}</span>
                 <span className="mt-1 block text-sm font-medium leading-6 text-moss">{item.body}</span>
               </span>
             </Link>

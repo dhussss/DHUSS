@@ -133,7 +133,7 @@ export function OnboardingWizard({ initialValues }: { initialValues: InitialValu
           {step === "structure" ? (
             <div>
               <p className="section-title">Your setup</p>
-              <h1 className="mt-2 text-3xl font-black tracking-tight sm:text-4xl">How do you work?</h1>
+              <h1 className="mt-2 text-3xl font-black sm:text-4xl">How do you work?</h1>
               <p className="mt-2 text-sm font-medium leading-6 text-moss">This keeps your workspace relevant and decides whether team setup is included.</p>
               <div className="mt-6 grid gap-3 sm:grid-cols-2">
                 <ChoiceCard
@@ -157,7 +157,7 @@ export function OnboardingWizard({ initialValues }: { initialValues: InitialValu
           {step === "details" ? (
             <div>
               <p className="section-title">Invoice basics</p>
-              <h1 className="mt-2 text-3xl font-black tracking-tight">Set up your business</h1>
+              <h1 className="mt-2 text-3xl font-black">Set up your business</h1>
               <p className="mt-2 text-sm font-medium leading-6 text-moss">Only the essentials for now. Payment details, logo and invoice wording can be added later.</p>
               <div className="mt-6 grid gap-4 sm:grid-cols-2">
                 <label className="sm:col-span-2">Business or trading name<input value={tradingName} onChange={(event) => setTradingName(event.target.value)} autoComplete="organization" /></label>
@@ -176,7 +176,7 @@ export function OnboardingWizard({ initialValues }: { initialValues: InitialValu
           {step === "workflow" ? (
             <div>
               <p className="section-title">The everyday flow</p>
-              <h1 className="mt-2 text-3xl font-black tracking-tight">From job to paid</h1>
+              <h1 className="mt-2 text-3xl font-black">From job to paid</h1>
               <p className="mt-2 text-sm font-medium leading-6 text-moss">Tap each stage to see how the pieces stay connected.</p>
               <div className="mt-6 grid gap-4 md:grid-cols-[0.9fr_1.1fr]">
                 <div className="grid gap-2">
@@ -203,7 +203,7 @@ export function OnboardingWizard({ initialValues }: { initialValues: InitialValu
           {step === "team" ? (
             <div>
               <p className="section-title">Team workflow</p>
-              <h1 className="mt-2 text-3xl font-black tracking-tight">Keep their hours traceable</h1>
+              <h1 className="mt-2 text-3xl font-black">Keep their hours traceable</h1>
               <p className="mt-2 text-sm font-medium leading-6 text-moss">Your team uses the same simple logging flow while you retain control of jobs, charge rates and payments.</p>
               <div className="mt-6 grid gap-3 sm:grid-cols-3">
                 <GuideCard number="1" title="Invite" body="Create a linking code in Team. They sign up with their own login and join your workspace." />
@@ -221,7 +221,7 @@ export function OnboardingWizard({ initialValues }: { initialValues: InitialValu
             <div className="text-center">
               <span className="mx-auto grid size-14 place-items-center rounded-2xl bg-mint text-white shadow-soft"><Check size={28} aria-hidden="true" /></span>
               <p className="section-title mt-5">Guided first job</p>
-              <h1 className="mt-2 text-3xl font-black tracking-tight sm:text-4xl">Now do it for real</h1>
+              <h1 className="mt-2 text-3xl font-black sm:text-4xl">Now do it for real</h1>
               <p className="mx-auto mt-3 max-w-xl text-sm font-medium leading-6 text-moss">We will guide you through a real client, job, time entry and invoice draft. Setup only finishes after you have completed each step yourself.</p>
               <div className="mx-auto mt-6 grid max-w-lg gap-2 text-left">
                 <ReadyLine icon={UserRound} text="Add your first client" />

@@ -102,7 +102,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
           <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-center">
             <div>
               <p className="text-sm font-semibold text-white/60">{todayLabel}</p>
-              <h1 className="mt-2 text-3xl font-black tracking-tight text-white sm:text-4xl">Good morning, {displayName}</h1>
+              <h1 className="mt-2 text-3xl font-black text-white sm:text-4xl">Good morning, {displayName}</h1>
             </div>
             <div className="grid gap-2 sm:grid-cols-3 lg:min-w-[31rem]">
               <div className="[&_button]:w-full [&_button]:rounded-xl [&_button]:border-white/15 [&_button]:bg-white [&_button]:text-ink [&_button]:shadow-none [&_button:hover]:bg-paper">
@@ -158,7 +158,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
             </div>
           </div>
           <div className="text-right">
-            <p className="text-3xl font-black tabular-nums tracking-tight text-ink">{formatMoney(setAside.combinedWeeklyCents)}</p>
+            <p className="text-3xl font-black tabular-nums text-ink">{formatMoney(setAside.combinedWeeklyCents)}</p>
             <span className="mt-1 inline-flex items-center gap-1 text-sm font-bold text-mint">
               Full breakdown <ArrowRight size={15} aria-hidden="true" />
             </span>
@@ -196,7 +196,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
           <div className="flex items-start justify-between gap-4">
             <div>
               <p className="section-title">Getting started</p>
-              <h2 className="mt-1 text-xl font-black tracking-tight">You are {setupProgress}% ready to send your first invoice</h2>
+              <h2 className="mt-1 text-xl font-black">You are {setupProgress}% ready to send your first invoice</h2>
             </div>
             <span className="text-2xl font-black text-mint">{setupStepsComplete}/3</span>
           </div>
@@ -223,7 +223,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
       <section className="mt-5 overflow-hidden rounded-2xl border border-line bg-white shadow-soft">
         <div className="border-b border-line bg-white p-5 sm:p-6">
           <div>
-            <h2 className="text-2xl font-black tracking-tight text-ink">This week</h2>
+            <h2 className="text-2xl font-black text-ink">This week</h2>
             <p className="mt-1 text-sm font-medium text-moss">
               {formatDateAU(dashboardData.currentWeekStart)} - {formatDateAU(dashboardData.currentWeekEnd)}
             </p>
@@ -249,7 +249,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
             <Link key={project.id} href={`/projects/${project.id}`} className="group block rounded-[10px] border border-line bg-white p-4 transition hover:border-mint/60 hover:bg-paper/30">
               <div className="flex items-start justify-between gap-3">
                 <div>
-                  <p className="text-lg font-black tracking-tight text-ink">{project.title}</p>
+                  <p className="text-lg font-black text-ink">{project.title}</p>
                   <p className="mt-1 text-sm font-bold text-moss">{project.client.businessName}</p>
                 </div>
                 <ArrowRight size={18} className="mt-1 text-moss transition group-hover:text-mint" aria-hidden="true" />
@@ -329,7 +329,7 @@ function HeroKpi({
           <Icon size={19} aria-hidden="true" />
         </span>
       </div>
-      <p className="mt-5 text-3xl font-black tabular-nums tracking-tight text-white sm:text-4xl">{value}</p>
+      <p className="mt-5 text-3xl font-black tabular-nums text-white sm:text-4xl">{value}</p>
       <p className="mt-2 text-sm font-medium leading-5 text-white/58">{note}</p>
       {href ? (
         <span className="mt-4 inline-flex items-center gap-1 text-sm font-bold text-white transition group-hover:gap-2">
@@ -377,7 +377,7 @@ function DashboardWidget({
       <div className="flex items-center justify-between gap-3 border-b border-line bg-white p-4">
         <div className="flex items-center gap-3">
           <span className={`h-8 w-1 rounded-full ${accents[accent]}`} aria-hidden="true" />
-          <h2 className="text-xl font-black tracking-tight">{title}</h2>
+          <h2 className="text-xl font-black">{title}</h2>
         </div>
         <Link className="inline-flex items-center gap-1 text-sm font-bold text-mint" href={actionHref}>
           {actionLabel} <ArrowRight size={16} aria-hidden="true" />

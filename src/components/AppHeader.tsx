@@ -24,7 +24,7 @@ export function AppHeader() {
           <span className="grid size-9 shrink-0 place-items-center rounded-xl bg-ink text-white shadow-[0_1px_1px_rgba(21,24,29,0.2),0_6px_16px_-6px_rgba(21,24,29,0.5)]">
             <BriefcaseBusiness size={18} strokeWidth={2.4} aria-hidden="true" />
           </span>
-          <span className="truncate text-[0.95rem] font-black tracking-tight">Trade Invoice Tracker</span>
+          <span className="truncate text-[0.95rem] font-black">Trade Invoice Tracker</span>
         </Link>
 
         <nav className="hidden items-center gap-0.5 rounded-xl border border-line/70 bg-white/60 p-1 md:flex" aria-label="Main navigation">
