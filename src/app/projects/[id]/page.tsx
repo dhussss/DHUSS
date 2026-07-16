@@ -22,11 +22,79 @@ export const dynamic = "force-dynamic";
 export default async function ProjectDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const ownerId = await requireUserId();
-  const projectOwner = await prisma.project.findUnique({ where: { id }, select: { ownerId: true } });
-  if (!projectOwner) notFound();
-
-  if (projectOwner.ownerId !== ownerId) {
-    const assignment = await prisma.projectAssignment.findFirst({
+  const today = todayInPerth();
+  const monthStart = new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), 1));
+  const monthEnd = new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth() + 1, 0));
+  const calendarStart = startOfWeekMonday(monthStart);
+  const calendarEnd = addDays(startOfWeekMonday(monthEnd), 6);
+  const [project, assignment, activeProjects, monthlyEntries, monthlyDraftLines, dayOffLogs] = await Promise.all([
+    prisma.project.findFirst({
+      where: { id, ownerId },
+      select: {
+        id: true,
+        title: true,
+        notes: true,
+        status: true,
+        currentHourlyRateCents: true,
+        client: { select: { businessName: true } },
+        timeEntries: {
+          select: {
+            id: true,
+            date: true,
+            startTime: true,
+            endTime: true,
+            durationMinutes: true,
+            notes: true,
+            billingStatus: true,
+            hourlyRateCentsSnapshot: true,
+            teamMemberId: true,
+            workerDisplayNameSnapshot: true,
+            approvalStatus: true,
+            paymentStatus: true
+          },
+          orderBy: [{ date: "desc" }, { createdAt: "desc" }]
+        },
+        expenseItems: {
+          select: {
+            id: true,
+            description: true,
+            datePurchased: true,
+            quantity: true,
+            unitCostCents: true,
+            totalCostCents: true,
+            notes: true,
+            billingStatus: true
+          },
+          orderBy: [{ datePurchased: "desc" }, { createdAt: "desc" }]
+        },
+        workExpenses: {
+          where: { archivedAt: null },
+          select: {
+            id: true,
+            description: true,
+            date: true,
+            category: true,
+            amountCents: true,
+            gstIncluded: true,
+            gstAmountCents: true,
+            notes: true
+          },
+          orderBy: [{ date: "desc" }, { createdAt: "desc" }]
+        },
+        invoices: {
+          select: {
+            id: true,
+            invoiceNumber: true,
+            status: true,
+            dateRangeStart: true,
+            dateRangeEnd: true,
+            grandTotalCents: true
+          },
+          orderBy: { invoiceDate: "desc" }
+        }
+      }
+    }),
+    prisma.projectAssignment.findFirst({
       where: { projectId: id, active: true, teamMember: { userId: ownerId, status: "ACTIVE" }, project: { status: "ACTIVE" } },
       select: {
         id: true,
@@ -38,35 +106,25 @@ export default async function ProjectDetailPage({ params }: { params: Promise<{ 
             id: true,
             timeEntries: {
               where: { projectId: id, createdByUserId: ownerId },
+              select: {
+                id: true,
+                date: true,
+                durationMinutes: true,
+                notes: true,
+                billingStatus: true,
+                paymentStatus: true,
+                approvalStatus: true,
+                payRateCentsSnapshot: true
+              },
               orderBy: [{ date: "desc" }, { createdAt: "desc" }]
             }
           }
         }
       }
-    });
-    if (!assignment) notFound();
-    const employer = await prisma.businessProfile.findUnique({ where: { ownerId: assignment.ownerId }, select: { tradingName: true } });
-    return <AssignedProjectView assignment={assignment} employerName={employer?.tradingName || "Employer"} />;
-  }
-  const today = todayInPerth();
-  const monthStart = new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), 1));
-  const monthEnd = new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth() + 1, 0));
-  const calendarStart = startOfWeekMonday(monthStart);
-  const calendarEnd = addDays(startOfWeekMonday(monthEnd), 6);
-  const [project, activeProjects, monthlyEntries, dayOffLogs] = await Promise.all([
-    prisma.project.findFirst({
-      where: { id, ownerId },
-      include: {
-        client: true,
-        timeEntries: { orderBy: [{ date: "desc" }, { createdAt: "desc" }] },
-        expenseItems: { orderBy: [{ datePurchased: "desc" }, { createdAt: "desc" }] },
-        workExpenses: { where: { archivedAt: null }, orderBy: [{ date: "desc" }, { createdAt: "desc" }] },
-        invoices: { orderBy: { invoiceDate: "desc" } }
-      }
     }),
     prisma.project.findMany({
       where: { status: "ACTIVE", ownerId },
-      include: { client: true },
+      select: { id: true, title: true, client: { select: { businessName: true } } },
       orderBy: { title: "asc" }
     }),
     prisma.timeEntry.findMany({
@@ -76,7 +134,23 @@ export default async function ProjectDetailPage({ params }: { params: Promise<{ 
         OR: [{ teamMemberId: null }, { approvalStatus: "APPROVED" }],
         date: { gte: calendarStart, lte: calendarEnd }
       },
-      select: { date: true, durationMinutes: true }
+      select: {
+        id: true,
+        date: true,
+        durationMinutes: true,
+        billingStatus: true,
+        invoice: { select: { status: true } }
+      }
+    }),
+    prisma.invoiceLineItem.findMany({
+      where: {
+        ownerId,
+        type: "LABOUR",
+        timeEntryId: { not: null },
+        invoice: { projectId: id, status: "DRAFT" },
+        timeEntry: { date: { gte: calendarStart, lte: calendarEnd } }
+      },
+      select: { timeEntryId: true }
     }),
     prisma.dayOffLog.findMany({
       where: {
@@ -88,7 +162,11 @@ export default async function ProjectDetailPage({ params }: { params: Promise<{ 
     })
   ]);
 
-  if (!project) notFound();
+  if (!project) {
+    if (!assignment) notFound();
+    const employer = await prisma.businessProfile.findUnique({ where: { ownerId: assignment.ownerId }, select: { tradingName: true } });
+    return <AssignedProjectView assignment={assignment} employerName={employer?.tradingName || "Employer"} />;
+  }
 
   const unbilledDates = [
     ...project.timeEntries.filter((entry) => entry.billingStatus === "UNBILLED").map((entry) => entry.date),
@@ -125,7 +203,12 @@ export default async function ProjectDetailPage({ params }: { params: Promise<{ 
   const hasUnbilledWork = unbilledTimeEntries.length > 0 || unbilledExpenseItems.length > 0;
   const activeInvoiceCount = project.invoices.filter((invoice) => invoice.status !== "VOID").length;
   const monthLabel = new Intl.DateTimeFormat("en-AU", { month: "long", year: "numeric", timeZone: "UTC" }).format(today);
-  const monthlyActivityCells = buildMonthlyActivityCells(monthlyEntries, dayOffLogs, today);
+  const monthlyActivityCells = buildMonthlyActivityCells(
+    monthlyEntries,
+    new Set(monthlyDraftLines.flatMap((line) => line.timeEntryId ? [line.timeEntryId] : [])),
+    dayOffLogs,
+    today
+  );
 
   return (
     <main className="page-shell">
@@ -437,7 +520,23 @@ type AssignedProject = Prisma.ProjectAssignmentGetPayload<{
     ownerId: true;
     payRateCents: true;
     project: { select: { id: true; title: true; notes: true; client: { select: { businessName: true } } } };
-    teamMember: { select: { id: true; timeEntries: true } };
+    teamMember: {
+      select: {
+        id: true;
+        timeEntries: {
+          select: {
+            id: true;
+            date: true;
+            durationMinutes: true;
+            notes: true;
+            billingStatus: true;
+            paymentStatus: true;
+            approvalStatus: true;
+            payRateCentsSnapshot: true;
+          };
+        };
+      };
+    };
   };
 }>;
 
@@ -533,29 +632,70 @@ type MonthlyActivityCell = {
   isDayOff: boolean;
   totalMinutes: number;
   entryCount: number;
+  billingMinutes: Record<BillingState, number>;
 };
 
-function buildMonthlyActivityCells(entries: Array<{ date: Date; durationMinutes: number }>, dayOffLogs: Array<{ date: Date }>, anchor: Date): MonthlyActivityCell[] {
+type BillingState = "UNBILLED" | "INVOICED" | "PENDING" | "PAID";
+
+type MonthlyBillingEntry = {
+  id: string;
+  date: Date;
+  durationMinutes: number;
+  billingStatus: "UNBILLED" | "BILLED";
+  invoice: { status: "DRAFT" | "SENT" | "PAID" | "VOID" } | null;
+};
+
+const BILLING_STATES: Array<{
+  key: BillingState;
+  label: string;
+  cellLabel: string;
+  dotClass: string;
+}> = [
+  { key: "UNBILLED", label: "Not invoiced", cellLabel: "Not invoiced", dotClass: "bg-yolk" },
+  { key: "INVOICED", label: "Invoiced / draft", cellLabel: "Invoiced", dotClass: "bg-sky-600" },
+  { key: "PENDING", label: "Awaiting payment", cellLabel: "Pending", dotClass: "bg-violet-600" },
+  { key: "PAID", label: "Paid", cellLabel: "Paid", dotClass: "bg-mint" }
+];
+
+function emptyBillingMinutes(): Record<BillingState, number> {
+  return { UNBILLED: 0, INVOICED: 0, PENDING: 0, PAID: 0 };
+}
+
+function billingStateForEntry(entry: MonthlyBillingEntry, draftEntryIds: Set<string>): BillingState {
+  if (draftEntryIds.has(entry.id)) return "INVOICED";
+  if (entry.billingStatus === "UNBILLED" || entry.invoice?.status === "VOID") return "UNBILLED";
+  if (entry.invoice?.status === "PAID") return "PAID";
+  if (entry.invoice?.status === "SENT") return "PENDING";
+  return "INVOICED";
+}
+
+function buildMonthlyActivityCells(
+  entries: MonthlyBillingEntry[],
+  draftEntryIds: Set<string>,
+  dayOffLogs: Array<{ date: Date }>,
+  anchor: Date
+): MonthlyActivityCell[] {
   const monthStart = new Date(Date.UTC(anchor.getUTCFullYear(), anchor.getUTCMonth(), 1));
   const monthEnd = new Date(Date.UTC(anchor.getUTCFullYear(), anchor.getUTCMonth() + 1, 0));
   const calendarStart = startOfWeekMonday(monthStart);
   const calendarEnd = addDays(startOfWeekMonday(monthEnd), 6);
   const todayKey = dateInputValue(anchor);
-  const activity = new Map<string, { totalMinutes: number; entryCount: number }>();
+  const activity = new Map<string, { totalMinutes: number; entryCount: number; billingMinutes: Record<BillingState, number> }>();
   const dayOffDates = new Set(dayOffLogs.map((log) => dateInputValue(log.date)));
 
   for (const entry of entries) {
     const key = dateInputValue(entry.date);
-    const current = activity.get(key) ?? { totalMinutes: 0, entryCount: 0 };
+    const current = activity.get(key) ?? { totalMinutes: 0, entryCount: 0, billingMinutes: emptyBillingMinutes() };
     current.totalMinutes += entry.durationMinutes;
     current.entryCount += 1;
+    current.billingMinutes[billingStateForEntry(entry, draftEntryIds)] += entry.durationMinutes;
     activity.set(key, current);
   }
 
   const cells: MonthlyActivityCell[] = [];
   for (let day = calendarStart; day <= calendarEnd; day = addDays(day, 1)) {
     const key = dateInputValue(day);
-    const summary = activity.get(key) ?? { totalMinutes: 0, entryCount: 0 };
+    const summary = activity.get(key) ?? { totalMinutes: 0, entryCount: 0, billingMinutes: emptyBillingMinutes() };
     cells.push({
       date: day,
       key,
@@ -564,7 +704,8 @@ function buildMonthlyActivityCells(entries: Array<{ date: Date; durationMinutes:
       isToday: key === todayKey,
       isDayOff: dayOffDates.has(key),
       totalMinutes: summary.totalMinutes,
-      entryCount: summary.entryCount
+      entryCount: summary.entryCount,
+      billingMinutes: summary.billingMinutes
     });
   }
 
@@ -577,60 +718,81 @@ function MonthlyActivityCalendar({ monthLabel, cells }: { monthLabel: string; ce
 
   return (
     <section className="mt-5 overflow-hidden rounded-lg border border-line bg-white shadow-soft">
-      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-line bg-white p-4 sm:p-5">
+      <div className="flex flex-wrap items-center justify-between gap-4 border-b border-line bg-white p-4 sm:p-5">
         <div className="flex items-center gap-3">
           <span className="icon-tile">
             <CalendarDays size={20} aria-hidden="true" />
           </span>
           <div>
-            <p className="section-title">Monthly activity</p>
+            <p className="section-title">Monthly billing</p>
             <h2 className="text-xl font-black tracking-tight">{monthLabel}</h2>
           </div>
         </div>
-        <p className="text-sm font-bold text-moss">{hasActivity ? "Theme dots show work. Red dots show days off." : "No logged work this month yet"}</p>
+        {hasActivity ? (
+          <div className="flex flex-wrap gap-x-4 gap-y-2" aria-label="Billing status legend">
+            {BILLING_STATES.map((state) => (
+              <span key={state.key} className="inline-flex items-center gap-1.5 text-xs font-bold text-moss">
+                <span className={`size-2.5 rounded-full ${state.dotClass}`} aria-hidden="true" />
+                {state.label}
+              </span>
+            ))}
+            <span className="inline-flex items-center gap-1.5 text-xs font-bold text-moss">
+              <span className="size-2.5 rounded-full bg-gum" aria-hidden="true" />
+              Day off
+            </span>
+          </div>
+        ) : <p className="text-sm font-bold text-moss">No logged work this month yet</p>}
       </div>
-      <div className="p-3 sm:p-5">
-        <div className="grid grid-cols-7 gap-1.5 text-center text-xs font-black uppercase text-moss sm:gap-2">
-          {weekDays.map((day) => (
-            <div key={day} className="px-1 py-2">
-              {day}
-            </div>
-          ))}
-        </div>
-        <div className="grid grid-cols-7 gap-1.5 sm:gap-2">
-          {cells.map((cell) => {
-            const title = [
-              formatDateAU(cell.date),
-              cell.entryCount ? `${formatHours(cell.totalMinutes)}h across ${cell.entryCount} entr${cell.entryCount === 1 ? "y" : "ies"}` : "no work logged",
-              cell.isDayOff ? "day off logged" : ""
-            ].filter(Boolean).join(", ");
-            const hasWork = cell.totalMinutes > 0;
+      <div className="overflow-x-auto p-3 sm:p-5">
+        <div className="min-w-[760px]">
+          <div className="grid grid-cols-7 gap-2 text-center text-xs font-black uppercase text-moss">
+            {weekDays.map((day) => <div key={day} className="px-1 py-2">{day}</div>)}
+          </div>
+          <div className="grid grid-cols-7 gap-2">
+            {cells.map((cell) => {
+              const activeStates = BILLING_STATES.filter((state) => cell.billingMinutes[state.key] > 0);
+              const title = [
+                formatDateAU(cell.date),
+                cell.entryCount ? `${formatHours(cell.totalMinutes)}h across ${cell.entryCount} entr${cell.entryCount === 1 ? "y" : "ies"}` : "no work logged",
+                ...activeStates.map((state) => `${state.label}: ${formatHours(cell.billingMinutes[state.key])}h`),
+                cell.isDayOff ? "day off logged" : ""
+              ].filter(Boolean).join(", ");
 
-            return (
-              <div
-                key={cell.key}
-                title={title}
-                className={`min-h-16 rounded-lg border p-2 text-left transition sm:min-h-20 ${
-                  cell.isToday
-                    ? "border-mint bg-mint/10 ring-2 ring-mint/15"
-                    : cell.inCurrentMonth
-                      ? "border-line bg-paper/50"
-                      : "border-line/70 bg-white/60 opacity-55"
-                }`}
-              >
-                <div className="flex items-center justify-between gap-1">
-                  <span className="text-sm font-black text-ink">{cell.dayNumber}</span>
-                  {cell.isToday ? <span className="rounded-full bg-mint px-1.5 py-0.5 text-[0.58rem] font-black uppercase leading-none text-white">Today</span> : null}
-                </div>
-                {hasWork || cell.isDayOff ? (
-                  <div className="mt-3 grid gap-1">
-                    <span className={`size-2.5 rounded-full ${hasWork ? "bg-mint" : "bg-gum"}`} aria-hidden="true" />
-                    {hasWork ? <span className="text-xs font-black text-ink">{formatHours(cell.totalMinutes)}h</span> : null}
+              return (
+                <div
+                  key={cell.key}
+                  title={title}
+                  className={`min-h-28 rounded-lg border p-2.5 text-left transition ${
+                    cell.isToday
+                      ? "border-mint bg-mint/10 ring-2 ring-mint/15"
+                      : cell.inCurrentMonth
+                        ? "border-line bg-paper/50"
+                        : "border-line/70 bg-white/60 opacity-55"
+                  }`}
+                >
+                  <div className="flex min-h-5 items-center justify-between gap-1">
+                    <span className="text-sm font-black text-ink">{cell.dayNumber}</span>
+                    {cell.isToday ? <span className="rounded-full bg-mint px-1.5 py-1 text-[0.58rem] font-black uppercase leading-none text-white">Today</span> : null}
                   </div>
-                ) : null}
-              </div>
-            );
-          })}
+                  {cell.totalMinutes > 0 ? <p className="mt-2 text-base font-black text-ink">{formatHours(cell.totalMinutes)}h</p> : null}
+                  {activeStates.length ? (
+                    <div className="mt-2 grid gap-1.5">
+                      {activeStates.map((state) => (
+                        <div key={state.key} className="flex items-start gap-1.5 text-[0.68rem] font-bold leading-tight text-moss">
+                          <span className={`mt-0.5 size-2 shrink-0 rounded-full ${state.dotClass}`} aria-hidden="true" />
+                          <span>{formatHours(cell.billingMinutes[state.key])}h {state.cellLabel}</span>
+                        </div>
+                      ))}
+                    </div>
+                  ) : cell.isDayOff ? (
+                    <div className="mt-3 flex items-center gap-1.5 text-xs font-bold text-gum"><span className="size-2 rounded-full bg-gum" aria-hidden="true" />Day off</div>
+                  ) : (
+                    <p className="mt-3 text-xs font-semibold text-moss/70">No work</p>
+                  )}
+                </div>
+              );
+            })}
+          </div>
         </div>
       </div>
     </section>

@@ -68,6 +68,10 @@ function revalidateAppData() {
   }
 }
 
+function revalidateDataTags(...tags: Array<(typeof CACHE_TAGS)[keyof typeof CACHE_TAGS]>) {
+  for (const tag of tags) revalidateTag(tag);
+}
+
 export async function logoutAction() {
   const supabase = await createClient();
   await supabase.auth.signOut();
@@ -361,7 +365,7 @@ export async function createTimeEntryAction(formData: FormData) {
 
     revalidatePath("/");
     revalidatePath("/insights");
-    revalidateAppData();
+    revalidateDataTags(CACHE_TAGS.dashboard, CACHE_TAGS.insights);
     redirect(returnTo(formData));
   }
 
@@ -409,7 +413,7 @@ export async function createTimeEntryAction(formData: FormData) {
 
   revalidatePath("/");
   revalidatePath("/projects");
-  revalidateAppData();
+  revalidateDataTags(CACHE_TAGS.dashboard, CACHE_TAGS.projects, CACHE_TAGS.hoursExport, CACHE_TAGS.insights);
   redirect(returnTo(formData));
 }
 
@@ -474,7 +478,7 @@ export async function updateTimeEntryAction(formData: FormData) {
   revalidatePath("/projects");
   revalidatePath(`/projects/${projectId}`);
   revalidatePath("/hours-export");
-  revalidateAppData();
+  revalidateDataTags(CACHE_TAGS.dashboard, CACHE_TAGS.projects, CACHE_TAGS.hoursExport, CACHE_TAGS.insights);
   redirect(`/projects/${projectId}`);
 }
 
@@ -499,7 +503,7 @@ export async function deleteTimeEntryAction(formData: FormData) {
   revalidatePath("/projects");
   revalidatePath(`/projects/${projectId}`);
   revalidatePath("/hours-export");
-  revalidateAppData();
+  revalidateDataTags(CACHE_TAGS.dashboard, CACHE_TAGS.projects, CACHE_TAGS.hoursExport, CACHE_TAGS.insights);
   redirect(returnTo(formData));
 }
 
@@ -536,7 +540,7 @@ export async function createExpenseItemAction(formData: FormData) {
 
   revalidatePath("/");
   revalidatePath("/projects");
-  revalidateAppData();
+  revalidateDataTags(CACHE_TAGS.dashboard, CACHE_TAGS.projects);
   redirect(returnTo(formData));
 }
 
@@ -584,7 +588,7 @@ export async function updateExpenseItemAction(formData: FormData) {
   revalidatePath("/projects");
   revalidatePath(`/projects/${projectId}`);
   revalidatePath("/invoices");
-  revalidateAppData();
+  revalidateDataTags(CACHE_TAGS.dashboard, CACHE_TAGS.projects);
   redirect(returnTo(formData));
 }
 
@@ -608,7 +612,7 @@ export async function deleteExpenseItemAction(formData: FormData) {
   revalidatePath("/projects");
   revalidatePath(`/projects/${projectId}`);
   revalidatePath("/invoices");
-  revalidateAppData();
+  revalidateDataTags(CACHE_TAGS.dashboard, CACHE_TAGS.projects);
   redirect(returnTo(formData));
 }
 
@@ -678,7 +682,7 @@ export async function createWorkExpenseAction(formData: FormData) {
   revalidatePath("/expenses");
   revalidatePath("/insights");
   if (expense.projectId) revalidatePath(`/projects/${expense.projectId}`);
-  revalidateAppData();
+  revalidateDataTags(CACHE_TAGS.expenses, CACHE_TAGS.insights);
   redirect(returnTo(formData));
 }
 
@@ -711,7 +715,7 @@ export async function updateWorkExpenseAction(formData: FormData) {
   revalidatePath("/insights");
   if (existing.projectId) revalidatePath(`/projects/${existing.projectId}`);
   if (expense.projectId) revalidatePath(`/projects/${expense.projectId}`);
-  revalidateAppData();
+  revalidateDataTags(CACHE_TAGS.expenses, CACHE_TAGS.insights);
   redirect(returnTo(formData));
 }
 
@@ -727,7 +731,7 @@ export async function archiveWorkExpenseAction(formData: FormData) {
   revalidatePath("/expenses");
   revalidatePath("/insights");
   if (expense.projectId) revalidatePath(`/projects/${expense.projectId}`);
-  revalidateAppData();
+  revalidateDataTags(CACHE_TAGS.expenses, CACHE_TAGS.insights);
   redirect(returnTo(formData));
 }
 
@@ -742,7 +746,7 @@ export async function restoreWorkExpenseAction(formData: FormData) {
   revalidatePath("/expenses");
   revalidatePath("/insights");
   if (expense.projectId) revalidatePath(`/projects/${expense.projectId}`);
-  revalidateAppData();
+  revalidateDataTags(CACHE_TAGS.expenses, CACHE_TAGS.insights);
   redirect(returnTo(formData));
 }
 
@@ -762,7 +766,7 @@ export async function deleteWorkExpenseAction(formData: FormData) {
   revalidatePath("/expenses");
   revalidatePath("/insights");
   if (expense.projectId) revalidatePath(`/projects/${expense.projectId}`);
-  revalidateAppData();
+  revalidateDataTags(CACHE_TAGS.expenses, CACHE_TAGS.insights);
   redirect(returnTo(formData));
 }
 
@@ -771,6 +775,7 @@ export async function createProjectAction(formData: FormData) {
   const title = text(formData, "title");
   const rateCents = dollarsToCents(formData.get("hourlyRate"));
   let clientId = text(formData, "clientId");
+  let createdClient = false;
   const notes = text(formData, "notes") || null;
 
   if (!title) throw new Error("Project name is required.");
@@ -793,6 +798,7 @@ export async function createProjectAction(formData: FormData) {
       }
     });
     clientId = client.id;
+    createdClient = true;
   }
 
   if (!clientId) throw new Error("Choose or add a client.");
@@ -817,7 +823,8 @@ export async function createProjectAction(formData: FormData) {
   });
 
   revalidatePath("/projects");
-  revalidateAppData();
+  revalidateDataTags(CACHE_TAGS.dashboard, CACHE_TAGS.projects, CACHE_TAGS.hoursExport);
+  if (createdClient) revalidateDataTags(CACHE_TAGS.clients);
   redirect(`/projects/${project.id}`);
 }
 
@@ -850,7 +857,7 @@ export async function createClientAction(formData: FormData) {
   revalidatePath("/");
   revalidatePath("/clients");
   revalidatePath("/projects");
-  revalidateAppData();
+  revalidateDataTags(CACHE_TAGS.clients);
   redirect(`/clients/${client.id}?saved=client-created`);
 }
 
@@ -889,7 +896,7 @@ export async function updateClientAction(formData: FormData) {
   revalidatePath("/projects");
   revalidatePath("/invoices");
   revalidatePath("/hours-export");
-  revalidateAppData();
+  revalidateDataTags(CACHE_TAGS.dashboard, CACHE_TAGS.clients, CACHE_TAGS.projects, CACHE_TAGS.invoices, CACHE_TAGS.hoursExport, CACHE_TAGS.insights, CACHE_TAGS.expenses);
   redirect("/clients?saved=client-updated");
 }
 
@@ -936,7 +943,7 @@ export async function updateProjectAction(formData: FormData) {
   });
 
   revalidatePath("/projects");
-  revalidateAppData();
+  revalidateDataTags(CACHE_TAGS.dashboard, CACHE_TAGS.projects, CACHE_TAGS.invoices, CACHE_TAGS.hoursExport, CACHE_TAGS.insights, CACHE_TAGS.expenses);
   redirect(`/projects/${projectId}`);
 }
 
@@ -951,7 +958,7 @@ export async function archiveProjectAction(formData: FormData) {
   if (result.count === 0) throw new Error("Project not found.");
 
   revalidatePath("/projects");
-  revalidateAppData();
+  revalidateDataTags(CACHE_TAGS.dashboard, CACHE_TAGS.projects, CACHE_TAGS.hoursExport, CACHE_TAGS.insights);
   redirect("/projects");
 }
 
@@ -967,7 +974,7 @@ export async function unarchiveProjectAction(formData: FormData) {
 
   revalidatePath("/");
   revalidatePath("/projects");
-  revalidateAppData();
+  revalidateDataTags(CACHE_TAGS.dashboard, CACHE_TAGS.projects, CACHE_TAGS.hoursExport, CACHE_TAGS.insights);
   redirect(`/projects/${projectId}`);
 }
 
@@ -1278,7 +1285,7 @@ export async function createInvoiceDraftAction(formData: FormData) {
   if (!invoice) throw new Error("Could not create the invoice. Please try again.");
 
   revalidatePath("/invoices");
-  revalidateAppData();
+  revalidateDataTags(CACHE_TAGS.dashboard, CACHE_TAGS.invoices);
   redirect(`/invoices/${invoice.id}`);
 }
 
@@ -1418,7 +1425,7 @@ export async function markInvoiceSentAction(formData: FormData) {
   const invoiceId = text(formData, "invoiceId");
   await finaliseInvoice(ownerId, invoiceId, "SENT", text(formData, "confirmIncomplete") === "on");
   revalidatePath("/invoices");
-  revalidateAppData();
+  revalidateDataTags(CACHE_TAGS.dashboard, CACHE_TAGS.projects, CACHE_TAGS.invoices, CACHE_TAGS.hoursExport, CACHE_TAGS.insights);
   redirect(`/invoices/${invoiceId}`);
 }
 
@@ -1428,7 +1435,7 @@ export async function markInvoicePaidAction(formData: FormData) {
   await finaliseInvoice(ownerId, invoiceId, "PAID", text(formData, "confirmIncomplete") === "on");
   revalidatePath("/");
   revalidatePath("/invoices");
-  revalidateAppData();
+  revalidateDataTags(CACHE_TAGS.dashboard, CACHE_TAGS.projects, CACHE_TAGS.invoices, CACHE_TAGS.hoursExport, CACHE_TAGS.insights);
   redirect(`/invoices/${invoiceId}`);
 }
 
@@ -1450,7 +1457,7 @@ export async function markInvoiceUnpaidAction(formData: FormData) {
 
   revalidatePath("/");
   revalidatePath("/invoices");
-  revalidateAppData();
+  revalidateDataTags(CACHE_TAGS.dashboard, CACHE_TAGS.invoices, CACHE_TAGS.insights);
   redirect(`/invoices/${invoiceId}`);
 }
 
@@ -1492,7 +1499,7 @@ export async function markInvoiceUnsentAction(formData: FormData) {
   revalidatePath("/projects");
   revalidatePath("/invoices");
   if (invoice.publicToken) revalidatePath(`/public/invoices/${invoice.publicToken}`);
-  revalidateAppData();
+  revalidateDataTags(CACHE_TAGS.dashboard, CACHE_TAGS.projects, CACHE_TAGS.invoices, CACHE_TAGS.hoursExport, CACHE_TAGS.insights);
   redirect(`/invoices/${invoiceId}`);
 }
 
@@ -1533,7 +1540,7 @@ export async function voidInvoiceAction(formData: FormData) {
   revalidatePath("/projects");
   revalidatePath("/invoices");
   if (invoice.publicToken) revalidatePath(`/public/invoices/${invoice.publicToken}`);
-  revalidateAppData();
+  revalidateDataTags(CACHE_TAGS.dashboard, CACHE_TAGS.projects, CACHE_TAGS.invoices, CACHE_TAGS.hoursExport, CACHE_TAGS.insights);
   redirect(`/invoices/${invoiceId}`);
 }
 
@@ -1552,7 +1559,7 @@ export async function unvoidInvoiceAction(formData: FormData) {
 
   revalidatePath("/");
   revalidatePath("/invoices");
-  revalidateAppData();
+  revalidateDataTags(CACHE_TAGS.dashboard, CACHE_TAGS.invoices);
   redirect(`/invoices/${invoiceId}`);
 }
 
@@ -1590,7 +1597,7 @@ export async function deleteInvoiceAction(formData: FormData) {
   revalidatePath("/projects");
   revalidatePath("/invoices");
   if (invoice.publicToken) revalidatePath(`/public/invoices/${invoice.publicToken}`);
-  revalidateAppData();
+  revalidateDataTags(CACHE_TAGS.dashboard, CACHE_TAGS.projects, CACHE_TAGS.invoices, CACHE_TAGS.hoursExport, CACHE_TAGS.insights);
   redirect("/invoices");
 }
 
@@ -1729,7 +1736,6 @@ export async function sendInvoiceEmailAction(formData: FormData) {
   });
   revalidatePath(`/invoices/${invoiceId}`);
   revalidatePath("/invoices");
-  revalidateAppData();
   return result;
 }
 
@@ -1739,6 +1745,5 @@ export async function sendInvoiceSmsAction(formData: FormData) {
   const result = await sendInvoiceMmsWithPdf(ownerId, invoiceId);
   revalidatePath(`/invoices/${invoiceId}`);
   revalidatePath("/invoices");
-  revalidateAppData();
   return result;
 }

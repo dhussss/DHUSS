@@ -20,13 +20,61 @@ export default async function TeamMemberPage({ params, searchParams }: { params:
   const [member, projects] = await Promise.all([
     prisma.teamMember.findFirst({
       where: { id, ownerId },
-      include: {
-        assignments: { include: { project: { include: { client: true } } }, orderBy: { createdAt: "desc" } },
-        timeEntries: { include: { project: { select: { title: true } } }, orderBy: [{ date: "desc" }, { createdAt: "desc" }] },
-        wagePayments: { include: { project: { select: { title: true } }, _count: { select: { timeEntries: true } } }, orderBy: { paidAt: "desc" } }
+      select: {
+        id: true,
+        displayName: true,
+        email: true,
+        status: true,
+        defaultPayRateCents: true,
+        defaultChargeRateCents: true,
+        assignments: {
+          select: {
+            id: true,
+            active: true,
+            payRateCents: true,
+            chargeRateCents: true,
+            project: { select: { title: true, client: { select: { businessName: true } } } }
+          },
+          orderBy: { createdAt: "desc" }
+        },
+        timeEntries: {
+          select: {
+            id: true,
+            projectId: true,
+            date: true,
+            durationMinutes: true,
+            notes: true,
+            approvalStatus: true,
+            paymentStatus: true,
+            billingStatus: true,
+            payRateCentsSnapshot: true,
+            hourlyRateCentsSnapshot: true,
+            project: { select: { title: true } }
+          },
+          orderBy: [{ date: "desc" }, { createdAt: "desc" }]
+        },
+        wagePayments: {
+          select: {
+            id: true,
+            status: true,
+            minutes: true,
+            paidAt: true,
+            reference: true,
+            amountCents: true,
+            reversedAt: true,
+            reversalNote: true,
+            project: { select: { title: true } },
+            _count: { select: { timeEntries: true } }
+          },
+          orderBy: { paidAt: "desc" }
+        }
       }
     }),
-    prisma.project.findMany({ where: { ownerId, status: "ACTIVE" }, include: { client: true }, orderBy: { title: "asc" } })
+    prisma.project.findMany({
+      where: { ownerId, status: "ACTIVE" },
+      select: { id: true, title: true, client: { select: { businessName: true } } },
+      orderBy: { title: "asc" }
+    })
   ]);
   if (!member) notFound();
 
