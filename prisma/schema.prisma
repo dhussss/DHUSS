@@ -83,6 +83,11 @@ enum WagePaymentStatus {
   VOID
 }
 
+enum BusinessStructure {
+  SOLE_TRADER
+  EMPLOYER
+}
+
 model Client {
   id           String    @id @default(cuid())
   ownerId      String?
@@ -454,10 +459,10 @@ model InvoiceLineItem {
 }
 
 model BusinessProfile {
-  id                                 String   @id @default(cuid())
-  ownerId                            String   @unique
+  id                                 String            @id @default(cuid())
+  ownerId                            String            @unique
   tradingName                        String
-  invoicePrefix                      String   @default("INV-")
+  invoicePrefix                      String            @default("INV-")
   legalName                          String?
   abn                                String?
   acn                                String?
@@ -467,12 +472,12 @@ model BusinessProfile {
   address                            String?
   website                            String?
   defaultHourlyRateCents             Int?
-  gstRegistered                      Boolean  @default(false)
-  gstRate                            Decimal  @default(10)
+  gstRegistered                      Boolean           @default(false)
+  gstRate                            Decimal           @default(10)
   bankAccountName                    String?
   bsb                                String?
   accountNumber                      String?
-  paymentTermsDays                   Int      @default(14)
+  paymentTermsDays                   Int               @default(14)
   defaultInvoiceNotes                String?
   defaultInvoiceEmailMessage         String?
   defaultInvoiceEmailSubjectTemplate String?
@@ -485,25 +490,27 @@ model BusinessProfile {
   defaultEmailIntro                  String?
   defaultEmailPaymentLine            String?
   defaultEmailSignOff                String?
-  includePaymentDetailsInEmail       Boolean  @default(false)
-  includeInvoiceSummaryInEmail       Boolean  @default(false)
-  includePublicInvoiceLinkInEmail    Boolean  @default(true)
-  taxSetAsideEnabled                 Boolean  @default(true)
+  includePaymentDetailsInEmail       Boolean           @default(false)
+  includeInvoiceSummaryInEmail       Boolean           @default(false)
+  includePublicInvoiceLinkInEmail    Boolean           @default(true)
+  taxSetAsideEnabled                 Boolean           @default(true)
   customTaxPercentageOverride        Decimal?
-  includeGstInTaxEstimate            Boolean  @default(false)
-  includeSuperInSetAsidePlanning     Boolean  @default(false)
-  superPlanningEnabled               Boolean  @default(false)
-  superContributionPercentage        Decimal  @default(11.5)
+  includeGstInTaxEstimate            Boolean           @default(false)
+  includeSuperInSetAsidePlanning     Boolean           @default(false)
+  superPlanningEnabled               Boolean           @default(false)
+  superContributionPercentage        Decimal           @default(11.5)
   superFundName                      String?
   superMemberNumber                  String?
   replyToEmail                       String?
-  themeAccent                        String   @default("emerald")
+  themeAccent                        String            @default("emerald")
   themeSecondary                     String?
-  themeMode                          String   @default("system")
+  themeMode                          String            @default("system")
+  businessStructure                  BusinessStructure @default(SOLE_TRADER)
+  onboardingCompletedAt              DateTime?
   logoPath                           String?
   signatureFooter                    String?
-  createdAt                          DateTime @default(now())
-  updatedAt                          DateTime @updatedAt
+  createdAt                          DateTime          @default(now())
+  updatedAt                          DateTime          @updatedAt
 
   @@index([ownerId])
 }

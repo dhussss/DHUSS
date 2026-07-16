@@ -78,6 +78,56 @@ export async function logoutAction() {
   redirect("/login");
 }
 
+export async function completeOnboardingAction(formData: FormData) {
+  const ownerId = await requireUserId();
+  const businessStructure = text(formData, "businessStructure");
+  const tradingName = text(formData, "tradingName");
+  const contactName = text(formData, "contactName");
+  const invoicePrefix = text(formData, "invoicePrefix") || "INV-";
+  const paymentTermsDays = optionalInt(formData, "paymentTermsDays", 14);
+  const defaultHourlyRateCents = optionalPositiveCents(formData, "defaultHourlyRate");
+
+  if (businessStructure !== "SOLE_TRADER" && businessStructure !== "EMPLOYER") {
+    throw new Error("Choose whether you work independently or have people working for you.");
+  }
+  if (!tradingName) throw new Error("Business or trading name is required.");
+  if (!contactName) throw new Error("Your name is required.");
+  if (!defaultHourlyRateCents) throw new Error("Enter your usual hourly charge rate.");
+  if (invoicePrefix.length > 16) throw new Error("Invoice prefix must be 16 characters or fewer.");
+  if (paymentTermsDays < 1 || paymentTermsDays > 90) throw new Error("Payment terms must be between 1 and 90 days.");
+
+  await prisma.businessProfile.upsert({
+    where: { ownerId },
+    create: {
+      ownerId,
+      tradingName,
+      contactName,
+      invoicePrefix,
+      defaultHourlyRateCents,
+      paymentTermsDays,
+      gstRegistered: text(formData, "gstRegistered") === "on",
+      businessStructure,
+      onboardingCompletedAt: new Date()
+    },
+    update: {
+      tradingName,
+      contactName,
+      invoicePrefix,
+      defaultHourlyRateCents,
+      paymentTermsDays,
+      gstRegistered: text(formData, "gstRegistered") === "on",
+      businessStructure,
+      onboardingCompletedAt: new Date()
+    }
+  });
+
+  revalidatePath("/");
+  revalidatePath("/business-profile");
+  revalidatePath("/settings");
+  revalidateDataTags(CACHE_TAGS.dashboard, CACHE_TAGS.profile);
+  redirect("/?onboarding=complete");
+}
+
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 function parseEmailList(value: string, label: string, required = false) {

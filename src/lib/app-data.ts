@@ -29,6 +29,8 @@ export type DashboardData = {
     includeSuperInSetAsidePlanning: boolean;
     superPlanningEnabled: boolean;
     superContributionPercentage: unknown;
+    businessStructure: "SOLE_TRADER" | "EMPLOYER";
+    onboardingCompletedAt: string | null;
   } | null;
   projects: { id: string; title: string; client: { businessName: string } }[];
   assignedProjects: { id: string; project: { id: string; title: string; client: { businessName: string } } }[];
@@ -457,7 +459,9 @@ export async function loadDashboardData(ownerId: string): Promise<DashboardData>
         'includeGstInTaxEstimate', bp."includeGstInTaxEstimate",
         'includeSuperInSetAsidePlanning', bp."includeSuperInSetAsidePlanning",
         'superPlanningEnabled', bp."superPlanningEnabled",
-        'superContributionPercentage', bp."superContributionPercentage"
+        'superContributionPercentage', bp."superContributionPercentage",
+        'businessStructure', bp."businessStructure",
+        'onboardingCompletedAt', bp."onboardingCompletedAt"
       ) AS data
       FROM "BusinessProfile" bp
       WHERE bp."ownerId" = ${ownerId}

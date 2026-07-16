@@ -1,10 +1,12 @@
 import Link from "next/link";
+import { redirect } from "next/navigation";
 import {
   AlertTriangle,
   ArrowRight,
   Banknote,
   Building2,
   Calculator,
+  CheckCircle2,
   ClipboardList,
   Clock3,
   FileClock,
@@ -29,8 +31,8 @@ import { ConfirmSubmitButton } from "@/components/ConfirmSubmitButton";
 
 export const dynamic = "force-dynamic";
 
-export default async function DashboardPage({ searchParams }: { searchParams: Promise<{ wagePaid?: string; timeSaved?: string; assignedTimeSaved?: string }> }) {
-  const { wagePaid, timeSaved, assignedTimeSaved } = await searchParams;
+export default async function DashboardPage({ searchParams }: { searchParams: Promise<{ wagePaid?: string; timeSaved?: string; assignedTimeSaved?: string; onboarding?: string }> }) {
+  const { wagePaid, timeSaved, assignedTimeSaved, onboarding } = await searchParams;
   const ownerId = await requireUserId();
   const today = todayInPerth();
   const previousWeek = previousWeekMondayToSunday(today);
@@ -38,6 +40,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
 
   const dashboardData = await getDashboardData(ownerId);
   const profile = dashboardData.profile;
+  if (!profile?.onboardingCompletedAt) redirect("/onboarding");
 
   const {
     projects,
@@ -75,6 +78,12 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
 
   return (
     <main className="page-shell max-w-[92rem]">
+      {onboarding === "complete" ? (
+        <div className="mb-4 flex items-center gap-3 rounded-xl border border-mint/25 bg-mint/10 p-4 text-sm font-bold text-ink" role="status">
+          <CheckCircle2 size={19} className="shrink-0 text-mint" aria-hidden="true" />
+          Setup complete. Add your first client and project when you are ready.
+        </div>
+      ) : null}
       {wagePaid === "1" ? (
         <div className="mb-4 flex items-center gap-3 rounded-xl border border-mint/25 bg-mint/10 p-4 text-sm font-bold text-ink" role="status">
           <WalletCards size={19} className="shrink-0 text-mint" aria-hidden="true" />

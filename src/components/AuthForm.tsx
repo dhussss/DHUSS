@@ -13,7 +13,7 @@ export function AuthForm({ mode }: { mode: "login" | "signup" }) {
   const [message, setMessage] = useState("");
   const [pending, setPending] = useState(false);
   const isSignup = mode === "signup";
-  const next = searchParams.get("next") || "/";
+  const next = searchParams.get("next") || (isSignup ? "/onboarding" : "/");
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();

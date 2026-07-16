@@ -1,11 +1,17 @@
 import Link from "next/link";
-import { BarChart3, Building2, Clock3, LogOut, ReceiptText, Settings2, UsersRound } from "lucide-react";
+import { BarChart3, BookOpenCheck, Building2, Clock3, LogOut, ReceiptText, Settings2, UsersRound } from "lucide-react";
 import { logoutAction } from "@/app/actions";
 import { requireUserId } from "@/lib/auth";
 
 export const dynamic = "force-dynamic";
 
 const links = [
+  {
+    href: "/onboarding?review=1",
+    label: "Setup Guide",
+    body: "Review the core workflow or update whether you work independently or manage a team.",
+    icon: BookOpenCheck
+  },
   {
     href: "/team",
     label: "Team",
