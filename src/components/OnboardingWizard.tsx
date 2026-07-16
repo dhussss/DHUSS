@@ -13,7 +13,7 @@ import {
   UserRound,
   UsersRound
 } from "lucide-react";
-import { completeOnboardingAction } from "@/app/actions";
+import { saveOnboardingSetupAction } from "@/app/actions";
 import { SubmitButton } from "@/components/SubmitButton";
 
 type BusinessStructure = "SOLE_TRADER" | "EMPLOYER";
@@ -109,7 +109,7 @@ export function OnboardingWizard({ initialValues }: { initialValues: InitialValu
   }
 
   return (
-    <form action={completeOnboardingAction} className="mx-auto w-full max-w-3xl">
+    <form action={saveOnboardingSetupAction} className="mx-auto w-full max-w-3xl">
       <input type="hidden" name="businessStructure" value={businessStructure ?? ""} />
       <input type="hidden" name="tradingName" value={tradingName} />
       <input type="hidden" name="contactName" value={contactName} />
@@ -220,9 +220,9 @@ export function OnboardingWizard({ initialValues }: { initialValues: InitialValu
           {step === "ready" ? (
             <div className="text-center">
               <span className="mx-auto grid size-14 place-items-center rounded-2xl bg-mint text-white shadow-soft"><Check size={28} aria-hidden="true" /></span>
-              <p className="section-title mt-5">Ready to work</p>
-              <h1 className="mt-2 text-3xl font-black tracking-tight sm:text-4xl">Your workspace is ready</h1>
-              <p className="mx-auto mt-3 max-w-xl text-sm font-medium leading-6 text-moss">Start with one client and project. The dashboard will keep unbilled work, outstanding invoices{businessStructure === "EMPLOYER" ? ", team hours and wages" : ""} visible from there.</p>
+              <p className="section-title mt-5">Guided first job</p>
+              <h1 className="mt-2 text-3xl font-black tracking-tight sm:text-4xl">Now do it for real</h1>
+              <p className="mx-auto mt-3 max-w-xl text-sm font-medium leading-6 text-moss">We will guide you through a real client, job, time entry and invoice draft. Setup only finishes after you have completed each step yourself.</p>
               <div className="mx-auto mt-6 grid max-w-lg gap-2 text-left">
                 <ReadyLine icon={UserRound} text="Add your first client" />
                 <ReadyLine icon={FolderKanban} text="Create their first project" />
@@ -241,7 +241,7 @@ export function OnboardingWizard({ initialValues }: { initialValues: InitialValu
             <ArrowLeft size={18} aria-hidden="true" />Back
           </button>
           {step === "ready" ? (
-            <SubmitButton className="tap-primary" pendingLabel="Preparing workspace...">Finish setup<Check size={18} aria-hidden="true" /></SubmitButton>
+            <SubmitButton className="tap-primary" pendingLabel="Starting guide...">Start guided setup<ArrowRight size={18} aria-hidden="true" /></SubmitButton>
           ) : (
             <button type="button" className="tap-primary" onClick={next}>Continue<ArrowRight size={18} aria-hidden="true" /></button>
           )}

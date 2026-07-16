@@ -56,6 +56,7 @@ export default async function NewInvoicePage({
   const startRaw = paramValue(params, "dateRangeStart") || todayInputValue();
   const endRaw = paramValue(params, "dateRangeEnd") || todayInputValue();
   const invoiceMode = paramValue(params, "invoiceMode") === "SIMPLE" ? "SIMPLE" : "DETAILED";
+  const onboarding = paramValue(params, "onboarding") === "1";
 
   let entries: InvoiceSourceTimeEntry[] = [];
   let expenses: InvoiceSourceExpense[] = [];
@@ -129,10 +130,12 @@ export default async function NewInvoicePage({
       </Link>
       <header className="page-header">
         <p className="section-title">New invoice</p>
-        <h1 className="page-title">Create invoice draft</h1>
+        <h1 className="page-title">{onboarding ? "Create your first invoice draft" : "Create invoice draft"}</h1>
+        {onboarding ? <p className="page-subtitle">Step 4 of 4. Review the work you just logged, then save a real draft. Nothing is sent to the client yet.</p> : null}
       </header>
 
       <form className="card mt-5 grid gap-4" method="get">
+        {onboarding ? <input type="hidden" name="onboarding" value="1" /> : null}
         <label>
           Project
           <select name="projectId" defaultValue={projectId} required>
@@ -298,13 +301,14 @@ export default async function NewInvoicePage({
               </dl>
 
               <form action={createInvoiceDraftAction} className="mt-5">
+                {onboarding ? <input type="hidden" name="onboarding" value="1" /> : null}
                 <input type="hidden" name="projectId" value={projectId} />
                 <input type="hidden" name="dateRangeStart" value={startRaw} />
                 <input type="hidden" name="dateRangeEnd" value={endRaw} />
                 <input type="hidden" name="invoiceMode" value={invoiceMode} />
                 <SubmitButton className="tap-primary w-full" pendingLabel="Saving draft..." disabled={entries.length === 0 && expenses.length === 0}>
                   <FilePlus size={20} aria-hidden="true" />
-                  Save as Draft
+                  {onboarding ? "Save draft and finish" : "Save as Draft"}
                 </SubmitButton>
               </form>
             </aside>

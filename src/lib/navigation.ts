@@ -5,7 +5,8 @@ const moreRoutePrefixes = [
   "/expenses",
   "/hours-export",
   "/business-profile",
-  "/team"
+  "/team",
+  "/tutorials"
 ];
 
 export function shouldHideAppNavigation(pathname: string) {

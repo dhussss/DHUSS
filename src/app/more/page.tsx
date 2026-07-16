@@ -7,9 +7,9 @@ export const dynamic = "force-dynamic";
 
 const links = [
   {
-    href: "/onboarding?review=1",
-    label: "Setup Guide",
-    body: "Review the core workflow or update whether you work independently or manage a team.",
+    href: "/tutorials",
+    label: "Tutorials",
+    body: "Open short guides for clients, jobs, work logs, invoices, expenses, and team workflows.",
     icon: BookOpenCheck
   },
   {

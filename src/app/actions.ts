@@ -78,7 +78,7 @@ export async function logoutAction() {
   redirect("/login");
 }
 
-export async function completeOnboardingAction(formData: FormData) {
+export async function saveOnboardingSetupAction(formData: FormData) {
   const ownerId = await requireUserId();
   const businessStructure = text(formData, "businessStructure");
   const tradingName = text(formData, "tradingName");
@@ -106,8 +106,7 @@ export async function completeOnboardingAction(formData: FormData) {
       defaultHourlyRateCents,
       paymentTermsDays,
       gstRegistered: text(formData, "gstRegistered") === "on",
-      businessStructure,
-      onboardingCompletedAt: new Date()
+      businessStructure
     },
     update: {
       tradingName,
@@ -116,14 +115,37 @@ export async function completeOnboardingAction(formData: FormData) {
       defaultHourlyRateCents,
       paymentTermsDays,
       gstRegistered: text(formData, "gstRegistered") === "on",
-      businessStructure,
-      onboardingCompletedAt: new Date()
+      businessStructure
     }
   });
 
   revalidatePath("/");
   revalidatePath("/business-profile");
   revalidatePath("/settings");
+  revalidateDataTags(CACHE_TAGS.dashboard, CACHE_TAGS.profile);
+  redirect("/onboarding/progress");
+}
+
+export async function finishOnboardingAction() {
+  const ownerId = await requireUserId();
+  const [clientCount, projectCount, timeEntryCount, invoiceCount] = await Promise.all([
+    prisma.client.count({ where: { ownerId } }),
+    prisma.project.count({ where: { ownerId } }),
+    prisma.timeEntry.count({ where: { ownerId } }),
+    prisma.invoice.count({ where: { ownerId } })
+  ]);
+
+  if (!clientCount || !projectCount || !timeEntryCount || !invoiceCount) {
+    redirect("/onboarding/progress");
+  }
+
+  await prisma.businessProfile.update({
+    where: { ownerId },
+    data: { onboardingCompletedAt: new Date() }
+  });
+
+  revalidatePath("/");
+  revalidatePath("/onboarding");
   revalidateDataTags(CACHE_TAGS.dashboard, CACHE_TAGS.profile);
   redirect("/?onboarding=complete");
 }
@@ -875,6 +897,7 @@ export async function createProjectAction(formData: FormData) {
   revalidatePath("/projects");
   revalidateDataTags(CACHE_TAGS.dashboard, CACHE_TAGS.projects, CACHE_TAGS.hoursExport);
   if (createdClient) revalidateDataTags(CACHE_TAGS.clients);
+  if (text(formData, "onboarding") === "1") redirect(`/projects/${project.id}?onboarding=1`);
   redirect(`/projects/${project.id}`);
 }
 
@@ -908,6 +931,7 @@ export async function createClientAction(formData: FormData) {
   revalidatePath("/clients");
   revalidatePath("/projects");
   revalidateDataTags(CACHE_TAGS.clients);
+  if (text(formData, "onboarding") === "1") redirect(`/projects/new?onboarding=1&clientId=${client.id}`);
   redirect(`/clients/${client.id}?saved=client-created`);
 }
 
@@ -1336,6 +1360,7 @@ export async function createInvoiceDraftAction(formData: FormData) {
 
   revalidatePath("/invoices");
   revalidateDataTags(CACHE_TAGS.dashboard, CACHE_TAGS.invoices);
+  if (text(formData, "onboarding") === "1") redirect(`/onboarding/progress?invoiceId=${invoice.id}`);
   redirect(`/invoices/${invoice.id}`);
 }
 

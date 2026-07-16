@@ -24,10 +24,11 @@ export default async function ProjectDetailPage({
   searchParams
 }: {
   params: Promise<{ id: string }>;
-  searchParams: Promise<{ month?: string }>;
+  searchParams: Promise<{ month?: string; onboarding?: string }>;
 }) {
   const [{ id }, query] = await Promise.all([params, searchParams]);
   const ownerId = await requireUserId();
+  const onboarding = query.onboarding === "1";
   const today = todayInPerth();
   const calendarMonth = parseCalendarMonth(query.month, today);
   const monthStart = new Date(Date.UTC(calendarMonth.getUTCFullYear(), calendarMonth.getUTCMonth(), 1));
@@ -225,6 +226,14 @@ export default async function ProjectDetailPage({
         Projects
       </Link>
 
+      {onboarding ? (
+        <section className="mb-4 rounded-2xl border border-mint/30 bg-mint/10 p-4 sm:p-5">
+          <p className="section-title">Guided setup · Step 3 of 4</p>
+          <h2 className="mt-1 text-xl font-black text-ink">Log real work on this job</h2>
+          <p className="mt-1 text-sm font-semibold leading-6 text-moss">Add the hours you have worked. Saving them will take you straight to the invoice step.</p>
+        </section>
+      ) : null}
+
       <header className="overflow-hidden rounded-2xl border border-line bg-white shadow-soft">
         <div className="grid gap-5 p-5 sm:p-6 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-end">
           <div>
@@ -264,7 +273,12 @@ export default async function ProjectDetailPage({
                   <Clock3 size={20} aria-hidden="true" />
                   Export Hours
                 </Link>
-                <LogTimeSheet projects={activeProjects} defaultProjectId={project.id} buttonLabel="Log Hours" />
+                <LogTimeSheet
+                  projects={activeProjects}
+                  defaultProjectId={project.id}
+                  buttonLabel={onboarding ? "Log your first hours" : "Log Hours"}
+                  returnTo={onboarding ? `/onboarding/progress?projectId=${project.id}` : undefined}
+                />
               </>
             )}
           </div>

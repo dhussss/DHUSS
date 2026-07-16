@@ -14,6 +14,7 @@ export default async function NewProjectPage({
   const params = await searchParams;
   const ownerId = await requireUserId();
   const defaultClientId = typeof params?.clientId === "string" ? params.clientId : undefined;
+  const onboarding = params?.onboarding === "1";
   const clients = await prisma.client.findMany({
     where: { ownerId },
     select: { id: true, businessName: true },
@@ -28,11 +29,12 @@ export default async function NewProjectPage({
       </Link>
       <header className="page-header">
         <p className="section-title">New project</p>
-        <h1 className="page-title">Add a job</h1>
+        <h1 className="page-title">{onboarding ? "Create your first real job" : "Add a job"}</h1>
+        {onboarding ? <p className="page-subtitle">Step 2 of 4. Set the client and the hourly rate you will charge for this work.</p> : null}
       </header>
 
       <section className="card mt-6 max-w-2xl">
-        <CreateProjectForm clients={clients} defaultClientId={defaultClientId} />
+        <CreateProjectForm clients={clients} defaultClientId={defaultClientId} onboarding={onboarding} />
       </section>
     </main>
   );

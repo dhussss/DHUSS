@@ -24,12 +24,14 @@ export function LogTimeSheet({
   projects,
   assignedProjects = [],
   defaultProjectId,
-  buttonLabel = "Log Time"
+  buttonLabel = "Log Time",
+  returnTo
 }: {
   projects: ProjectOption[];
   assignedProjects?: AssignedProjectOption[];
   defaultProjectId?: string;
   buttonLabel?: string;
+  returnTo?: string;
 }) {
   const pathname = usePathname();
   const [open, setOpen] = useState(false);
@@ -50,7 +52,7 @@ export function LogTimeSheet({
   const selectedAssignmentId = selectedTimeProject.startsWith("assigned:") ? selectedTimeProject.slice("assigned:".length) : "";
   const selectedOwnedProjectId = selectedTimeProject.startsWith("owned:") ? selectedTimeProject.slice("owned:".length) : "";
   const isAssignedTime = Boolean(selectedAssignmentId);
-  const timeReturnTo = pathname === "/" ? (isAssignedTime ? "/?assignedTimeSaved=1" : "/?timeSaved=1") : pathname;
+  const timeReturnTo = returnTo ?? (pathname === "/" ? (isAssignedTime ? "/?assignedTimeSaved=1" : "/?timeSaved=1") : pathname);
 
   const calculatedRange = useMemo(() => {
     const start = parseClockTime(startTime);

@@ -7,12 +7,8 @@ import { prisma } from "@/lib/prisma";
 
 export const dynamic = "force-dynamic";
 
-export default async function OnboardingPage({
-  searchParams
-}: {
-  searchParams: Promise<{ review?: string }>;
-}) {
-  const [{ review }, user] = await Promise.all([searchParams, requireUser()]);
+export default async function OnboardingPage() {
+  const user = await requireUser();
   const profile = await prisma.businessProfile.findUnique({
     where: { ownerId: user.id },
     select: {
@@ -27,7 +23,8 @@ export default async function OnboardingPage({
     }
   });
 
-  if (profile?.onboardingCompletedAt && review !== "1") redirect("/");
+  if (profile?.onboardingCompletedAt) redirect("/tutorials");
+  if (profile?.businessStructure) redirect("/onboarding/progress");
 
   return (
     <main className="min-h-screen bg-paper px-4 py-5 sm:px-6 sm:py-8">

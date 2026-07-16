@@ -8,7 +8,7 @@ import { SubmitButton } from "@/components/SubmitButton";
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
-export function ClientCreateForm() {
+export function ClientCreateForm({ onboarding = false }: { onboarding?: boolean }) {
   const [error, setError] = useState("");
 
   function validateSubmit(event: FormEvent<HTMLFormElement>) {
@@ -31,6 +31,7 @@ export function ClientCreateForm() {
 
   return (
     <form action={createClientAction} onSubmit={validateSubmit} noValidate className="grid gap-5">
+      {onboarding ? <input type="hidden" name="onboarding" value="1" /> : null}
       {error ? (
         <p className="rounded-lg border border-gum/30 bg-gum/10 p-3 text-sm font-bold text-gum" role="alert">
           {error}
@@ -72,13 +73,13 @@ export function ClientCreateForm() {
       </label>
 
       <div className="grid gap-2 sm:grid-cols-2">
-        <Link href="/clients" className="tap-secondary w-full">
+        <Link href={onboarding ? "/onboarding" : "/clients"} className="tap-secondary w-full">
           <ArrowLeft size={20} aria-hidden="true" />
           Cancel
         </Link>
         <SubmitButton className="tap-primary w-full" pendingLabel="Saving client...">
           <Save size={20} aria-hidden="true" />
-          Save Client
+          {onboarding ? "Save and continue" : "Save Client"}
         </SubmitButton>
       </div>
     </form>

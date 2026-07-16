@@ -10,12 +10,13 @@ type ClientOption = {
   businessName: string;
 };
 
-export function CreateProjectForm({ clients, defaultClientId }: { clients: ClientOption[]; defaultClientId?: string }) {
+export function CreateProjectForm({ clients, defaultClientId, onboarding = false }: { clients: ClientOption[]; defaultClientId?: string; onboarding?: boolean }) {
   const initialClientId = defaultClientId && clients.some((client) => client.id === defaultClientId) ? defaultClientId : clients[0]?.id ?? "__new";
   const [clientId, setClientId] = useState(initialClientId);
 
   return (
     <form action={createProjectAction} className="grid gap-5">
+      {onboarding ? <input type="hidden" name="onboarding" value="1" /> : null}
       <label>
         Project/job name
         <input name="title" placeholder="Bathroom renovation" required />
@@ -80,7 +81,7 @@ export function CreateProjectForm({ clients, defaultClientId }: { clients: Clien
 
       <SubmitButton className="tap-primary" pendingLabel="Saving project...">
         <Save size={20} aria-hidden="true" />
-        Save Project
+        {onboarding ? "Save and log work" : "Save Project"}
       </SubmitButton>
     </form>
   );
