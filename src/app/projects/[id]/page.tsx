@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { AlertTriangle, ArrowLeft, Banknote, CalendarDays, CheckCircle2, Clock3, Edit, FilePlus, FileText, ReceiptText, RotateCcw } from "lucide-react";
+import { AlertTriangle, ArrowLeft, Banknote, CalendarDays, CheckCircle2, ChevronLeft, ChevronRight, Clock3, Edit, FilePlus, FileText, ReceiptText, RotateCcw } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import type { Prisma } from "@prisma/client";
 import { deleteExpenseItemAction, deleteTimeEntryAction, deleteWorkExpenseAction, unarchiveProjectAction } from "@/app/actions";
@@ -19,12 +19,19 @@ import { expenseCategoryLabel } from "@/lib/expenses";
 
 export const dynamic = "force-dynamic";
 
-export default async function ProjectDetailPage({ params }: { params: Promise<{ id: string }> }) {
-  const { id } = await params;
+export default async function ProjectDetailPage({
+  params,
+  searchParams
+}: {
+  params: Promise<{ id: string }>;
+  searchParams: Promise<{ month?: string }>;
+}) {
+  const [{ id }, query] = await Promise.all([params, searchParams]);
   const ownerId = await requireUserId();
   const today = todayInPerth();
-  const monthStart = new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), 1));
-  const monthEnd = new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth() + 1, 0));
+  const calendarMonth = parseCalendarMonth(query.month, today);
+  const monthStart = new Date(Date.UTC(calendarMonth.getUTCFullYear(), calendarMonth.getUTCMonth(), 1));
+  const monthEnd = new Date(Date.UTC(calendarMonth.getUTCFullYear(), calendarMonth.getUTCMonth() + 1, 0));
   const calendarStart = startOfWeekMonday(monthStart);
   const calendarEnd = addDays(startOfWeekMonday(monthEnd), 6);
   const [project, assignment, activeProjects, monthlyEntries, monthlyDraftLines, dayOffLogs] = await Promise.all([
@@ -202,11 +209,12 @@ export default async function ProjectDetailPage({ params }: { params: Promise<{ 
   }, new Map<string, { minutes: number; valueCents: number; isEmployee: boolean }>());
   const hasUnbilledWork = unbilledTimeEntries.length > 0 || unbilledExpenseItems.length > 0;
   const activeInvoiceCount = project.invoices.filter((invoice) => invoice.status !== "VOID").length;
-  const monthLabel = new Intl.DateTimeFormat("en-AU", { month: "long", year: "numeric", timeZone: "UTC" }).format(today);
+  const monthLabel = new Intl.DateTimeFormat("en-AU", { month: "long", year: "numeric", timeZone: "UTC" }).format(calendarMonth);
   const monthlyActivityCells = buildMonthlyActivityCells(
     monthlyEntries,
     new Set(monthlyDraftLines.flatMap((line) => line.timeEntryId ? [line.timeEntryId] : [])),
     dayOffLogs,
+    calendarMonth,
     today
   );
 
@@ -318,7 +326,13 @@ export default async function ProjectDetailPage({ params }: { params: Promise<{ 
         <ProjectMetric label="Unbilled total" value={formatMoney(unbilledTotalCents)} icon={ReceiptText} highlight={hasUnbilledWork} />
       </section>
 
-      <MonthlyActivityCalendar monthLabel={monthLabel} cells={monthlyActivityCells} />
+      <MonthlyActivityCalendar
+        projectId={project.id}
+        monthLabel={monthLabel}
+        month={calendarMonth}
+        today={today}
+        cells={monthlyActivityCells}
+      />
 
       <section className="mt-7 grid gap-6 lg:grid-cols-2">
         <div>
@@ -661,6 +675,25 @@ function emptyBillingMinutes(): Record<BillingState, number> {
   return { UNBILLED: 0, INVOICED: 0, PENDING: 0, PAID: 0 };
 }
 
+function parseCalendarMonth(value: string | undefined, fallback: Date): Date {
+  const match = value?.match(/^(\d{4})-(\d{2})$/);
+  if (!match) return new Date(Date.UTC(fallback.getUTCFullYear(), fallback.getUTCMonth(), 1));
+  const year = Number(match[1]);
+  const month = Number(match[2]);
+  if (year < 2000 || year > 2100 || month < 1 || month > 12) {
+    return new Date(Date.UTC(fallback.getUTCFullYear(), fallback.getUTCMonth(), 1));
+  }
+  return new Date(Date.UTC(year, month - 1, 1));
+}
+
+function shiftCalendarMonth(month: Date, offset: number): Date {
+  return new Date(Date.UTC(month.getUTCFullYear(), month.getUTCMonth() + offset, 1));
+}
+
+function calendarMonthValue(month: Date): string {
+  return `${month.getUTCFullYear()}-${String(month.getUTCMonth() + 1).padStart(2, "0")}`;
+}
+
 function billingStateForEntry(entry: MonthlyBillingEntry, draftEntryIds: Set<string>): BillingState {
   if (draftEntryIds.has(entry.id)) return "INVOICED";
   if (entry.billingStatus === "UNBILLED" || entry.invoice?.status === "VOID") return "UNBILLED";
@@ -673,13 +706,14 @@ function buildMonthlyActivityCells(
   entries: MonthlyBillingEntry[],
   draftEntryIds: Set<string>,
   dayOffLogs: Array<{ date: Date }>,
-  anchor: Date
+  anchor: Date,
+  today: Date
 ): MonthlyActivityCell[] {
   const monthStart = new Date(Date.UTC(anchor.getUTCFullYear(), anchor.getUTCMonth(), 1));
   const monthEnd = new Date(Date.UTC(anchor.getUTCFullYear(), anchor.getUTCMonth() + 1, 0));
   const calendarStart = startOfWeekMonday(monthStart);
   const calendarEnd = addDays(startOfWeekMonday(monthEnd), 6);
-  const todayKey = dateInputValue(anchor);
+  const todayKey = dateInputValue(today);
   const activity = new Map<string, { totalMinutes: number; entryCount: number; billingMinutes: Record<BillingState, number> }>();
   const dayOffDates = new Set(dayOffLogs.map((log) => dateInputValue(log.date)));
 
@@ -712,9 +746,25 @@ function buildMonthlyActivityCells(
   return cells;
 }
 
-function MonthlyActivityCalendar({ monthLabel, cells }: { monthLabel: string; cells: MonthlyActivityCell[] }) {
+function MonthlyActivityCalendar({
+  projectId,
+  monthLabel,
+  month,
+  today,
+  cells
+}: {
+  projectId: string;
+  monthLabel: string;
+  month: Date;
+  today: Date;
+  cells: MonthlyActivityCell[];
+}) {
   const weekDays = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
   const hasActivity = cells.some((cell) => cell.entryCount > 0 || cell.isDayOff);
+  const previousMonth = calendarMonthValue(shiftCalendarMonth(month, -1));
+  const nextMonth = calendarMonthValue(shiftCalendarMonth(month, 1));
+  const currentMonth = calendarMonthValue(today);
+  const isCurrentMonth = calendarMonthValue(month) === currentMonth;
 
   return (
     <section className="mt-5 overflow-hidden rounded-lg border border-line bg-white shadow-soft">
@@ -725,7 +775,30 @@ function MonthlyActivityCalendar({ monthLabel, cells }: { monthLabel: string; ce
           </span>
           <div>
             <p className="section-title">Monthly billing</p>
-            <h2 className="text-xl font-black tracking-tight">{monthLabel}</h2>
+            <div className="mt-1 flex items-center gap-1.5">
+              <Link
+                href={`/projects/${projectId}?month=${previousMonth}`}
+                className="grid size-9 place-items-center rounded-lg border border-line bg-white text-ink transition hover:border-mint/40 hover:text-mint"
+                aria-label="Show previous month"
+                title="Previous month"
+              >
+                <ChevronLeft size={19} aria-hidden="true" />
+              </Link>
+              <h2 className="min-w-36 text-center text-xl font-black tracking-tight">{monthLabel}</h2>
+              <Link
+                href={`/projects/${projectId}?month=${nextMonth}`}
+                className="grid size-9 place-items-center rounded-lg border border-line bg-white text-ink transition hover:border-mint/40 hover:text-mint"
+                aria-label="Show next month"
+                title="Next month"
+              >
+                <ChevronRight size={19} aria-hidden="true" />
+              </Link>
+              {!isCurrentMonth ? (
+                <Link href={`/projects/${projectId}?month=${currentMonth}`} className="ml-1 text-xs font-bold text-mint">
+                  This month
+                </Link>
+              ) : null}
+            </div>
           </div>
         </div>
         {hasActivity ? (
