@@ -1,5 +1,15 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { createServerClient } from "@supabase/ssr";
+import type { User } from "@supabase/supabase-js";
+import { isStaleRefreshTokenError, isSupabaseAuthCookie } from "@/lib/supabase/auth-cookies";
+
+function clearSupabaseAuthCookies(request: NextRequest, response: NextResponse) {
+  request.cookies.getAll().forEach(({ name }) => {
+    if (!isSupabaseAuthCookie(name)) return;
+    request.cookies.delete(name);
+    response.cookies.delete(name);
+  });
+}
 
 export async function updateSession(request: NextRequest) {
   let response = NextResponse.next({ request });
@@ -21,9 +31,18 @@ export async function updateSession(request: NextRequest) {
     }
   );
 
-  const {
-    data: { user }
-  } = await supabase.auth.getUser();
+  let user: User | null = null;
+  let shouldClearStaleSession = false;
+
+  try {
+    const result = await supabase.auth.getUser();
+    user = result.data.user;
+    shouldClearStaleSession = isStaleRefreshTokenError(result.error);
+  } catch (error) {
+    shouldClearStaleSession = isStaleRefreshTokenError(error);
+  }
+
+  if (shouldClearStaleSession) clearSupabaseAuthCookies(request, response);
 
   const path = request.nextUrl.pathname;
   const isAuthPage = path === "/login" || path === "/signup" || path === "/forgot-password";
@@ -40,7 +59,9 @@ export async function updateSession(request: NextRequest) {
     const url = request.nextUrl.clone();
     url.pathname = "/login";
     url.searchParams.set("next", `${path}${request.nextUrl.search}`);
-    return NextResponse.redirect(url);
+    const redirectResponse = NextResponse.redirect(url);
+    if (shouldClearStaleSession) clearSupabaseAuthCookies(request, redirectResponse);
+    return redirectResponse;
   }
 
   if (user && isAuthPage && path !== "/forgot-password") {

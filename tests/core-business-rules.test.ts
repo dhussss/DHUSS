@@ -7,6 +7,7 @@ import { invoiceTotals } from "../src/lib/invoices";
 import { dollarsToCents } from "../src/lib/money";
 import { labourTotalCents, parseClockTime } from "../src/lib/time";
 import { normaliseRgbValue } from "../src/lib/themes";
+import { isStaleRefreshTokenError, isSupabaseAuthCookie } from "../src/lib/supabase/auth-cookies";
 
 test("currency input is converted to integer cents without silent truncation", () => {
   assert.equal(dollarsToCents("$1,234.50"), 123450);
@@ -36,6 +37,15 @@ test("legacy theme values cannot inject arbitrary CSS", () => {
   assert.equal(normaliseRgbValue("12 34 56", "1 2 3"), "12 34 56");
   assert.equal(normaliseRgbValue("300 34 56", "1 2 3"), "1 2 3");
   assert.equal(normaliseRgbValue("1 2 3;} body{display:none", "4 5 6"), "4 5 6");
+});
+
+test("stale Supabase refresh sessions are recognised and scoped cookies are removable", () => {
+  assert.equal(isStaleRefreshTokenError({ code: "refresh_token_not_found" }), true);
+  assert.equal(isStaleRefreshTokenError(new Error("Invalid Refresh Token: Refresh Token Not Found")), true);
+  assert.equal(isStaleRefreshTokenError({ code: "email_not_confirmed" }), false);
+  assert.equal(isSupabaseAuthCookie("sb-kfejfgkkugatnrxrftry-auth-token"), true);
+  assert.equal(isSupabaseAuthCookie("sb-kfejfgkkugatnrxrftry-auth-token.1"), true);
+  assert.equal(isSupabaseAuthCookie("unrelated-session"), false);
 });
 
 test("today defaults to the Australia/Perth calendar date", () => {
