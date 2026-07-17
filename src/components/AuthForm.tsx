@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { LogIn, UserPlus } from "lucide-react";
 import { createClient } from "@/lib/supabase/browser";
+import { safeInternalPath } from "@/lib/navigation";
 
 export function AuthForm({ mode }: { mode: "login" | "signup" }) {
   const router = useRouter();
@@ -17,9 +18,7 @@ export function AuthForm({ mode }: { mode: "login" | "signup" }) {
   const callbackError = searchParams.get("error") === "auth_callback_failed"
     ? "That sign-in link could not be completed. Please try logging in again."
     : "";
-  const next = requestedNext?.startsWith("/") && !requestedNext.startsWith("//")
-    ? requestedNext
-    : isSignup ? "/onboarding" : "/";
+  const next = safeInternalPath(requestedNext, isSignup ? "/onboarding" : "/");
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();

@@ -5,9 +5,9 @@ import Link from "next/link";
 import { Mail } from "lucide-react";
 import { createClient } from "@/lib/supabase/browser";
 
-export function ForgotPasswordForm() {
+export function ForgotPasswordForm({ initialError = "" }: { initialError?: string }) {
   const [pending, setPending] = useState(false);
-  const [error, setError] = useState("");
+  const [error, setError] = useState(initialError);
   const [sent, setSent] = useState(false);
 
   async function submit(event: FormEvent<HTMLFormElement>) {

@@ -8,6 +8,7 @@ import { dollarsToCents } from "../src/lib/money";
 import { labourTotalCents, parseClockTime } from "../src/lib/time";
 import { normaliseRgbValue } from "../src/lib/themes";
 import { isStaleRefreshTokenError, isSupabaseAuthCookie } from "../src/lib/supabase/auth-cookies";
+import { safeInternalPath } from "../src/lib/navigation";
 
 test("currency input is converted to integer cents without silent truncation", () => {
   assert.equal(dollarsToCents("$1,234.50"), 123450);
@@ -46,6 +47,14 @@ test("stale Supabase refresh sessions are recognised and scoped cookies are remo
   assert.equal(isSupabaseAuthCookie("sb-kfejfgkkugatnrxrftry-auth-token"), true);
   assert.equal(isSupabaseAuthCookie("sb-kfejfgkkugatnrxrftry-auth-token.1"), true);
   assert.equal(isSupabaseAuthCookie("unrelated-session"), false);
+});
+
+test("internal return paths cannot redirect to another origin", () => {
+  assert.equal(safeInternalPath("/projects/123?tab=hours"), "/projects/123?tab=hours");
+  assert.equal(safeInternalPath("//malicious.example/path"), "/");
+  assert.equal(safeInternalPath("/\\malicious.example/path"), "/");
+  assert.equal(safeInternalPath("https://malicious.example/path"), "/");
+  assert.equal(safeInternalPath(null, "/onboarding"), "/onboarding");
 });
 
 test("today defaults to the Australia/Perth calendar date", () => {

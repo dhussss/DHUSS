@@ -55,9 +55,20 @@ export async function updateSession(request: NextRequest) {
     path === "/sw.js" ||
     path === "/favicon.ico";
 
+  if (!user && path === "/reset-password") {
+    const url = request.nextUrl.clone();
+    url.pathname = "/forgot-password";
+    url.search = "";
+    url.searchParams.set("error", "reset_expired");
+    const redirectResponse = NextResponse.redirect(url);
+    if (shouldClearStaleSession) clearSupabaseAuthCookies(request, redirectResponse);
+    return redirectResponse;
+  }
+
   if (!user && !isAuthPage && !isAuthCallback && !isPublicInvoice && !isPublicAsset) {
     const url = request.nextUrl.clone();
     url.pathname = "/login";
+    url.search = "";
     url.searchParams.set("next", `${path}${request.nextUrl.search}`);
     const redirectResponse = NextResponse.redirect(url);
     if (shouldClearStaleSession) clearSupabaseAuthCookies(request, redirectResponse);
