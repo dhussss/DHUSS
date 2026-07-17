@@ -8,6 +8,7 @@ import { dollarsToCents } from "../src/lib/money";
 import { labourTotalCents, parseClockTime } from "../src/lib/time";
 import { normaliseRgbValue } from "../src/lib/themes";
 import { isStaleRefreshTokenError, isSupabaseAuthCookie } from "../src/lib/supabase/auth-cookies";
+import { canSkipSessionLookup } from "../src/lib/supabase/middleware-routes";
 import { safeInternalPath } from "../src/lib/navigation";
 
 test("currency input is converted to integer cents without silent truncation", () => {
@@ -47,6 +48,17 @@ test("stale Supabase refresh sessions are recognised and scoped cookies are remo
   assert.equal(isSupabaseAuthCookie("sb-kfejfgkkugatnrxrftry-auth-token"), true);
   assert.equal(isSupabaseAuthCookie("sb-kfejfgkkugatnrxrftry-auth-token.1"), true);
   assert.equal(isSupabaseAuthCookie("unrelated-session"), false);
+});
+
+test("public routes skip remote session lookups while protected routes do not", () => {
+  assert.equal(canSkipSessionLookup("/public/invoices/example-token"), true);
+  assert.equal(canSkipSessionLookup("/public/invoices/example-token/pdf"), true);
+  assert.equal(canSkipSessionLookup("/auth/callback"), true);
+  assert.equal(canSkipSessionLookup("/forgot-password"), true);
+  assert.equal(canSkipSessionLookup("/sw.js"), true);
+  assert.equal(canSkipSessionLookup("/login"), false);
+  assert.equal(canSkipSessionLookup("/projects"), false);
+  assert.equal(canSkipSessionLookup("/reset-password"), false);
 });
 
 test("internal return paths cannot redirect to another origin", () => {

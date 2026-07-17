@@ -2,6 +2,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { createServerClient } from "@supabase/ssr";
 import type { User } from "@supabase/supabase-js";
 import { isStaleRefreshTokenError, isSupabaseAuthCookie } from "@/lib/supabase/auth-cookies";
+import { canSkipSessionLookup } from "@/lib/supabase/middleware-routes";
 
 function clearSupabaseAuthCookies(request: NextRequest, response: NextResponse) {
   request.cookies.getAll().forEach(({ name }) => {
@@ -12,6 +13,9 @@ function clearSupabaseAuthCookies(request: NextRequest, response: NextResponse) 
 }
 
 export async function updateSession(request: NextRequest) {
+  const path = request.nextUrl.pathname;
+  if (canSkipSessionLookup(path)) return NextResponse.next({ request });
+
   let response = NextResponse.next({ request });
 
   const supabase = createServerClient(
@@ -44,16 +48,7 @@ export async function updateSession(request: NextRequest) {
 
   if (shouldClearStaleSession) clearSupabaseAuthCookies(request, response);
 
-  const path = request.nextUrl.pathname;
-  const isAuthPage = path === "/login" || path === "/signup" || path === "/forgot-password";
-  const isAuthCallback = path.startsWith("/auth/callback");
-  const isPublicInvoice = path.startsWith("/public/invoices/");
-  const isPublicAsset =
-    path.startsWith("/_next") ||
-    path.startsWith("/icons") ||
-    path === "/manifest.webmanifest" ||
-    path === "/sw.js" ||
-    path === "/favicon.ico";
+  const isAuthPage = path === "/login" || path === "/signup";
 
   if (!user && path === "/reset-password") {
     const url = request.nextUrl.clone();
@@ -65,7 +60,7 @@ export async function updateSession(request: NextRequest) {
     return redirectResponse;
   }
 
-  if (!user && !isAuthPage && !isAuthCallback && !isPublicInvoice && !isPublicAsset) {
+  if (!user && !isAuthPage) {
     const url = request.nextUrl.clone();
     url.pathname = "/login";
     url.search = "";
@@ -75,7 +70,7 @@ export async function updateSession(request: NextRequest) {
     return redirectResponse;
   }
 
-  if (user && isAuthPage && path !== "/forgot-password") {
+  if (user && isAuthPage) {
     return NextResponse.redirect(new URL("/", request.url));
   }
 
