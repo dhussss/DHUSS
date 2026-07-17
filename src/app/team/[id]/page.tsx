@@ -184,7 +184,7 @@ export default async function TeamMemberPage({ params, searchParams }: { params:
             <label>Pay rate<input name="payRate" type="number" min="0.01" step="0.01" defaultValue={centsToDollars(member.defaultPayRateCents)} required /></label>
             <label>Client rate<input name="chargeRate" type="number" min="0.01" step="0.01" defaultValue={centsToDollars(member.defaultChargeRateCents)} required /></label>
           </div>
-          <button className="tap-primary" type="submit">Assign project</button>
+          <SubmitButton className="tap-primary" pendingLabel="Assigning project...">Assign project</SubmitButton>
         </form>
 
         <section className="surface-panel">

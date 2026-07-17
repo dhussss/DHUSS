@@ -2,6 +2,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { ArrowLeft, Link2 } from "lucide-react";
 import { acceptTeamInvitationAction } from "@/app/team/actions";
+import { SubmitButton } from "@/components/SubmitButton";
 import { getUser } from "@/lib/auth";
 
 export const dynamic = "force-dynamic";
@@ -20,7 +21,7 @@ export default async function JoinTeamPage({ searchParams }: { searchParams?: Pr
         <p className="mt-2 text-sm font-medium leading-6 text-moss">This links only projects assigned to you. Your private clients, invoices, expenses, and dashboard remain separate.</p>
         <form action={acceptTeamInvitationAction} className="mt-5 grid gap-4">
           <label>Invitation code<input name="code" defaultValue={code} autoCapitalize="characters" required /></label>
-          <button className="tap-primary" type="submit"><Link2 size={19} aria-hidden="true" />Accept invitation</button>
+          <SubmitButton className="tap-primary" pendingLabel="Joining team..."><Link2 size={19} aria-hidden="true" />Accept invitation</SubmitButton>
         </form>
       </section>
     </main>

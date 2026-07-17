@@ -2,6 +2,7 @@ import Link from "next/link";
 import { ArrowRight, CheckCircle2, RotateCcw, UserPlus, UsersRound, WalletCards } from "lucide-react";
 import { createTeamInvitationAction, restoreTeamMemberAction, revokeTeamInvitationAction } from "@/app/team/actions";
 import { ConfirmSubmitButton } from "@/components/ConfirmSubmitButton";
+import { SubmitButton } from "@/components/SubmitButton";
 import { TeamInviteLink } from "@/components/TeamInviteLink";
 import { LiveTeamRefresh } from "@/components/LiveTeamRefresh";
 import { requireUser } from "@/lib/auth";
@@ -66,7 +67,7 @@ export default async function TeamPage({ searchParams }: { searchParams?: Promis
             <label>Pay rate<input name="payRate" type="number" min="0.01" step="0.01" inputMode="decimal" required /></label>
             <label>Client rate<input name="chargeRate" type="number" min="0.01" step="0.01" inputMode="decimal" required /></label>
           </div>
-          <button className="tap-primary" type="submit"><UserPlus size={19} aria-hidden="true" />Create invitation</button>
+          <SubmitButton className="tap-primary" pendingLabel="Creating invitation..."><UserPlus size={19} aria-hidden="true" />Create invitation</SubmitButton>
         </form>
 
         <section className="surface-panel">
@@ -87,7 +88,7 @@ export default async function TeamPage({ searchParams }: { searchParams?: Promis
       </section>
 
       {invitations.length ? (
-        <section className="mt-6"><h2 className="text-xl font-black">Pending invitations</h2><div className="mt-3 grid gap-3">{invitations.map((invitation) => <article key={invitation.id} className="card flex items-center justify-between gap-4"><div><p className="font-black">{invitation.subcontractorName}</p><p className="mt-1 text-sm font-medium text-moss">Expires {formatDateAU(invitation.expiresAt)}</p></div><form action={revokeTeamInvitationAction}><input type="hidden" name="invitationId" value={invitation.id} /><button className="tap-danger" type="submit">Revoke</button></form></article>)}</div></section>
+        <section className="mt-6"><h2 className="text-xl font-black">Pending invitations</h2><div className="mt-3 grid gap-3">{invitations.map((invitation) => <article key={invitation.id} className="card flex items-center justify-between gap-4"><div><p className="font-black">{invitation.subcontractorName}</p><p className="mt-1 text-sm font-medium text-moss">Expires {formatDateAU(invitation.expiresAt)}</p></div><form action={revokeTeamInvitationAction}><input type="hidden" name="invitationId" value={invitation.id} /><SubmitButton className="tap-danger" pendingLabel="Revoking...">Revoke</SubmitButton></form></article>)}</div></section>
       ) : null}
 
       {!members.length ? <div className="mt-6 flex items-center gap-3 rounded-2xl border border-line bg-white p-4 text-sm font-medium text-moss"><WalletCards size={20} aria-hidden="true" />Team payments appear automatically after employees log hours.</div> : null}
