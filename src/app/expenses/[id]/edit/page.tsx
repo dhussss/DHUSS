@@ -4,12 +4,13 @@ import { ArrowLeft } from "lucide-react";
 import { updateWorkExpenseAction } from "@/app/actions";
 import { WorkExpenseForm } from "@/components/WorkExpenseForm";
 import { requireUserId } from "@/lib/auth";
+import { safeInternalPath } from "@/lib/navigation";
 import { prisma } from "@/lib/prisma";
 
 export const dynamic = "force-dynamic";
 
 function safeReturnTo(value: string | string[] | undefined) {
-  return typeof value === "string" && value.startsWith("/") ? value : "/expenses?saved=expense-updated";
+  return safeInternalPath(typeof value === "string" ? value : null, "/expenses?saved=expense-updated");
 }
 
 export default async function EditExpensePage({

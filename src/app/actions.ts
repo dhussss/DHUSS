@@ -16,6 +16,7 @@ import { buildInvoiceLineData, invoiceTotals, summaryText } from "@/lib/invoices
 import { sendInvoiceMmsWithPdf, sendPreparedInvoiceEmailWithPdf } from "@/lib/invoice-delivery";
 import { isQuarterHour, isQuarterHourClock, parseClockTime } from "@/lib/time";
 import { createClient } from "@/lib/supabase/server";
+import { safeInternalPath } from "@/lib/navigation";
 
 function text(formData: FormData, key: string) {
   return String(formData.get(key) ?? "").trim();
@@ -60,8 +61,7 @@ function optionalPercentage(formData: FormData, key: string) {
 }
 
 function returnTo(formData: FormData) {
-  const value = text(formData, "returnTo");
-  return value.startsWith("/") && !value.startsWith("//") ? value : "/";
+  return safeInternalPath(text(formData, "returnTo"));
 }
 
 function revalidateAppData() {

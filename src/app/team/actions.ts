@@ -7,6 +7,7 @@ import { requireUser } from "@/lib/auth";
 import { CACHE_TAGS } from "@/lib/app-data";
 import { parseInputDate, todayInPerth } from "@/lib/dates";
 import { dollarsToCents } from "@/lib/money";
+import { safeInternalPath } from "@/lib/navigation";
 import { prisma } from "@/lib/prisma";
 import { isQuarterHour, isQuarterHourClock, parseClockTime } from "@/lib/time";
 
@@ -25,8 +26,7 @@ function positiveRate(formData: FormData, name: string, label: string) {
 }
 
 function safeReturnTo(formData: FormData, fallback: string) {
-  const target = value(formData, "returnTo");
-  return target.startsWith("/") && !target.startsWith("//") ? target : fallback;
+  return safeInternalPath(value(formData, "returnTo"), fallback);
 }
 
 function durationFromForm(formData: FormData) {
