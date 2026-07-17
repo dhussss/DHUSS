@@ -1547,10 +1547,11 @@ export async function markInvoiceUnpaidAction(formData: FormData) {
   if (!invoice) throw new Error("Invoice not found.");
   if (invoice.status !== "PAID") throw new Error("Only paid invoices can be marked unpaid.");
 
-  await prisma.invoice.update({
-    where: { id: invoiceId },
+  const updated = await prisma.invoice.updateMany({
+    where: { id: invoiceId, ownerId, status: "PAID" },
     data: { status: "SENT", paymentDate: null }
   });
+  if (updated.count !== 1) throw new Error("Invoice status changed. Refresh the page and try again.");
 
   revalidatePath("/");
   revalidatePath("/invoices");
@@ -1577,20 +1578,22 @@ export async function markInvoiceUnsentAction(formData: FormData) {
     .map((line) => line.expenseItemId)
     .filter((id): id is string => Boolean(id));
 
-  await prisma.$transaction([
-    prisma.timeEntry.updateMany({
+  await prisma.$transaction(async (tx) => {
+    const updated = await tx.invoice.updateMany({
+      where: { id: invoiceId, ownerId, status: "SENT" },
+      data: { status: "DRAFT", paymentDate: null, publicTokenEnabled: false }
+    });
+    if (updated.count !== 1) throw new Error("Invoice status changed. Refresh the page and try again.");
+
+    await tx.timeEntry.updateMany({
       where: { ownerId, id: { in: timeEntryIds }, invoiceId },
       data: { billingStatus: "UNBILLED", invoiceId: null }
-    }),
-    prisma.expenseItem.updateMany({
+    });
+    await tx.expenseItem.updateMany({
       where: { ownerId, id: { in: expenseItemIds }, invoiceId },
       data: { billingStatus: "UNBILLED", invoiceId: null }
-    }),
-    prisma.invoice.update({
-      where: { id: invoiceId },
-      data: { status: "DRAFT", paymentDate: null, publicTokenEnabled: false }
-    })
-  ]);
+    });
+  });
 
   revalidatePath("/");
   revalidatePath("/projects");
@@ -1610,6 +1613,7 @@ export async function voidInvoiceAction(formData: FormData) {
 
   if (!invoice) throw new Error("Invoice not found.");
   if (invoice.ownerId !== ownerId) throw new Error("Invoice not found.");
+  if (invoice.status === "VOID") throw new Error("Invoice is already void.");
 
   const timeEntryIds = invoice.lineItems
     .map((line) => line.timeEntryId)
@@ -1618,20 +1622,22 @@ export async function voidInvoiceAction(formData: FormData) {
     .map((line) => line.expenseItemId)
     .filter((id): id is string => Boolean(id));
 
-  await prisma.$transaction([
-    prisma.timeEntry.updateMany({
+  await prisma.$transaction(async (tx) => {
+    const updated = await tx.invoice.updateMany({
+      where: { id: invoiceId, ownerId, status: invoice.status },
+      data: { status: "VOID", paymentDate: null, publicTokenEnabled: false }
+    });
+    if (updated.count !== 1) throw new Error("Invoice status changed. Refresh the page and try again.");
+
+    await tx.timeEntry.updateMany({
       where: { ownerId, id: { in: timeEntryIds }, invoiceId },
       data: { billingStatus: "UNBILLED", invoiceId: null }
-    }),
-    prisma.expenseItem.updateMany({
+    });
+    await tx.expenseItem.updateMany({
       where: { ownerId, id: { in: expenseItemIds }, invoiceId },
       data: { billingStatus: "UNBILLED", invoiceId: null }
-    }),
-    prisma.invoice.update({
-      where: { id: invoiceId },
-      data: { status: "VOID", paymentDate: null, publicTokenEnabled: false }
-    })
-  ]);
+    });
+  });
 
   revalidatePath("/");
   revalidatePath("/projects");
@@ -1649,10 +1655,11 @@ export async function unvoidInvoiceAction(formData: FormData) {
   if (!invoice) throw new Error("Invoice not found.");
   if (invoice.status !== "VOID") throw new Error("Only void invoices can be restored.");
 
-  await prisma.invoice.update({
-    where: { id: invoiceId },
+  const updated = await prisma.invoice.updateMany({
+    where: { id: invoiceId, ownerId, status: "VOID" },
     data: { status: "DRAFT", paymentDate: null }
   });
+  if (updated.count !== 1) throw new Error("Invoice status changed. Refresh the page and try again.");
 
   revalidatePath("/");
   revalidatePath("/invoices");
@@ -1678,17 +1685,20 @@ export async function deleteInvoiceAction(formData: FormData) {
     .map((line) => line.expenseItemId)
     .filter((id): id is string => Boolean(id));
 
-  await prisma.$transaction([
-    prisma.timeEntry.updateMany({
+  await prisma.$transaction(async (tx) => {
+    await tx.timeEntry.updateMany({
       where: { ownerId, id: { in: timeEntryIds }, invoiceId },
       data: { billingStatus: "UNBILLED", invoiceId: null }
-    }),
-    prisma.expenseItem.updateMany({
+    });
+    await tx.expenseItem.updateMany({
       where: { ownerId, id: { in: expenseItemIds }, invoiceId },
       data: { billingStatus: "UNBILLED", invoiceId: null }
-    }),
-    prisma.invoice.delete({ where: { id: invoiceId } })
-  ]);
+    });
+    const deleted = await tx.invoice.deleteMany({
+      where: { id: invoiceId, ownerId, status: invoice.status }
+    });
+    if (deleted.count !== 1) throw new Error("Invoice status changed. Refresh the page and try again.");
+  });
 
   revalidatePath("/");
   revalidatePath("/projects");
