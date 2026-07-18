@@ -21,7 +21,7 @@ export default async function PublicInvoicePage({ params }: { params: Promise<{ 
     where: {
       publicToken: token,
       publicTokenEnabled: true,
-      status: { in: ["SENT", "PAID"] }
+      status: { not: "VOID" }
     },
     include: {
       project: { select: { title: true } },

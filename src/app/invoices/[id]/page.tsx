@@ -21,6 +21,7 @@ import { SubmitButton } from "@/components/SubmitButton";
 import { requireUserId } from "@/lib/auth";
 import { createBusinessLogoSignedUrl } from "@/lib/business-logos";
 import { invoiceBusinessDetails, invoiceClientDetails } from "@/lib/invoice-data";
+import { canShareInvoicePublicly } from "@/lib/invoice-sharing";
 import { prisma } from "@/lib/prisma";
 import { formatMoney } from "@/lib/money";
 import { formatHours, labourTotalCents } from "@/lib/time";
@@ -58,7 +59,7 @@ export default async function InvoiceDetailPage({ params }: { params: Promise<{ 
     : "";
   const publicInvoicePath = invoice.publicToken ? `/public/invoices/${invoice.publicToken}` : null;
   const publicInvoiceUrl = invoice.publicTokenEnabled && publicInvoicePath ? absoluteAppUrl(publicInvoicePath) : null;
-  const canSharePublicLink = invoice.status === "SENT" || invoice.status === "PAID";
+  const canSharePublicLink = canShareInvoicePublicly(invoice.status);
   const employeeLabour = invoice.lineItems.filter((line) => line.type === "LABOUR" && line.teamMemberId);
   const ownerLabour = invoice.lineItems.filter((line) => line.type === "LABOUR" && !line.teamMemberId);
   const ownerHours = ownerLabour.reduce((sum, line) => sum + (line.hoursMinutes || 0), 0);
@@ -184,7 +185,7 @@ export default async function InvoiceDetailPage({ params }: { params: Promise<{ 
                 </form>
               ) : (
                 <p className="rounded-lg border border-line bg-paper p-3 text-sm font-bold text-moss">
-                  Mark this invoice as sent before creating a client link.
+                  Void invoices cannot have an active client link.
                 </p>
               )}
               {invoice.publicTokenEnabled && !publicInvoiceUrl ? (

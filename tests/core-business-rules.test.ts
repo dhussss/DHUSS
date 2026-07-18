@@ -3,6 +3,7 @@ import test from "node:test";
 import { Prisma } from "@prisma/client";
 import { parseInputDate, todayInputValue } from "../src/lib/dates";
 import { nextInvoiceNumberFromExisting } from "../src/lib/invoice-numbers";
+import { canShareInvoicePublicly } from "../src/lib/invoice-sharing";
 import { invoiceTotals } from "../src/lib/invoices";
 import { dollarsToCents } from "../src/lib/money";
 import { labourTotalCents, parseClockTime } from "../src/lib/time";
@@ -59,6 +60,13 @@ test("public routes skip remote session lookups while protected routes do not", 
   assert.equal(canSkipSessionLookup("/login"), false);
   assert.equal(canSkipSessionLookup("/projects"), false);
   assert.equal(canSkipSessionLookup("/reset-password"), false);
+});
+
+test("draft invoices can be shared without changing delivery status", () => {
+  assert.equal(canShareInvoicePublicly("DRAFT"), true);
+  assert.equal(canShareInvoicePublicly("SENT"), true);
+  assert.equal(canShareInvoicePublicly("PAID"), true);
+  assert.equal(canShareInvoicePublicly("VOID"), false);
 });
 
 test("internal return paths cannot redirect to another origin", () => {

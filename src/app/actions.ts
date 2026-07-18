@@ -12,6 +12,7 @@ import { dollarsToCents } from "@/lib/money";
 import { addDays, endOfDay, parseInputDate, todayInPerth } from "@/lib/dates";
 import { expenseCategoryOptions, expenseStatusOptions } from "@/lib/expenses";
 import { nextInvoiceNumberFromExisting } from "@/lib/invoice-numbers";
+import { canShareInvoicePublicly } from "@/lib/invoice-sharing";
 import { buildInvoiceLineData, invoiceTotals, summaryText } from "@/lib/invoices";
 import { sendInvoiceMmsWithPdf, sendPreparedInvoiceEmailWithPdf } from "@/lib/invoice-delivery";
 import { isQuarterHour, isQuarterHourClock, parseClockTime } from "@/lib/time";
@@ -1581,7 +1582,7 @@ export async function markInvoiceUnsentAction(formData: FormData) {
   await prisma.$transaction(async (tx) => {
     const updated = await tx.invoice.updateMany({
       where: { id: invoiceId, ownerId, status: "SENT" },
-      data: { status: "DRAFT", paymentDate: null, publicTokenEnabled: false }
+      data: { status: "DRAFT", paymentDate: null }
     });
     if (updated.count !== 1) throw new Error("Invoice status changed. Refresh the page and try again.");
 
@@ -1709,8 +1710,7 @@ export async function deleteInvoiceAction(formData: FormData) {
 }
 
 function assertInvoiceCanBeShared(status: "DRAFT" | "SENT" | "PAID" | "VOID") {
-  if (status === "DRAFT") throw new Error("Mark the invoice as sent before creating a client link.");
-  if (status === "VOID") throw new Error("Void invoices cannot be shared.");
+  if (!canShareInvoicePublicly(status)) throw new Error("Void invoices cannot be shared.");
 }
 
 async function loadOwnedInvoiceForSharing(ownerId: string, invoiceId: string) {
