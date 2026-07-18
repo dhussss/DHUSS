@@ -9,25 +9,25 @@ const config: Config = {
   theme: {
     extend: {
       colors: {
-        ink: "#15181d",
-        paper: "#f6f4ee",
-        line: "#e5e1d5",
-        gum: "#b8442c",
+        ink: "#171a1d",
+        paper: "#f7f8f6",
+        line: "#dfe3de",
+        gum: "#c34432",
         mint: "rgb(var(--color-accent-rgb) / <alpha-value>)",
         moss: "rgb(var(--color-secondary-rgb) / <alpha-value>)",
-        yolk: "#a97a1d"
+        yolk: "#9d6b16"
       },
       boxShadow: {
-        soft: "0 1px 2px rgba(21, 24, 29, 0.04), 0 10px 28px -6px rgba(21, 24, 29, 0.09)",
-        lift: "0 2px 4px rgba(21, 24, 29, 0.05), 0 20px 44px -12px rgba(21, 24, 29, 0.16)",
-        crisp: "0 1px 1px rgba(21, 24, 29, 0.04)"
+        soft: "0 1px 2px rgba(23, 26, 29, 0.035), 0 8px 24px -16px rgba(23, 26, 29, 0.22)",
+        lift: "0 1px 3px rgba(23, 26, 29, 0.06), 0 22px 60px -24px rgba(23, 26, 29, 0.28)",
+        crisp: "0 1px 2px rgba(23, 26, 29, 0.045)"
       },
       borderRadius: {
-        xl: "0.875rem",
-        "2xl": "1.125rem"
+        xl: "0.5rem",
+        "2xl": "0.5rem"
       },
       fontWeight: {
-        black: "800"
+        black: "700"
       },
       letterSpacing: {
         tightest: "-0.045em"

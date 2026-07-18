@@ -92,7 +92,7 @@ export default async function InvoiceDetailPage({ params }: { params: Promise<{ 
       <div className="invoice-layout grid gap-5 xl:grid-cols-[minmax(0,210mm)_20rem] xl:items-start xl:justify-center">
         <InvoiceDocumentView invoice={invoice} business={business} client={client} logoUrl={logoUrl} showStatus />
 
-        <aside className="no-print grid h-fit gap-3">
+        <aside className="invoice-controls no-print grid h-fit gap-3">
           {employeeLabour.length ? (
             <section className="card border-mint/30 bg-mint/10">
               <p className="section-title">Labour and wages ledger</p>
@@ -119,10 +119,10 @@ export default async function InvoiceDetailPage({ params }: { params: Promise<{ 
             </section>
           ) : null}
 
-          <section className="card">
-            <p className="section-title">Send workflow</p>
+          <section className="invoice-primary-action">
+            <p className="section-title">Send invoice</p>
             <div className="mt-4 grid gap-2">
-              <p className="text-sm font-bold text-moss">Review the email first, then send the invoice PDF attachment.</p>
+              <p className="text-sm text-moss">Review the message and PDF before delivery.</p>
               <EmailInvoiceButton
                 invoiceId={invoice.id}
                 invoiceStatus={invoice.status}
@@ -130,15 +130,12 @@ export default async function InvoiceDetailPage({ params }: { params: Promise<{ 
                 disabledReason={emailDisabledReason}
                 smsDisabledReason={smsDisabledReason}
               />
-              <p className="rounded-lg border border-line bg-paper p-3 text-xs font-bold leading-5 text-moss">
-                Email sends through your configured SMTP account with a hidden confirmation copy to your email. SMS sends as MMS through Twilio with the invoice PDF attached.
-              </p>
             </div>
           </section>
 
-          <section className="card">
-            <p className="section-title">Client invoice link</p>
-            <div className="mt-4 grid gap-2">
+          <details className="invoice-control-group">
+            <summary><span>Client invoice link</span><span>{publicInvoiceUrl ? "Active" : "Not active"}</span></summary>
+            <div className="invoice-control-body grid gap-2">
               {publicInvoiceUrl ? (
                 <>
                   <p className="break-all rounded-lg border border-line bg-paper p-3 text-xs font-bold text-moss">{publicInvoiceUrl}</p>
@@ -196,11 +193,12 @@ export default async function InvoiceDetailPage({ params }: { params: Promise<{ 
                 </p>
               ) : null}
             </div>
-          </section>
+          </details>
 
-          <section className="grid gap-2">
-            <p className="section-title">Invoice status</p>
-            <p className="text-xs font-bold leading-5 text-moss">Use these controls for invoices delivered outside the app or when correcting their payment state.</p>
+          <details className="invoice-control-group">
+            <summary><span>Invoice status</span><span>{invoice.status.toLowerCase()}</span></summary>
+            <div className="invoice-control-body grid gap-2">
+            <p className="text-xs leading-5 text-moss">Correct delivery or payment state when needed.</p>
             <form action={markInvoiceSentAction}>
               <input type="hidden" name="invoiceId" value={invoice.id} />
               {finaliseWarnings.length ? <input type="hidden" name="confirmIncomplete" value="on" /> : null}
@@ -301,7 +299,8 @@ export default async function InvoiceDetailPage({ params }: { params: Promise<{ 
                 Delete Invoice
               </ConfirmSubmitButton>
             </form>
-          </section>
+            </div>
+          </details>
         </aside>
       </div>
     </main>

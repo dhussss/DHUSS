@@ -128,7 +128,7 @@ export function LogTimeSheet({
           }}
         >
           <div
-            className="w-full max-w-lg overflow-auto rounded-2xl border border-line bg-paper p-4 pb-[max(1rem,env(safe-area-inset-bottom))] text-ink shadow-lift"
+            className="w-full max-w-lg overflow-auto rounded-lg border border-line bg-paper p-4 pb-[max(1rem,env(safe-area-inset-bottom))] text-ink shadow-lift"
             style={{ maxHeight: "calc(100dvh - 1.5rem)" }}
             role="dialog"
             aria-modal="true"
@@ -137,7 +137,7 @@ export function LogTimeSheet({
             <div className="flex items-center justify-between gap-4">
               <div>
                 <p className="section-title">Quick entry</p>
-                <h2 id="log-work-title" className="text-2xl font-black text-ink">Log work</h2>
+                <h2 id="log-work-title" className="text-2xl font-semibold text-ink">Log work</h2>
               </div>
               <button
                 type="button"

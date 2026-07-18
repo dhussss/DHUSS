@@ -13,7 +13,7 @@ import { SubmitButton } from "@/components/SubmitButton";
 export const dynamic = "force-dynamic";
 
 type SearchParams = Record<string, string | string[] | undefined>;
-const filters = ["ALL", "DRAFT", "SENT", "PAID", "VOID"] as const;
+const filters = ["ALL", "DRAFT", "SENT", "OVERDUE", "PAID", "VOID"] as const;
 
 function statusParam(params: SearchParams | undefined) {
   const value = params?.status;
@@ -46,12 +46,12 @@ export default async function InvoicesPage({
         </Link>
       </header>
 
-      <nav className="mt-5 flex gap-2 overflow-x-auto pb-1" aria-label="Invoice filters">
+      <nav className="filter-tabs mt-5" aria-label="Invoice filters">
         {filters.map((filter) => (
           <Link
             key={filter}
             href={filter === "ALL" ? `/invoices${q ? `?q=${encodeURIComponent(q)}` : ""}` : `/invoices?status=${filter.toLowerCase()}${q ? `&q=${encodeURIComponent(q)}` : ""}`}
-            className={`status-pill shrink-0 ${filter === status ? "border-mint bg-mint text-white" : "border-line bg-white text-moss"}`}
+            className={filter === status ? "is-active" : ""}
           >
             {filter.toLowerCase()}
           </Link>
@@ -70,54 +70,21 @@ export default async function InvoicesPage({
         </button>
       </form>
 
-      <section className="mt-6 grid gap-3">
+      <section className="collection-panel mt-5">
         {invoices.map((invoice) => {
           const dueDate = invoice.dueDate;
           const overdue = invoice.status === "SENT" && dueDate && dueDate < today;
 
           return (
-          <article key={invoice.id} className={`card transition hover:border-mint ${overdue ? "border-gum/50 bg-gum/5" : ""}`}>
-            <div className="flex items-start justify-between gap-3">
-              <div>
-                <div className="flex flex-wrap items-center gap-2">
-                  <h2 className="text-xl font-black">{invoice.invoiceNumber}</h2>
-                  {overdue ? <span className="status-pill border-gum bg-gum/10 text-gum">overdue</span> : null}
-                </div>
-                <p className="mt-1 text-sm font-bold text-moss">
-                  {invoice.project.title} - {invoice.client.businessName}
-                </p>
-                  <p className="mt-1 text-xs font-semibold text-moss">{invoice.mode.toLowerCase()} invoice</p>
-              </div>
-              <InvoiceStatusPill status={invoice.status} />
+          <article key={invoice.id} className={`collection-row invoice-collection-row ${overdue ? "bg-gum/[0.025]" : ""}`}>
+            <div className="min-w-0">
+              <div className="flex items-center gap-2"><h2 className="collection-title">{invoice.invoiceNumber}</h2>{overdue ? <span className="status-pill border-gum/30 bg-gum/10 text-gum">Overdue</span> : null}</div>
+              <p className="collection-subtitle">{invoice.project.title} · {invoice.client.businessName}</p>
             </div>
-            <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-5">
-              <div>
-                <p className="text-xs font-semibold text-moss">Date range</p>
-                <p className="mt-1 text-sm font-bold">
-                  {formatDateAU(invoice.dateRangeStart)} - {formatDateAU(invoice.dateRangeEnd)}
-                </p>
-              </div>
-              <div>
-                <p className="text-xs font-semibold text-moss">Invoice date</p>
-                <p className="mt-1 text-sm font-bold">{formatDateAU(invoice.invoiceDate)}</p>
-              </div>
-              <div>
-                <p className="text-xs font-semibold text-moss">Due date</p>
-                <p className={`mt-1 text-sm font-bold ${overdue ? "text-gum" : ""}`}>{dueDate ? formatDateAU(dueDate) : "Not set"}</p>
-              </div>
-              <div>
-                <p className="text-xs font-semibold text-moss">Total</p>
-                <p className="mt-1 text-lg font-black">{formatMoney(invoice.grandTotalCents)}</p>
-              </div>
-              <div>
-                <p className="text-xs font-semibold text-moss">Hours</p>
-                <p className="mt-1 text-lg font-black">
-                  {invoice.totalDurationMinutes ? formatHours(invoice.totalDurationMinutes) : Number(invoice.totalHours)}h
-                </p>
-              </div>
-            </div>
-            {invoice.paymentDate ? <p className="mt-3 text-sm font-bold text-moss">Paid {formatDateAU(invoice.paymentDate)}</p> : null}
-            <div className="mt-4 flex flex-col gap-2 sm:flex-row">
+            <dl className="collection-meta"><dt>Due</dt><dd className={overdue ? "text-gum" : ""}>{dueDate ? formatDateAU(dueDate) : "Not set"}</dd></dl>
+            <dl className="collection-meta"><dt>Hours</dt><dd>{invoice.totalDurationMinutes ? formatHours(invoice.totalDurationMinutes) : Number(invoice.totalHours)}h</dd></dl>
+            <div><span className="collection-value">{formatMoney(invoice.grandTotalCents)}</span><div className="mt-1"><InvoiceStatusPill status={invoice.status} /></div></div>
+            <div className="collection-actions">
               <Link href={`/invoices/${invoice.id}`} className="tap-secondary flex-1">
                 <Eye size={18} aria-hidden="true" />
                 View
@@ -153,9 +120,7 @@ export default async function InvoicesPage({
           );
         })}
         {invoices.length === 0 ? (
-          <p className="rounded-lg border border-line bg-white p-4 text-sm font-bold text-moss">
-            No {status === "ALL" ? "" : status.toLowerCase()} invoices yet.
-          </p>
+          <div className="empty-collection">No {status === "ALL" ? "" : status.toLowerCase()} invoices yet.</div>
         ) : null}
       </section>
     </main>

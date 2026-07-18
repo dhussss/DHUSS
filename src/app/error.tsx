@@ -7,10 +7,10 @@ export default function ErrorPage({ error, reset }: { error: Error & { digest?: 
   return (
     <main className="page-shell items-center justify-center">
       <section className="surface-panel w-full max-w-lg p-6 text-center sm:p-8">
-        <span className="mx-auto grid size-12 place-items-center rounded-xl bg-gum/10 text-gum">
+        <span className="mx-auto grid size-12 place-items-center rounded-lg bg-gum/10 text-gum">
           <AlertTriangle size={24} aria-hidden="true" />
         </span>
-        <h1 className="mt-4 text-2xl font-black text-ink">Something did not load</h1>
+        <h1 className="mt-4 text-2xl font-semibold text-ink">Something did not load</h1>
         <p className="mt-2 text-sm font-medium leading-6 text-moss">
           Your data has not been removed. Check your connection and try again.
         </p>

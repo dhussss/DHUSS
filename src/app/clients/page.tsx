@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { CheckCircle2, Eye, Mail, Phone, Plus, Search, Trash2, UsersRound } from "lucide-react";
+import { CheckCircle2, Eye, Plus, Search, Trash2, UsersRound } from "lucide-react";
 import { deleteClientAction } from "@/app/actions";
 import { requireUserId } from "@/lib/auth";
 import { getClientsPageData } from "@/lib/app-data";
@@ -54,32 +54,15 @@ export default async function ClientsPage({
         </div>
       ) : null}
 
-      <section className="mt-5 grid gap-3">
+      <section className="collection-panel mt-5">
         {clients.length ? (
           clients.map((client) => {
             return (
-              <article key={client.id} className="rounded-2xl border border-line bg-white p-4 shadow-soft transition hover:border-mint/40 sm:p-5">
-                <div className="grid gap-4 md:grid-cols-[minmax(0,1fr)_auto] md:items-center">
-                  <div className="min-w-0">
-                    <h2 className="text-xl font-black text-ink">{client.businessName}</h2>
-                    {client.contactName ? <p className="mt-1 text-sm font-semibold text-moss">{client.contactName}</p> : null}
-                    <div className="mt-3 flex flex-col gap-1 text-sm font-medium text-moss sm:flex-row sm:flex-wrap sm:gap-x-4">
-                      {client.email ? (
-                        <span className="inline-flex min-w-0 items-center gap-2">
-                          <Mail size={15} aria-hidden="true" />
-                          <span className="break-all">{client.email}</span>
-                        </span>
-                      ) : null}
-                      {client.phone ? (
-                        <span className="inline-flex items-center gap-2">
-                          <Phone size={15} aria-hidden="true" />
-                          {client.phone}
-                        </span>
-                      ) : null}
-                      {!client.email && !client.phone ? <span>No contact details recorded</span> : null}
-                    </div>
-                  </div>
-                  <div className="grid gap-2 sm:grid-cols-2 md:min-w-48">
+              <article key={client.id} className="collection-row client-collection-row">
+                  <div className="min-w-0"><h2 className="collection-title">{client.businessName}</h2><p className="collection-subtitle">{client.contactName || "No contact name"}</p></div>
+                  <dl className="collection-meta"><dt>Email</dt><dd>{client.email || "Not recorded"}</dd></dl>
+                  <dl className="collection-meta"><dt>Phone</dt><dd>{client.phone || "Not recorded"}</dd></dl>
+                  <div className="collection-actions">
                     <Link href={`/clients/${client.id}`} className="tap-secondary w-full">
                       <Eye size={18} aria-hidden="true" />
                       View
@@ -97,12 +80,11 @@ export default async function ClientsPage({
                       </ConfirmSubmitButton>
                     </form>
                   </div>
-                </div>
               </article>
             );
           })
         ) : (
-          <article className="card text-sm font-bold text-moss">No clients found.</article>
+          <div className="empty-collection"><UsersRound size={18} aria-hidden="true" />No clients found.</div>
         )}
       </section>
     </main>

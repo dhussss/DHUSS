@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { ReceiptText } from "lucide-react";
+import { ArrowRight } from "lucide-react";
 import { useEffect, useRef } from "react";
 import { formatMoney } from "@/lib/money";
 import { formatHours } from "@/lib/time";
@@ -42,13 +42,12 @@ export function WeeklyPerformanceChart({
     <section>
       <div
         ref={scrollContainerRef}
-        className="snap-x snap-mandatory overflow-x-auto md:snap-none"
+        className="week-scroll snap-x snap-mandatory overflow-x-auto xl:snap-none"
         role="region"
         aria-label="Current week, scroll horizontally to view each day"
         tabIndex={0}
       >
-        <div className="min-w-[70rem]">
-          <div className="grid grid-cols-7 divide-x divide-line">
+        <div className="week-days">
             {days.map((day) => {
               const projectChips = day.projects.slice(0, 2);
               const extraProjectCount = Math.max(day.projects.length - projectChips.length, 0);
@@ -58,57 +57,53 @@ export function WeeklyPerformanceChart({
                 <article
                   key={day.date}
                   ref={day.isToday ? todayCardRef : undefined}
-                  className={`flex min-h-56 snap-center flex-col p-5 ${day.isToday ? "bg-mint/[0.08] shadow-[inset_0_3px_0_rgb(var(--color-accent-rgb))]" : "bg-white"}`}
+                  className={`week-day snap-center ${day.isToday ? "is-today" : ""}`}
                 >
-                  <div className="min-h-16 border-b border-line/70 pb-3">
-                    <div className="flex flex-wrap items-center justify-between gap-2">
-                      <p className="text-sm font-bold text-ink">{day.dayShort}</p>
-                      {day.isToday ? <span className="rounded-md bg-mint px-2 py-1 text-[0.65rem] font-black uppercase leading-none text-white">Today</span> : null}
-                    </div>
-                    <p className="mt-1 text-sm font-medium text-moss">{day.dateLabel}</p>
+                  <div className="week-day-heading">
+                    <p>{day.dayShort} <span>{day.dateLabel}</span></p>
+                    {day.isToday ? <span>Today</span> : null}
                   </div>
 
                   {day.totalMinutes ? (
                     <>
-                      <p className="mt-4 text-2xl font-black text-ink">{formatHours(day.totalMinutes)}h</p>
-                      <p className="mt-1 text-sm font-medium text-moss">{formatMoney(day.billableValueCents)}</p>
-                      <div className="mt-4 h-1 overflow-hidden rounded-full bg-paper" aria-label={`${day.dayName}: ${formatHours(day.totalMinutes)} hours`}>
-                        <div className="h-full rounded-full bg-mint" style={{ width: `${progress}%` }} />
+                      <p className="week-day-hours">{formatHours(day.totalMinutes)}h</p>
+                      <p className="week-day-value">{formatMoney(day.billableValueCents)} billable</p>
+                      <div className="week-day-progress" aria-label={`${day.dayName}: ${formatHours(day.totalMinutes)} hours`}>
+                        <div style={{ width: `${progress}%` }} />
                       </div>
                     </>
-                  ) : null}
+                  ) : <><p className="week-day-hours is-empty">0h</p><p className="week-day-value">No work logged</p><div className="week-day-progress"><div style={{ width: "0%" }} /></div></>}
 
-                  <div className="mt-4 flex flex-wrap gap-1.5">
+                  <div className="week-projects">
                     {projectChips.length ? (
                       <>
                         {projectChips.map((project) => (
-                          <span key={project} className="max-w-full break-words rounded-md border border-line/80 bg-paper/70 px-2 py-1 text-xs font-semibold leading-4 text-moss">
+                          <span key={project}>
                             {project}
                           </span>
                         ))}
-                        {extraProjectCount ? <span className="rounded-md border border-line/80 bg-paper/70 px-2 py-1 text-xs font-bold leading-4 text-moss">+{extraProjectCount} more</span> : null}
+                        {extraProjectCount ? <span>+{extraProjectCount} more</span> : null}
                       </>
                     ) : (
-                      <span className="text-sm font-medium text-moss/75">No work logged</span>
+                      <span className="empty-project">No project</span>
                     )}
                   </div>
+                  <p className="week-entry-count">{day.entryCount} {day.entryCount === 1 ? "entry" : "entries"}</p>
                 </article>
               );
             })}
-          </div>
         </div>
       </div>
 
       {!hasEntries ? (
-        <div className="border-t border-line/80 bg-mint/10 p-4 sm:p-5">
+        <div className="week-empty-state">
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div>
-              <p className="font-black text-ink">No hours logged this week yet</p>
-              <p className="mt-1 text-sm font-bold text-moss">The chart will fill from Monday through Sunday as work is logged.</p>
+              <p className="font-semibold text-ink">No hours logged this week yet</p>
+              <p className="mt-1 text-sm text-moss">Choose a project and add your first entry.</p>
             </div>
             <Link href="/projects" className="tap-secondary bg-white">
-              <ReceiptText size={18} aria-hidden="true" />
-              Choose Project
+              Choose project <ArrowRight size={16} aria-hidden="true" />
             </Link>
           </div>
         </div>

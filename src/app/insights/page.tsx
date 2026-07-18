@@ -37,17 +37,16 @@ export default async function InsightsPage() {
         </Link>
       </div>
 
-      <section className="overflow-hidden rounded-2xl border border-line bg-white shadow-soft">
-        <div className="command-hero-bg relative overflow-hidden p-5 sm:p-6 lg:p-7">
-          <div className="pointer-events-none absolute -right-16 -top-24 size-72 rounded-full bg-white/[0.05] blur-3xl" aria-hidden="true" />
-          <div className="relative grid gap-5 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-end">
+      <section className="insights-summary">
+        <div className="insights-header">
+          <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-end">
             <div>
-              <p className="inline-flex items-center gap-2 text-sm font-bold text-white/70">
+              <p className="inline-flex items-center gap-2 text-sm font-semibold text-mint">
                 <BarChart3 size={17} aria-hidden="true" />
                 Insights
               </p>
-              <h1 className="mt-2 text-4xl font-black text-white sm:text-5xl">Business tracking</h1>
-              <p className="mt-3 max-w-2xl text-sm font-medium leading-6 text-white/65">
+              <h1 className="mt-2 text-4xl font-semibold text-ink">Business tracking</h1>
+              <p className="mt-2 max-w-2xl text-sm leading-6 text-moss">
                 Clear workload, invoice, and financial-year signals based on your logged data.
               </p>
             </div>
@@ -202,21 +201,21 @@ export default async function InsightsPage() {
 
 function HeroMetric({ label, value }: { label: string; value: string }) {
   return (
-    <div className="rounded-xl border border-white/12 bg-white/[0.06] p-4">
-      <p className="text-xs font-bold text-white/60">{label}</p>
-      <p className="mt-2 text-2xl font-black tabular-nums text-white sm:text-3xl">{value}</p>
+    <div className="insights-hero-metric">
+      <p>{label}</p>
+      <strong>{value}</strong>
     </div>
   );
 }
 
 function Panel({ title, icon: Icon, children }: { title: string; icon: LucideIcon; children: ReactNode }) {
   return (
-    <section className="rounded-2xl border border-line bg-white shadow-soft">
-      <div className="flex items-center gap-3 border-b border-line p-4">
+    <section className="insights-panel">
+      <div className="insights-panel-header">
         <span className="icon-tile">
           <Icon size={20} aria-hidden="true" />
         </span>
-        <h2 className="text-2xl font-black">{title}</h2>
+        <h2>{title}</h2>
       </div>
       <div className="grid gap-4 p-4">{children}</div>
     </section>
@@ -240,12 +239,12 @@ function StatTile({
 }) {
   const toneClass = tone === "gum" ? "text-gum" : tone === "mint" ? "text-mint" : tone === "yolk" ? "text-yolk" : "text-ink";
   return (
-    <div className={`rounded-lg border border-line bg-paper/55 ${compact ? "p-3" : "p-4"}`}>
+    <div className={`insight-stat ${compact ? "is-compact" : ""}`}>
       <div className="flex items-center justify-between gap-2">
-        <p className="text-xs font-bold text-moss">{label}</p>
+        <p className="text-xs font-medium text-moss">{label}</p>
         {Icon ? <Icon size={16} className="text-moss" aria-hidden="true" /> : null}
       </div>
-      <p className={`mt-1.5 font-black tabular-nums ${toneClass} ${compact ? "text-lg" : "text-2xl"}`}>{value}</p>
+      <p className={`mt-1.5 font-semibold tabular-nums ${toneClass} ${compact ? "text-lg" : "text-2xl"}`}>{value}</p>
       {hint ? <p className="mt-0.5 text-xs font-semibold text-moss">{hint}</p> : null}
     </div>
   );
@@ -253,9 +252,9 @@ function StatTile({
 
 function InsightRow({ label, value }: { label: string; value: string }) {
   return (
-    <div className="flex flex-col gap-1 rounded-lg border border-line bg-paper/55 p-3 sm:flex-row sm:items-center sm:justify-between">
-      <span className="text-sm font-bold text-moss">{label}</span>
-      <span className="font-black text-ink">{value}</span>
+    <div className="insight-row">
+      <span>{label}</span>
+      <strong>{value}</strong>
     </div>
   );
 }

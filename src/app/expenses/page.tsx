@@ -58,7 +58,7 @@ export default async function ExpensesPage({
         </div>
       ) : null}
 
-      <section className="mt-5 grid gap-3 md:grid-cols-3">
+      <section className="expense-summary-strip mt-5">
         <SummaryTile label="This month" value={formatMoney(monthTotal)} />
         <SummaryTile label="Financial year" value={formatMoney(fyTotal)} />
         <SummaryTile label="GST estimate" value={formatMoney(gstTotal)} />
@@ -78,17 +78,17 @@ export default async function ExpensesPage({
           <WorkExpenseForm action={createWorkExpenseAction} projects={projects} returnTo="/expenses?saved=expense-created" submitLabel="Add Expense" />
         </div>
 
-        <section className="surface-panel">
+        <section className="surface-panel expense-register">
           <div className="surface-header">
             <p className="section-title">Register</p>
             <h2 className="mt-1 text-2xl font-black">Logged expenses</h2>
           </div>
-          <div className="grid gap-3 p-3">
+          <div>
             {expenses.length ? (
               expenses.map((expense) => {
                 const wageLinked = Boolean(expense.wagePayment);
                 return (
-                <article key={expense.id} className={`rounded-2xl border bg-white p-4 shadow-soft ${expense.archivedAt ? "border-line opacity-70" : "border-line"}`}>
+                <article key={expense.id} className={`expense-row ${expense.archivedAt ? "opacity-70" : ""}`}>
                   <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                     <div>
                       <div className="flex flex-wrap items-center gap-2">
@@ -180,9 +180,9 @@ export default async function ExpensesPage({
 
 function SummaryTile({ label, value }: { label: string; value: string }) {
   return (
-    <article className="card">
-      <p className="text-sm font-semibold text-moss">{label}</p>
-      <p className="mt-3 text-3xl font-black text-ink">{value}</p>
+    <article>
+      <p>{label}</p>
+      <strong>{value}</strong>
     </article>
   );
 }

@@ -23,7 +23,7 @@ export function BuildIndicator() {
   const version = buildVersion();
 
   return (
-    <div className="pointer-events-none fixed right-2 top-[4.45rem] z-30 rounded-full border border-line/80 bg-white/90 px-2.5 py-1 text-[0.64rem] font-bold text-moss shadow-sm backdrop-blur md:bottom-2 md:right-3 md:top-auto">
+    <div className="pointer-events-none fixed bottom-2 right-3 z-30 hidden rounded-full border border-line/80 bg-white/90 px-2.5 py-1 text-[0.64rem] font-semibold text-moss shadow-sm backdrop-blur sm:block">
       {channel} v{version}
     </div>
   );

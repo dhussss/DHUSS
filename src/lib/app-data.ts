@@ -708,11 +708,15 @@ export const getClientsPageData = unstable_cache(
 );
 
 export const getInvoicesPageData = unstable_cache(
-  async (ownerId: string, status: "ALL" | "DRAFT" | "SENT" | "PAID" | "VOID" = "ALL", q = "") =>
+  async (ownerId: string, status: "ALL" | "DRAFT" | "SENT" | "OVERDUE" | "PAID" | "VOID" = "ALL", q = "") =>
     prisma.invoice.findMany({
       where: {
         ownerId,
-        ...(status === "ALL" ? {} : { status }),
+        ...(status === "ALL"
+          ? {}
+          : status === "OVERDUE"
+            ? { status: "SENT", dueDate: { lt: todayInPerth() } }
+            : { status }),
         ...(q
           ? {
               OR: [

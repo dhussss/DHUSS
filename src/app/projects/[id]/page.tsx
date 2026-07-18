@@ -234,8 +234,8 @@ export default async function ProjectDetailPage({
         </section>
       ) : null}
 
-      <header className="overflow-hidden rounded-2xl border border-line bg-white shadow-soft">
-        <div className="grid gap-5 p-5 sm:p-6 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-end">
+      <header className="project-detail-header">
+        <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-end">
           <div>
             <div className="flex flex-wrap items-center gap-2">
               <p className="section-title">Project command</p>
@@ -246,7 +246,7 @@ export default async function ProjectDetailPage({
                 <span className="status-pill border-line bg-paper text-moss">all caught up</span>
               )}
             </div>
-            <h1 className="mt-3 text-4xl font-black">{project.title}</h1>
+            <h1 className="mt-3 text-4xl font-semibold">{project.title}</h1>
             <p className="mt-2 text-base font-semibold text-moss">{project.client.businessName}</p>
             {project.notes ? <p className="mt-4 max-w-3xl text-sm font-medium leading-6 text-moss">{project.notes}</p> : null}
           </div>
@@ -285,7 +285,7 @@ export default async function ProjectDetailPage({
         </div>
       </header>
 
-      <section className={`mt-4 overflow-hidden rounded-2xl border bg-white shadow-soft ${hasUnbilledWork ? "border-mint/35" : "border-line"}`}>
+      <section className={`project-unbilled-panel mt-4 ${hasUnbilledWork ? "has-work" : ""}`}>
         <div className="grid gap-5 p-5 sm:p-6 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-center">
           <div>
             <div className="flex items-center gap-2">
@@ -296,7 +296,7 @@ export default async function ProjectDetailPage({
               )}
               <p className={`text-sm font-bold ${hasUnbilledWork ? "text-mint" : "text-moss"}`}>Unbilled work</p>
             </div>
-            <h2 className="mt-3 text-4xl font-black text-ink sm:text-5xl">
+            <h2 className="mt-3 text-4xl font-semibold text-ink">
               {hasUnbilledWork ? formatMoney(unbilledTotalCents) : "All caught up"}
             </h2>
             <p className="mt-2 text-sm font-medium leading-6 text-moss">
@@ -312,7 +312,7 @@ export default async function ProjectDetailPage({
             </Link>
           ) : null}
         </div>
-        <div className="grid gap-3 border-t border-line bg-paper/40 p-4 sm:grid-cols-2 xl:grid-cols-4">
+        <div className="project-unbilled-stats">
           <UnbilledStat label="Hours" value={`${formatHours(unbilledMinutes)}h`} dark={hasUnbilledWork} />
           <UnbilledStat label="Labour" value={formatMoney(unbilledTimeValueCents)} dark={hasUnbilledWork} />
           <UnbilledStat label="Expenses" value={formatMoney(unbilledExpenseValueCents)} dark={hasUnbilledWork} />
@@ -333,11 +333,10 @@ export default async function ProjectDetailPage({
         ) : null}
       </section>
 
-      <section className="mt-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+      <section className="project-metrics-strip mt-5">
         <ProjectMetric label="Current rate" value={`${formatMoney(project.currentHourlyRateCents)}/h`} icon={Banknote} />
         <ProjectMetric label="Logged entries" value={String(project.timeEntries.length)} icon={Clock3} />
         <ProjectMetric label="Invoices" value={String(activeInvoiceCount)} icon={FileText} />
-        <ProjectMetric label="Unbilled total" value={formatMoney(unbilledTotalCents)} icon={ReceiptText} highlight={hasUnbilledWork} />
       </section>
 
       <MonthlyActivityCalendar
@@ -630,23 +629,23 @@ function ProjectMetric({
   highlight?: boolean;
 }) {
   return (
-    <article className={`card min-h-32 ${highlight ? "border-mint/30 bg-mint/10" : ""}`}>
+    <article className={`project-metric ${highlight ? "is-highlighted" : ""}`}>
       <div className="flex items-start justify-between gap-3">
-        <p className="text-sm font-bold text-moss">{label}</p>
-        <span className={`grid size-10 place-items-center rounded-[10px] ${highlight ? "bg-white text-mint" : "bg-paper text-moss"}`}>
+        <p className="text-sm font-medium text-moss">{label}</p>
+        <span className={highlight ? "text-mint" : "text-moss"}>
           <Icon size={20} aria-hidden="true" />
         </span>
       </div>
-      <p className="mt-5 text-2xl font-black text-ink">{value}</p>
+      <p className="mt-4 text-2xl font-semibold text-ink">{value}</p>
     </article>
   );
 }
 
 function UnbilledStat({ label, value, dark }: { label: string; value: string; dark: boolean }) {
   return (
-    <div className={`rounded-[10px] border bg-white p-4 ${dark ? "border-mint/25" : "border-line"}`}>
-      <p className="text-xs font-bold text-moss">{label}</p>
-      <p className="mt-2 text-2xl font-black text-ink">{value}</p>
+    <div className={dark ? "is-active" : ""}>
+      <p>{label}</p>
+      <strong>{value}</strong>
     </div>
   );
 }

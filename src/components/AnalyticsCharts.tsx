@@ -234,12 +234,12 @@ export function InsightCards({ cards }: { cards: InsightCard[] }) {
   };
 
   return (
-    <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-5">
+    <div className="insight-card-strip">
       {cards.map((card) => (
-        <article key={card.title} className={`rounded-lg border p-4 shadow-soft ${tones[card.tone]}`}>
-          <p className="text-xs font-black uppercase tracking-[0.12em] text-moss">{card.title}</p>
-          <p className="mt-3 text-3xl font-black text-ink">{card.value}</p>
-          <p className="mt-2 text-sm font-bold leading-6 text-moss">{card.body}</p>
+        <article key={card.title} className={`insight-card ${tones[card.tone]}`}>
+          <p className="text-xs font-semibold text-moss">{card.title}</p>
+          <p className="mt-2 text-2xl font-semibold text-ink">{card.value}</p>
+          <p className="mt-1 text-xs leading-5 text-moss">{card.body}</p>
         </article>
       ))}
     </div>
