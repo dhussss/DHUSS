@@ -14,6 +14,7 @@ import { safeInternalPath } from "../src/lib/navigation";
 import { absoluteAppUrl, resolveAppBaseUrl } from "../src/lib/app-url";
 import { outboundDeliveryAllowed } from "../src/lib/delivery-policy";
 import { invoiceSenderDisplayName } from "../src/lib/platform";
+import { tutorialByKey, tutorialCategories, tutorials } from "../src/lib/tutorials";
 
 test("currency input is converted to integer cents without silent truncation", () => {
   assert.equal(dollarsToCents("$1,234.50"), 123450);
@@ -96,6 +97,16 @@ test("internal return paths cannot redirect to another origin", () => {
   assert.equal(safeInternalPath("/\\malicious.example/path"), "/");
   assert.equal(safeInternalPath("https://malicious.example/path"), "/");
   assert.equal(safeInternalPath(null, "/onboarding"), "/onboarding");
+});
+
+test("tutorial catalogue has stable unique keys and complete learning content", () => {
+  assert.equal(new Set(tutorials.map((tutorial) => tutorial.key)).size, tutorials.length);
+  assert.ok(tutorials.length >= 15);
+  assert.ok(tutorials.every((tutorial) => tutorialCategories.includes(tutorial.category)));
+  assert.ok(tutorials.every((tutorial) => tutorial.steps.length >= 3));
+  assert.ok(tutorials.every((tutorial) => tutorial.demoFrames.length >= 3));
+  assert.equal(tutorialByKey("workflow-overview")?.category, "Getting Started");
+  assert.equal(tutorialByKey("team-setup")?.employersOnly, true);
 });
 
 test("today defaults to the Australia/Perth calendar date", () => {

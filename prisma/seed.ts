@@ -13,6 +13,7 @@ async function main() {
     throw new Error("Seed aborted. The destructive demo seed cannot run in the production Vercel environment.");
   }
 
+  await prisma.tutorialProgress.deleteMany();
   await prisma.invoiceLineItem.deleteMany();
   await prisma.timeEntry.deleteMany();
   await prisma.expenseItem.deleteMany();

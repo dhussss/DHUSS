@@ -1,6 +1,7 @@
 import { requireUserId } from "@/lib/auth";
 import { getHoursExportData } from "@/lib/app-data";
 import { HoursExportClient } from "@/components/HoursExportClient";
+import { LearnHowLink } from "@/components/LearnHowLink";
 
 export const dynamic = "force-dynamic";
 
@@ -25,6 +26,8 @@ export default async function HoursExportPage({
       <header className="page-header">
         <p className="section-title">Hours Export</p>
         <h1 className="page-title">Text report generator</h1>
+        <p className="page-subtitle">Prepare a project and date-range report for payroll, client records or your accountant.</p>
+        <LearnHowLink tutorialKey="exporting-hours" className="mt-2">Learn how Hours Export works</LearnHowLink>
       </header>
 
       <section className="mt-6 max-w-3xl">

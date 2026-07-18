@@ -13,7 +13,7 @@ export async function GET() {
   if (!user) return NextResponse.json({ error: "Authentication required." }, { status: 401 });
 
   const ownerId = user.id;
-  const [profile, clients, projects, timeEntries, expenseItems, workExpenses, invoices, teamMembers, teamInvitations, wagePayments, dayOffLogs] = await Promise.all([
+  const [profile, clients, projects, timeEntries, expenseItems, workExpenses, invoices, teamMembers, teamInvitations, wagePayments, dayOffLogs, tutorialProgress] = await Promise.all([
     prisma.businessProfile.findUnique({ where: { ownerId } }),
     prisma.client.findMany({ where: { ownerId }, orderBy: { createdAt: "asc" } }),
     prisma.project.findMany({ where: { ownerId }, include: { rateHistory: { orderBy: { startsAt: "asc" } } }, orderBy: { createdAt: "asc" } }),
@@ -24,16 +24,17 @@ export async function GET() {
     prisma.teamMember.findMany({ where: { ownerId }, include: { assignments: { orderBy: { createdAt: "asc" } } }, orderBy: { createdAt: "asc" } }),
     prisma.teamInvitation.findMany({ where: { ownerId }, orderBy: { createdAt: "asc" } }),
     prisma.wagePayment.findMany({ where: { ownerId }, orderBy: { paidAt: "asc" } }),
-    prisma.dayOffLog.findMany({ where: { ownerId }, orderBy: { date: "asc" } })
+    prisma.dayOffLog.findMany({ where: { ownerId }, orderBy: { date: "asc" } }),
+    prisma.tutorialProgress.findMany({ where: { ownerId }, orderBy: { updatedAt: "asc" } })
   ]);
 
   const body = JSON.stringify({
     format: "trade-business-export",
-    version: 1,
+    version: 2,
     product: platform.name,
     exportedAt: new Date().toISOString(),
     accountEmail: user.email ?? null,
-    data: { profile, clients, projects, timeEntries, expenseItems, workExpenses, invoices, teamMembers, teamInvitations, wagePayments, dayOffLogs }
+    data: { profile, clients, projects, timeEntries, expenseItems, workExpenses, invoices, teamMembers, teamInvitations, wagePayments, dayOffLogs, tutorialProgress }
   }, (key, value) => excludedKeys.has(key) ? undefined : value, 2);
 
   const date = new Date().toISOString().slice(0, 10);

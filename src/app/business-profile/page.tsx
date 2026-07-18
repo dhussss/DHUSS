@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { createClient } from "@/lib/supabase/server";
 import { centsToDollars } from "@/lib/money";
 import { BusinessProfileForm } from "@/components/BusinessProfileForm";
+import { LearnHowLink } from "@/components/LearnHowLink";
 
 export const dynamic = "force-dynamic";
 
@@ -30,6 +31,7 @@ export default async function BusinessProfilePage({
         <p className="page-subtitle">
           These details are private to your account and will be used for your invoices.
         </p>
+        <LearnHowLink tutorialKey="business-profile" className="mt-2">Learn what these settings control</LearnHowLink>
       </header>
 
       <section className="mt-6 max-w-4xl">

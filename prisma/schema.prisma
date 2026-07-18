@@ -514,3 +514,17 @@ model BusinessProfile {
 
   @@index([ownerId])
 }
+
+model TutorialProgress {
+  id           String   @id @default(cuid())
+  ownerId      String
+  tutorialKey  String
+  status       String   @default("IN_PROGRESS")
+  currentStep  Int      @default(0)
+  startedAt    DateTime @default(now())
+  completedAt  DateTime?
+  updatedAt    DateTime @updatedAt
+
+  @@unique([ownerId, tutorialKey])
+  @@index([ownerId, status])
+}

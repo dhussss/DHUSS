@@ -142,10 +142,27 @@ export async function finishOnboardingAction() {
     redirect("/onboarding/progress");
   }
 
-  await prisma.businessProfile.update({
-    where: { ownerId },
-    data: { onboardingCompletedAt: new Date() }
-  });
+  await prisma.$transaction([
+    prisma.businessProfile.update({
+      where: { ownerId },
+      data: { onboardingCompletedAt: new Date() }
+    }),
+    prisma.tutorialProgress.upsert({
+      where: { ownerId_tutorialKey: { ownerId, tutorialKey: "workflow-overview" } },
+      create: {
+        ownerId,
+        tutorialKey: "workflow-overview",
+        status: "COMPLETED",
+        currentStep: 3,
+        completedAt: new Date()
+      },
+      update: {
+        status: "COMPLETED",
+        currentStep: 3,
+        completedAt: new Date()
+      }
+    })
+  ]);
 
   revalidatePath("/");
   revalidatePath("/onboarding");

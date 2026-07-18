@@ -9,6 +9,7 @@ import { getInsightsData } from "@/lib/insights";
 import { formatMoney } from "@/lib/money";
 import { formatPercent } from "@/lib/planning";
 import { formatHours } from "@/lib/time";
+import { LearnHowLink } from "@/components/LearnHowLink";
 
 export const dynamic = "force-dynamic";
 
@@ -49,6 +50,7 @@ export default async function InsightsPage() {
               <p className="mt-2 max-w-2xl text-sm leading-6 text-moss">
                 Clear workload, invoice, and financial-year signals based on your logged data.
               </p>
+              <LearnHowLink tutorialKey="understanding-insights" className="mt-2">What do these insights mean?</LearnHowLink>
             </div>
             <div className="grid gap-2 sm:grid-cols-3 lg:w-[31rem]">
               <HeroMetric label="Week hours" value={`${formatHours(insights.currentWeek.totalMinutes)}h`} />

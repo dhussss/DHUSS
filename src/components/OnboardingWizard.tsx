@@ -4,6 +4,7 @@ import { useState } from "react";
 import {
   ArrowLeft,
   ArrowRight,
+  BarChart3,
   BriefcaseBusiness,
   Check,
   Clock3,
@@ -11,7 +12,8 @@ import {
   FolderKanban,
   ReceiptText,
   UserRound,
-  UsersRound
+  UsersRound,
+  WalletCards
 } from "lucide-react";
 import { saveOnboardingSetupAction } from "@/app/actions";
 import { SubmitButton } from "@/components/SubmitButton";
@@ -52,11 +54,32 @@ const workflowItems = [
     icon: Clock3
   },
   {
+    key: "expenses",
+    title: "Record expenses",
+    short: "Keep project and business costs traceable.",
+    detail: "Record what you paid, let the app calculate GST when applicable, and link the cost to a project when it belongs to a specific job.",
+    icon: ReceiptText
+  },
+  {
     key: "invoice",
-    title: "Invoice and follow up",
-    short: "Review, send, then mark payment.",
-    detail: "Create an invoice from the unbilled work, email its PDF, then track whether it is draft, awaiting payment or paid.",
+    title: "Create the invoice",
+    short: "Turn unbilled work into a reviewed draft.",
+    detail: "Choose a date range, import eligible hours and expenses, verify GST and totals, then inspect the generated PDF before sending anything.",
     icon: FileText
+  },
+  {
+    key: "payment",
+    title: "Track payment",
+    short: "Follow sent invoices through to paid.",
+    detail: "Invoice status drives outstanding and overdue totals. Mark payment only after confirming it, and use reversals when a status was entered incorrectly.",
+    icon: WalletCards
+  },
+  {
+    key: "insights",
+    title: "Review the business",
+    short: "Use your records to see trends and gaps.",
+    detail: "Insights combines time, invoices, payments, expenses and wages into workload and financial signals. Planning estimates are guidance, not tax advice.",
+    icon: BarChart3
   }
 ] as const;
 

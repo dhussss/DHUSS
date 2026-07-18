@@ -11,6 +11,7 @@ import { formatMoney } from "@/lib/money";
 import { prisma } from "@/lib/prisma";
 import { formatHours, labourTotalCents } from "@/lib/time";
 import { absoluteAppUrl } from "@/lib/app-url";
+import { LearnHowLink } from "@/components/LearnHowLink";
 
 export const dynamic = "force-dynamic";
 
@@ -41,6 +42,7 @@ export default async function TeamPage({ searchParams }: { searchParams?: Promis
         <p className="section-title">Team</p>
         <h1 className="page-title">Subcontractors</h1>
         <p className="page-subtitle">Invite your team, assign projects, and track billable labour and wages automatically.</p>
+        <LearnHowLink tutorialKey="team-setup" className="mt-2">Learn the team workflow</LearnHowLink>
       </header>
 
       {params?.archived ? (

@@ -8,6 +8,7 @@ import { invoiceTotals, timeEntryTotalCents, type InvoiceSourceExpense, type Inv
 import { formatMoney } from "@/lib/money";
 import { formatHours } from "@/lib/time";
 import { SubmitButton } from "@/components/SubmitButton";
+import { LearnHowLink } from "@/components/LearnHowLink";
 
 export const dynamic = "force-dynamic";
 
@@ -146,6 +147,7 @@ export default async function NewInvoicePage({
         <p className="section-title">New invoice</p>
         <h1 className="page-title">{onboarding ? "Create your first invoice draft" : "Create invoice draft"}</h1>
         {onboarding ? <p className="page-subtitle">Step 4 of 4. Review the work you just logged, then save a real draft. Nothing is sent to the client yet.</p> : null}
+        {!onboarding ? <LearnHowLink tutorialKey="creating-invoices" className="mt-2">Walk through invoice creation</LearnHowLink> : null}
       </header>
 
       <form className="card mt-5 grid gap-4" method="get">

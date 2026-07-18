@@ -9,6 +9,7 @@ import { formatHours } from "@/lib/time";
 import { ProjectStatusPill } from "@/components/StatusPill";
 import { LiveTeamRefresh } from "@/components/LiveTeamRefresh";
 import { prisma } from "@/lib/prisma";
+import { LearnHowLink } from "@/components/LearnHowLink";
 
 export const dynamic = "force-dynamic";
 
@@ -67,10 +68,7 @@ export default async function ProjectsPage({
           <p className="section-title">Projects</p>
           <h1 className="page-title">Active jobs</h1>
         </div>
-        <Link href="/projects/new" className="tap-primary">
-          <Plus size={20} aria-hidden="true" />
-          Add New Project
-        </Link>
+        <div className="flex flex-wrap items-center gap-3"><LearnHowLink tutorialKey="creating-projects">Learn how projects work</LearnHowLink><Link href="/projects/new" className="tap-primary"><Plus size={20} aria-hidden="true" />Add New Project</Link></div>
       </header>
 
       <form className="search-panel mt-5 flex items-center gap-2">
@@ -95,7 +93,8 @@ export default async function ProjectsPage({
             </Link>
           );
         })}
-        {!projects.length ? <div className="empty-collection">No active projects found.</div> : null}
+        {!projects.length && q ? <div className="empty-collection">No active projects match “{q}”.</div> : null}
+        {!projects.length && !q && !assignedRows.length ? <div className="grid justify-items-start gap-3 p-5 sm:p-6"><span className="icon-tile"><BriefcaseBusiness size={19} aria-hidden="true" /></span><div><h2 className="text-lg font-semibold text-ink">Projects keep each job together</h2><p className="mt-1 max-w-xl text-sm font-medium leading-6 text-moss">Create a project for a client to start logging hours, expenses, assigned workers and invoices in one traceable job file.</p></div><div className="flex flex-wrap gap-2"><Link href="/projects/new" className="tap-primary"><Plus size={17} aria-hidden="true" />Create a project</Link><LearnHowLink tutorialKey="creating-projects">Learn more</LearnHowLink></div></div> : null}
       </section>
 
       {assignedRows.length ? (

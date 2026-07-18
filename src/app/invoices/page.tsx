@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { Banknote, Eye, Mail, Plus, RotateCcw, Search } from "lucide-react";
+import { Banknote, Eye, FileText, Mail, Plus, RotateCcw, Search } from "lucide-react";
 import { markInvoicePaidAction, markInvoiceUnpaidAction } from "@/app/actions";
 import { requireUserId } from "@/lib/auth";
 import { getInvoicesPageData } from "@/lib/app-data";
@@ -9,6 +9,7 @@ import { formatHours } from "@/lib/time";
 import { ConfirmSubmitButton } from "@/components/ConfirmSubmitButton";
 import { InvoiceStatusPill } from "@/components/StatusPill";
 import { SubmitButton } from "@/components/SubmitButton";
+import { LearnHowLink } from "@/components/LearnHowLink";
 
 export const dynamic = "force-dynamic";
 
@@ -40,10 +41,7 @@ export default async function InvoicesPage({
           <p className="section-title">Invoices</p>
           <h1 className="page-title">Invoice history</h1>
         </div>
-        <Link href="/invoices/new" className="tap-primary">
-          <Plus size={20} aria-hidden="true" />
-          Create New Invoice
-        </Link>
+        <div className="flex flex-wrap items-center gap-3"><LearnHowLink tutorialKey="creating-invoices">Learn how invoices work</LearnHowLink><Link href="/invoices/new" className="tap-primary"><Plus size={20} aria-hidden="true" />Create New Invoice</Link></div>
       </header>
 
       <nav className="filter-tabs mt-5" aria-label="Invoice filters">
@@ -120,7 +118,9 @@ export default async function InvoicesPage({
           );
         })}
         {invoices.length === 0 ? (
-          <div className="empty-collection">No {status === "ALL" ? "" : status.toLowerCase()} invoices yet.</div>
+          status === "ALL" && !q ? (
+            <div className="grid justify-items-start gap-3 p-5 sm:p-6"><span className="icon-tile"><FileText size={19} aria-hidden="true" /></span><div><h2 className="text-lg font-semibold text-ink">Invoices turn recorded work into a payment request</h2><p className="mt-1 max-w-xl text-sm font-medium leading-6 text-moss">Log hours and expenses against a project first, then create a draft from everything still marked unbilled.</p></div><div className="flex flex-wrap gap-2"><Link href="/invoices/new" className="tap-primary"><Plus size={17} aria-hidden="true" />Create an invoice</Link><LearnHowLink tutorialKey="creating-invoices">See the workflow</LearnHowLink></div></div>
+          ) : <div className="empty-collection">No {status === "ALL" ? "" : status.toLowerCase()} invoices found.</div>
         ) : null}
       </section>
     </main>

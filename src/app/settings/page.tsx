@@ -1,6 +1,7 @@
 import { SettingsForm } from "@/components/SettingsForm";
 import { requireUserId } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { LearnHowLink } from "@/components/LearnHowLink";
 
 export const dynamic = "force-dynamic";
 
@@ -28,6 +29,7 @@ export default async function SettingsPage() {
         <p className="section-title">Settings</p>
         <h1 className="page-title">App preferences</h1>
         <p className="page-subtitle">Theme, tax planning, and super estimate settings live here. Business and invoice identity stays in Business Profile.</p>
+        <LearnHowLink tutorialKey="business-profile" className="mt-2">Learn where business and invoice settings live</LearnHowLink>
       </header>
 
       <section className="mt-6 max-w-4xl">

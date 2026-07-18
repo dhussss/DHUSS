@@ -64,6 +64,11 @@ button[aria-busy="true"]::before {
   to { transform: rotate(360deg); }
 }
 
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
 a:focus-visible,
 button:focus-visible {
   outline: 3px solid rgb(var(--color-accent-rgb) / 0.28);
@@ -131,6 +136,14 @@ label {
 }
 
 @layer components {
+  .filter-chip {
+    @apply inline-flex min-h-10 items-center justify-center rounded-lg border border-line bg-white px-3 text-xs font-semibold text-moss transition hover:border-mint/40 hover:text-ink;
+  }
+
+  .filter-chip.is-active {
+    @apply border-mint bg-mint/10 text-mint;
+  }
+
   .app-header {
     @apply sticky top-0 z-30 border-b border-line bg-white/95 backdrop-blur-xl;
   }

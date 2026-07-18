@@ -183,7 +183,24 @@ Test the production password-reset email and callback before inviting external t
 
 ### Onboarding
 
-New users select sole trader or team setup, save their business basics, then complete a real client -> project -> time -> invoice flow. Tutorials remain available under **More > Tutorials**.
+New users select sole trader or team setup, learn the complete client -> project -> hours -> expenses -> invoice -> payment -> insights lifecycle, save their business basics, then complete a real client -> project -> time -> invoice flow. Setup only finishes after the user creates those real records.
+
+The learning centre remains available under **More > Tutorials** and includes:
+
+- 18 reusable, role-aware tutorials organised by workflow
+- search by topic, feature, and real-world use case
+- completed, in-progress, and not-started filters
+- owner-scoped progress saved across devices
+- deep links such as `/tutorials?guide=logging-hours`
+- step-by-step walkthroughs with animated UI demonstrations and transcripts
+- keyboard controls, reduced-motion support, and mobile tutorial sheets
+- contextual **Learn how** links and educational empty states throughout the app
+
+Tutorial progress is introduced by migration `20260718000000_tutorial_progress`. Apply pending migrations before deploying this build:
+
+```bash
+pnpm run db:migrate
+```
 
 ### Clients and Projects
 

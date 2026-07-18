@@ -23,6 +23,7 @@ import { dateInputValue, formatDateAU, previousWeekMondayToSunday, todayInPerth 
 import { formatMoney } from "@/lib/money";
 import { calculateSetAsidePlanning } from "@/lib/planning";
 import { formatHours } from "@/lib/time";
+import { LearnHowLink } from "@/components/LearnHowLink";
 
 export const dynamic = "force-dynamic";
 
@@ -172,6 +173,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: Da
             <p className="text-sm font-semibold text-mint">Current week</p>
             <h2 id="week-title">Your week at a glance</h2>
             <p>{formatDateAU(dashboardData.currentWeekStart)} – {formatDateAU(dashboardData.currentWeekEnd)}</p>
+            <LearnHowLink tutorialKey="weekly-planner">Learn how to review your week</LearnHowLink>
           </div>
           <div className="week-totals">
             <span><strong>{formatHours(totalCurrentWeekMinutes)}h</strong><small>logged</small></span>

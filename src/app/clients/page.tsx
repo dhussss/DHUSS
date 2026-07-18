@@ -4,6 +4,7 @@ import { deleteClientAction } from "@/app/actions";
 import { requireUserId } from "@/lib/auth";
 import { getClientsPageData } from "@/lib/app-data";
 import { ConfirmSubmitButton } from "@/components/ConfirmSubmitButton";
+import { LearnHowLink } from "@/components/LearnHowLink";
 
 export const dynamic = "force-dynamic";
 
@@ -35,6 +36,7 @@ export default async function ClientsPage({
             Add Client
           </Link>
         </div>
+        <LearnHowLink tutorialKey="creating-clients">Learn how clients work</LearnHowLink>
       </header>
 
       <form className="search-panel mt-5 flex items-center gap-2">
@@ -84,7 +86,11 @@ export default async function ClientsPage({
             );
           })
         ) : (
-          <div className="empty-collection"><UsersRound size={18} aria-hidden="true" />No clients found.</div>
+          q ? <div className="empty-collection"><UsersRound size={18} aria-hidden="true" />No clients match “{q}”.</div> : <div className="grid justify-items-start gap-3 p-5 sm:p-6">
+            <span className="icon-tile"><UsersRound size={19} aria-hidden="true" /></span>
+            <div><h2 className="text-lg font-semibold text-ink">Clients are the businesses you work for</h2><p className="mt-1 max-w-xl text-sm font-medium leading-6 text-moss">Add a client before creating their projects or invoices. Their contact and billing details can be reused on every job.</p></div>
+            <div className="flex flex-wrap gap-2"><Link href="/clients/new" className="tap-primary"><Plus size={17} aria-hidden="true" />Add your first client</Link><LearnHowLink tutorialKey="creating-clients">Learn more</LearnHowLink></div>
+          </div>
         )}
       </section>
     </main>
