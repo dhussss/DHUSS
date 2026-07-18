@@ -11,6 +11,8 @@ import { formatDateAU } from "@/lib/dates";
 import { formatMoney } from "@/lib/money";
 import { InvoiceStatusPill } from "@/components/StatusPill";
 import { EmailComposer } from "@/components/EmailComposer";
+import { absoluteAppUrl } from "@/lib/app-url";
+import { invoiceSenderDisplayName } from "@/lib/platform";
 
 export const dynamic = "force-dynamic";
 
@@ -65,6 +67,7 @@ export default async function InvoiceEmailPage({ params }: { params: Promise<{ i
   });
   const disabledReason = !client.email ? "Add an email address to this client before preparing the email." : "";
   const confirmationCopyEmail = invoiceEmailConfirmationCopyAddress(business.email);
+  const replyToEmail = profile?.replyToEmail || business.email;
 
   return (
     <main className="page-shell">
@@ -146,7 +149,8 @@ export default async function InvoiceEmailPage({ params }: { params: Promise<{ i
                 <Mail size={18} aria-hidden="true" />
                 App email delivery
               </p>
-              <p>The app sends this through your configured SMTP account with the invoice PDF attached. A hidden confirmation copy is sent to {confirmationCopyEmail ?? "your configured sender email"} so you have a real record.</p>
+              <p>Sender: {invoiceSenderDisplayName(business.name)} through the platform&apos;s verified email address.</p>
+              <p>Replies go to {replyToEmail ?? "the reply-to address you configure in Business Profile"}. A hidden confirmation copy is sent to {confirmationCopyEmail ?? "the configured platform sender"}.</p>
             </div>
           </section>
         </aside>
@@ -190,18 +194,6 @@ function statusLabel(status: string) {
     .split("_")
     .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
     .join(" ");
-}
-
-function appBaseUrl() {
-  const configured = process.env.APP_BASE_URL?.replace(/\/$/, "");
-  if (configured) return configured;
-  const vercelUrl = process.env.VERCEL_URL?.replace(/\/$/, "");
-  return vercelUrl ? `https://${vercelUrl}` : "";
-}
-
-function absoluteAppUrl(path: string) {
-  const baseUrl = appBaseUrl();
-  return baseUrl ? `${baseUrl}${path}` : path;
 }
 
 function formatEmailDate(date: Date | string | number) {

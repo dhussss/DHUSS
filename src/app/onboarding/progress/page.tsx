@@ -5,6 +5,7 @@ import { SubmitButton } from "@/components/SubmitButton";
 import { requireUserId } from "@/lib/auth";
 import { dateInputValue } from "@/lib/dates";
 import { prisma } from "@/lib/prisma";
+import { platform } from "@/lib/platform";
 
 export const dynamic = "force-dynamic";
 
@@ -36,7 +37,7 @@ export default async function OnboardingProgressPage() {
       <div className="mx-auto w-full max-w-2xl">
         <div className="mb-6 flex items-center gap-3">
           <span className="grid size-10 place-items-center rounded-xl bg-ink text-white shadow-soft"><BriefcaseBusiness size={19} aria-hidden="true" /></span>
-          <div><p className="text-sm font-black text-ink">Trade Invoice Tracker</p><p className="text-xs font-semibold text-moss">Guided setup</p></div>
+          <div><p className="text-sm font-black text-ink">{platform.name}</p><p className="text-xs font-semibold text-moss">Guided setup</p></div>
         </div>
 
         <section className="overflow-hidden rounded-2xl border border-line bg-white shadow-lift">

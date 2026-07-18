@@ -5,6 +5,14 @@ const prisma = new PrismaClient();
 const d = (value: string) => new Date(`${value}T00:00:00.000Z`);
 
 async function main() {
+  if (process.env.ALLOW_DESTRUCTIVE_SEED !== "true") {
+    throw new Error("Seed aborted. This script deletes existing application rows. Set ALLOW_DESTRUCTIVE_SEED=true only against an isolated development database.");
+  }
+
+  if (process.env.VERCEL_ENV === "production") {
+    throw new Error("Seed aborted. The destructive demo seed cannot run in the production Vercel environment.");
+  }
+
   await prisma.invoiceLineItem.deleteMany();
   await prisma.timeEntry.deleteMany();
   await prisma.expenseItem.deleteMany();

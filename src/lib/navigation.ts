@@ -6,7 +6,8 @@ const moreRoutePrefixes = [
   "/hours-export",
   "/business-profile",
   "/team",
-  "/tutorials"
+  "/tutorials",
+  "/account"
 ];
 
 export function safeInternalPath(value: string | null | undefined, fallback = "/") {
@@ -22,7 +23,7 @@ export function safeInternalPath(value: string | null | undefined, fallback = "/
 }
 
 export function shouldHideAppNavigation(pathname: string) {
-  return pathname === "/login" || pathname === "/signup" || pathname === "/forgot-password" || pathname === "/reset-password" || pathname.startsWith("/onboarding") || pathname.startsWith("/auth/") || pathname.startsWith("/public/");
+  return pathname === "/login" || pathname === "/signup" || pathname === "/forgot-password" || pathname === "/reset-password" || pathname === "/support" || pathname.startsWith("/legal/") || pathname.startsWith("/onboarding") || pathname.startsWith("/auth/") || pathname.startsWith("/public/");
 }
 
 export function isNavigationItemActive(pathname: string, href: string) {

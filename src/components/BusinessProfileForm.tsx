@@ -247,9 +247,12 @@ export function BusinessProfileForm({
             <h2 className="text-xl font-black">Invoice email</h2>
           </div>
         </div>
+        <p className="mt-4 rounded-lg border border-line bg-paper p-3 text-sm font-medium leading-6 text-moss">
+          Invoice emails use the platform&apos;s verified delivery address. Your business name appears as the sender and replies go to the address below, without spoofing your email domain.
+        </p>
         <div className="mt-5 grid gap-4">
           <label>
-            Reply-to email
+            Reply-to email shown to clients
             <input name="replyToEmail" type="email" defaultValue={profile.replyToEmail || profile.email} />
           </label>
           <label>

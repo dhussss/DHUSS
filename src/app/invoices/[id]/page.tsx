@@ -25,6 +25,8 @@ import { canShareInvoicePublicly } from "@/lib/invoice-sharing";
 import { prisma } from "@/lib/prisma";
 import { formatMoney } from "@/lib/money";
 import { formatHours, labourTotalCents } from "@/lib/time";
+import { absoluteAppUrl } from "@/lib/app-url";
+import { outboundDeliveryAllowed } from "@/lib/delivery-policy";
 
 export const dynamic = "force-dynamic";
 
@@ -72,11 +74,15 @@ export default async function InvoiceDetailPage({ params }: { params: Promise<{ 
   );
   const emailDisabledReason = !client.email
     ? "Add an email address to this client before emailing the invoice."
+    : !outboundDeliveryAllowed()
+      ? "Real invoice delivery is disabled in this development or preview environment."
     : !emailDeliveryConfigured()
       ? "Configure SMTP delivery before one-step invoice email can send."
       : "";
   const smsDisabledReason = !client.phone
     ? "Add a phone number to this client before texting the invoice."
+    : !outboundDeliveryAllowed()
+      ? "Real invoice delivery is disabled in this development or preview environment."
     : !mmsDeliveryConfigured()
       ? "Configure Twilio MMS delivery before one-step invoice SMS can send."
       : "";
@@ -308,11 +314,6 @@ export default async function InvoiceDetailPage({ params }: { params: Promise<{ 
   );
 }
 
-function absoluteAppUrl(path: string) {
-  const baseUrl = process.env.APP_BASE_URL?.replace(/\/$/, "") || (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL.replace(/\/$/, "")}` : "");
-  return baseUrl ? `${baseUrl}${path}` : path;
-}
-
 function invoiceWarnings(
   profile: {
     tradingName: string;
@@ -335,7 +336,7 @@ function invoiceWarnings(
 }
 
 function emailDeliveryConfigured() {
-  return Boolean(process.env.SMTP_HOST && process.env.SMTP_USER && process.env.SMTP_PASSWORD && (process.env.SMTP_FROM_EMAIL || process.env.SMTP_USER));
+  return Boolean(process.env.SMTP_HOST && process.env.SMTP_USER && process.env.SMTP_PASSWORD && (process.env.INVOICE_FROM_EMAIL || process.env.SMTP_FROM_EMAIL || process.env.SMTP_USER));
 }
 
 function mmsDeliveryConfigured() {

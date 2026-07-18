@@ -5,17 +5,33 @@ import { BuildIndicator } from "@/components/BuildIndicator";
 import { BottomNav } from "@/components/BottomNav";
 import { ServiceWorkerRegister } from "@/components/ServiceWorkerRegister";
 import { ThemeVars } from "@/components/ThemeVars";
+import { resolveAppBaseUrl } from "@/lib/app-url";
+import { platform } from "@/lib/platform";
 
 export const runtime = "nodejs";
 export const preferredRegion = "syd1";
 
+const metadataBase = resolveAppBaseUrl();
+
 export const metadata: Metadata = {
-  title: "Trade Invoice Tracker",
-  description: "Mobile-first work, expense, team and invoice tracking for Australian tradespeople.",
+  metadataBase: metadataBase ? new URL(metadataBase) : undefined,
+  title: {
+    default: platform.name,
+    template: `%s | ${platform.name}`
+  },
+  description: platform.description,
+  applicationName: platform.name,
   manifest: "/manifest.webmanifest",
+  alternates: metadataBase ? { canonical: "/" } : undefined,
+  openGraph: {
+    type: "website",
+    title: platform.name,
+    description: platform.description,
+    siteName: platform.name
+  },
   appleWebApp: {
     capable: true,
-    title: "Trade Tracker",
+    title: platform.shortName,
     statusBarStyle: "default"
   },
   icons: {

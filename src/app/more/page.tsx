@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { ArrowRight, BarChart3, BookOpenCheck, Building2, Clock3, LogOut, ReceiptText, Settings2, UsersRound } from "lucide-react";
+import { ArrowRight, BarChart3, BookOpenCheck, Building2, Clock3, FileDown, HelpCircle, LogOut, ReceiptText, Settings2, ShieldCheck, UsersRound } from "lucide-react";
 import { logoutAction } from "@/app/actions";
 import { requireUserId } from "@/lib/auth";
 
@@ -11,6 +11,20 @@ const links = [
     label: "Tutorials",
     body: "Open short guides for clients, jobs, work logs, invoices, expenses, and team workflows.",
     icon: BookOpenCheck,
+    group: "Help"
+  },
+  {
+    href: "/support",
+    label: "Support and product help",
+    body: "Get help, review service guidance, and understand how your data is handled.",
+    icon: HelpCircle,
+    group: "Help"
+  },
+  {
+    href: "/legal/privacy",
+    label: "Privacy and terms",
+    body: "Read the current privacy summary and terms requiring final legal review.",
+    icon: ShieldCheck,
     group: "Help"
   },
   {
@@ -53,6 +67,13 @@ const links = [
     label: "Business Profile",
     body: "Business details, invoice identity, payment details, logo, and email wording.",
     icon: Building2,
+    group: "Business"
+  },
+  {
+    href: "/account",
+    label: "Account and data",
+    body: "Download your business data and review account lifecycle options.",
+    icon: FileDown,
     group: "Business"
   }
 ];

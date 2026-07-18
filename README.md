@@ -2,6 +2,8 @@
 
 Mobile-first job, time, expense, subcontractor, and invoice tracking for Australian tradespeople. The app is a Next.js PWA backed by Supabase Postgres and Supabase Auth, with server-generated invoice PDFs.
 
+The default product name is centrally configured and can be changed without editing UI components. Platform identity is separate from each tenant's business profile and invoice snapshots.
+
 ## What It Covers
 
 - Email/password accounts, password recovery, onboarding, and a reusable tutorial library
@@ -42,7 +44,13 @@ pnpm run dev
 
 Open `http://localhost:3000`.
 
-Use `pnpm run db:seed` only on a development database where sample data is appropriate. Do not seed production.
+The demo seed is destructive and refuses to run unless explicitly acknowledged against an isolated development database:
+
+```bash
+ALLOW_DESTRUCTIVE_SEED=true pnpm run db:seed
+```
+
+It also refuses to run when `VERCEL_ENV=production`.
 
 ## Environment Variables
 
@@ -61,6 +69,10 @@ NEXT_PUBLIC_SUPABASE_URL="https://<PROJECT-REF>.supabase.co"
 NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY="<PUBLISHABLE-KEY>"
 DIAGNOSTICS_TOKEN="<LONG-RANDOM-TOKEN>"
 APP_BASE_URL="https://<CANONICAL-PRODUCTION-DOMAIN>"
+NEXT_PUBLIC_PRODUCT_NAME="Trade Invoice Tracker"
+NEXT_PUBLIC_PRODUCT_SHORT_NAME="Trade Tracker"
+NEXT_PUBLIC_PRODUCT_DESCRIPTION="Work, expense, team and invoice tracking for Australian trade businesses."
+NEXT_PUBLIC_SUPPORT_EMAIL="support@example.com"
 ```
 
 `DATABASE_URL` is the only database URL used by the running app. `DIRECT_URL` is reserved for Prisma migrations.
@@ -82,17 +94,18 @@ Never use a `NEXT_PUBLIC_` prefix for this key. It is optional; invoices fall ba
 SMTP_HOST="smtp.example.com"
 SMTP_PORT="587"
 SMTP_SECURE="false"
-SMTP_USER="you@example.com"
-SMTP_PASSWORD="<APP-SPECIFIC-OR-SMTP-PASSWORD>"
-SMTP_FROM_EMAIL="you@example.com"
-SMTP_FROM_NAME="Your Business Name"
+SMTP_USER="smtp-account@example.com"
+SMTP_PASSWORD="<PROVIDER-SECRET>"
+INVOICE_FROM_EMAIL="invoices@verified-platform-domain.example"
 ```
 
-The user reviews the recipient, subject, and plain-text body before confirming delivery. The generated PDF is attached server-side. A hidden confirmation copy is addressed to the business-profile email, falling back to the configured sender email.
+The user reviews the recipient, subject, and plain-text body before confirming delivery. The generated PDF is attached server-side. The visible display name is `Business Name via Product Name`, the actual From address is the verified platform address, and Reply-To is the tenant's configured reply-to or business email. A hidden confirmation copy is addressed to the business-profile email, falling back to the configured sender email.
 
 SMTP acceptance proves that the provider accepted the message; it is not a delivery or read receipt. Messages sent by the server may not appear in Apple Mail's Sent folder. The confirmation copy provides an independent record.
 
-Important for multi-user testing: these SMTP settings belong to the deployment, not to each user. A shared deployment therefore sends every user's invoice through the same configured SMTP account. Per-user email OAuth/provider credentials are a future requirement before broad public rollout.
+The platform-sent model deliberately prevents arbitrary sender spoofing. Custom business-domain sending is not currently supported; it requires per-domain ownership, SPF, DKIM, and provider verification. Platform authentication emails are configured separately in Supabase Auth and must use the platform identity.
+
+Local and Vercel preview deployments cannot send real email or MMS unless `ALLOW_NON_PRODUCTION_DELIVERY=true` is deliberately set for controlled testing. Do not enable it with real client recipients.
 
 ### Optional Invoice MMS
 
@@ -127,6 +140,8 @@ The migrations create the schema, indexes, constraints, the private `business-lo
 
 The Prisma database role connects through the pooler and performs server-side queries. Application queries and mutations still check the authenticated `ownerId`; the database hardening prevents browser Supabase API roles from directly bypassing the app.
 
+The current tenancy boundary is one owner account per business, with assigned-worker access controlled through team membership and project assignments. This safely isolates the current product model, but ownership transfer, multiple administrators, and business switching require a dedicated workspace/membership migration before unrestricted public rollout. See `docs/PRODUCT_READINESS.md`.
+
 Run the read-only audit after migrations:
 
 ```bash
@@ -148,6 +163,17 @@ Legacy rows with a null `ownerId` may be reported. They are hidden from users an
 - `/login` signs in and preserves a safe local destination.
 - `/forgot-password` requests a Supabase recovery email.
 - `/reset-password` sets the new password after the Auth callback establishes a recovery session.
+
+Supabase Auth owns verification, recovery, and platform-level email delivery. Configure its Site URL, redirect allow-list, branded SMTP sender, and templates for each environment. Invoice SMTP credentials are not used for authentication messages.
+
+## Public Trust and Account Surfaces
+
+- `/support` provides public support and safe incident-reporting guidance.
+- `/legal/privacy` and `/legal/terms` describe current beta behaviour and clearly require formal legal review.
+- `/account` lets an authenticated user download a tenant-scoped JSON export and explains the reviewed account-closure process.
+- Public invoice URLs use random high-entropy tokens, are revocable, and exclude void invoices.
+
+The export strips internal owner IDs, invitation token hashes, and public invoice tokens. Automated destructive business deletion is intentionally deferred until financial retention, ownership transfer, pending invoice, and file cleanup rules are approved.
 - Protected pages and every server mutation require an authenticated user.
 - Client, project, invoice, team, expense, and profile reads are owner-scoped.
 
@@ -265,11 +291,13 @@ The production-readiness audit may find preserved rows created before authentica
 
 ## Current Rollout Limits
 
-- SMTP identity is deployment-wide rather than per user.
+- Invoice delivery uses one verified platform sender with tenant-specific display names and Reply-To; verified custom tenant domains are not supported yet.
+- The current owner-based tenant boundary does not yet support multiple administrators, ownership transfer, or business switching.
+- Durable provider delivery logs, database-backed send throttling, and automated account deletion are not implemented.
 - Quotes and quote-to-job conversion are not implemented.
 - Receipt image storage is not implemented.
 - Supabase password-reset delivery must be tested with the production Auth configuration.
 - Private logos on anonymous public invoices require optional `SUPABASE_SECRET_KEY`; invoices otherwise use the initial badge.
 - Backup/PITR configuration lives outside this repository and must be confirmed in Supabase.
 
-These limits do not block controlled testing with known users, but they should be reviewed before a broad public launch.
+These limits do not block controlled testing with known users. They do block unrestricted public rollout. The full decision and external migration checklist are in `docs/PRODUCT_READINESS.md`; operational response steps are in `docs/OPERATIONS.md`.

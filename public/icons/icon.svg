@@ -1,5 +1,5 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-labelledby="title">
-  <title>Trade Invoice Tracker</title>
+  <title>Application icon</title>
   <rect width="512" height="512" rx="96" fill="#0f9f8f"/>
   <path d="M138 106h236c18 0 32 14 32 32v236c0 18-14 32-32 32H138c-18 0-32-14-32-32V138c0-18 14-32 32-32Z" fill="#fffdfa"/>
   <path d="M162 166h188M162 220h188M162 274h122" stroke="#17211c" stroke-width="30" stroke-linecap="round"/>

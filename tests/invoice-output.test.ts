@@ -34,7 +34,7 @@ const invoice: InvoiceDocumentData = {
       unitAmountCents: 9500,
       totalAmountCents: 152000,
       notes: "Framing and installation",
-      workerNameSnapshot: "Daniel Hussein",
+      workerNameSnapshot: "Alex Morgan",
       teamMemberId: null,
       payRateCentsSnapshot: null
     },
@@ -53,17 +53,17 @@ const invoice: InvoiceDocumentData = {
 };
 
 const business: InvoiceBusinessDetails = {
-  name: "DHUSS Pty Ltd",
-  legalName: "DHUSS Pty Ltd",
-  contactName: "Daniel Hussein",
-  abn: "78694683700",
+  name: "Example Trade Co",
+  legalName: "Example Trade Co Pty Ltd",
+  contactName: "Alex Morgan",
+  abn: "12345678901",
   email: "accounts@example.com",
   phone: "0400000000",
   address: "Perth WA",
   website: null,
-  bankAccountName: "DHUSS Pty Ltd",
-  bsb: "013711",
-  accountNumber: "807190837",
+  bankAccountName: "Example Trade Co",
+  bsb: "123456",
+  accountNumber: "12345678",
   gstRegistered: true,
   gstRate: 10,
   logoPath: null,
@@ -74,8 +74,8 @@ const business: InvoiceBusinessDetails = {
 
 const client: InvoiceClientDetails = {
   businessName: "Coastal Homes WA",
-  contactName: "Daniel",
-  email: "daniel@example.com",
+  contactName: "Jordan",
+  email: "jordan@example.com",
   phone: "0411111111",
   address: "Fremantle WA",
   abn: "16652787418"
@@ -92,7 +92,7 @@ test("prepared invoice email stays concise and resolves merge tags once", () => 
     signOff: "Kind regards,\n{{senderName}}\n{{businessName}}"
   });
 
-  assert.equal(body.match(/Hi Daniel,/g)?.length, 1);
+  assert.equal(body.match(/Hi Jordan,/g)?.length, 1);
   assert.equal(body.includes("{{"), false);
   assert.match(body, /Amount due: \$1,765\.50/);
   assert.match(body, /Due date: 30 July 2026/);

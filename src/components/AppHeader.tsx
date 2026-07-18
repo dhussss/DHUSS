@@ -15,6 +15,7 @@ import {
   UsersRound,
 } from "lucide-react";
 import { isNavigationItemActive, shouldHideAppNavigation } from "@/lib/navigation";
+import { platform } from "@/lib/platform";
 
 const items = [
   { href: "/", label: "Home", icon: LayoutDashboard },
@@ -39,7 +40,7 @@ export function AppHeader() {
           <span className="app-brand-mark">
             <BriefcaseBusiness size={18} strokeWidth={2.4} aria-hidden="true" />
           </span>
-          <span className="app-brand-name">Trade Invoice Tracker</span>
+          <span className="app-brand-name">{platform.name}</span>
         </Link>
 
         <nav className="app-nav" aria-label="Main navigation">
@@ -60,8 +61,8 @@ export function AppHeader() {
           })}
         </nav>
         <div className="app-rail-footer">
-          <span className="app-avatar" aria-hidden="true">T</span>
-          <span><strong>Trade workspace</strong><small>Business account</small></span>
+          <span className="app-avatar" aria-hidden="true">{platform.shortName.charAt(0).toUpperCase()}</span>
+          <span><strong>Business workspace</strong><small>Private account</small></span>
         </div>
       </div>
     </header>

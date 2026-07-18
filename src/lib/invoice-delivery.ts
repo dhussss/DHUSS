@@ -6,6 +6,9 @@ import { buildPreparedInvoiceEmailBody, invoiceDueDate, renderTemplate } from "@
 import { renderInvoicePdf } from "@/lib/invoice-pdf";
 import { formatMoney } from "@/lib/money";
 import { prisma } from "@/lib/prisma";
+import { absoluteAppUrl, requirePublicAppUrl } from "@/lib/app-url";
+import { assertOutboundDeliveryAllowed } from "@/lib/delivery-policy";
+import { invoiceSenderDisplayName } from "@/lib/platform";
 
 type DeliveryData = Awaited<ReturnType<typeof loadInvoiceDeliveryData>>;
 
@@ -49,13 +52,14 @@ export async function sendPreparedInvoiceEmailWithPdf(
   const preview = buildInvoiceEmailMessage(data);
   const subject = options.subject?.trim() || preview.subject;
   const body = options.body?.trim() || preview.body;
+  const replyToEmail = data.profile?.replyToEmail || data.business.email;
   const confirmationCopyEmail = invoiceEmailConfirmationCopyAddress(data.business.email);
   const pdf = await renderDeliveryPdf(data);
   const filename = invoicePdfFileName(data.invoice.invoiceNumber);
-  await sendSmtpMail({
+  const providerReference = await sendSmtpMail({
     to,
     bcc: shouldSendConfirmationCopy(to, confirmationCopyEmail) ? confirmationCopyEmail : null,
-    replyTo: data.business.email,
+    replyTo: replyToEmail,
     fromName: data.business.name,
     subject,
     text: body,
@@ -73,8 +77,8 @@ export async function sendPreparedInvoiceEmailWithPdf(
   return {
     ok: true,
     message: confirmationCopyEmail
-      ? `Your email provider accepted the invoice for ${to} with the PDF attached. A confirmation copy was addressed to ${confirmationCopyEmail}.`
-      : `Your email provider accepted the invoice for ${to} with the PDF attached.`
+      ? `Your email provider accepted the invoice for ${to} with the PDF attached. A confirmation copy was addressed to ${confirmationCopyEmail}. Reference: ${providerReference}.`
+      : `Your email provider accepted the invoice for ${to} with the PDF attached. Reference: ${providerReference}.`
   };
 }
 
@@ -170,7 +174,7 @@ export function buildInvoiceEmailMessage(data: DeliveryData) {
 }
 
 export function invoiceEmailConfirmationCopyAddress(businessEmail: string | null) {
-  return businessEmail || process.env.SMTP_FROM_EMAIL || process.env.SMTP_USER || null;
+  return businessEmail || process.env.INVOICE_FROM_EMAIL || process.env.SMTP_FROM_EMAIL || process.env.SMTP_USER || null;
 }
 
 function buildSmsMessage(data: DeliveryData, mediaUrl: string) {
@@ -204,14 +208,15 @@ async function sendSmtpMail({
   text: string;
   attachment: { filename: string; content: Buffer };
 }) {
+  assertOutboundDeliveryAllowed();
   const host = process.env.SMTP_HOST;
   const user = process.env.SMTP_USER;
   const pass = process.env.SMTP_PASSWORD;
-  const fromEmail = process.env.SMTP_FROM_EMAIL || user;
+  const fromEmail = process.env.INVOICE_FROM_EMAIL || process.env.SMTP_FROM_EMAIL || user;
   const port = Number(process.env.SMTP_PORT || 587);
 
   if (!host || !user || !pass || !fromEmail) {
-    throw new Error("SMTP delivery is not configured. Add SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASSWORD, and SMTP_FROM_EMAIL.");
+    throw new Error("Invoice email delivery is not configured. Add SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASSWORD, and INVOICE_FROM_EMAIL.");
   }
 
   const transporter = nodemailer.createTransport({
@@ -221,8 +226,8 @@ async function sendSmtpMail({
     auth: { user, pass }
   });
 
-  await transporter.sendMail({
-    from: formatEmailAddress(process.env.SMTP_FROM_NAME || fromName, fromEmail),
+  const result = await transporter.sendMail({
+    from: formatEmailAddress(invoiceSenderDisplayName(fromName), fromEmail),
     to,
     bcc: bcc || undefined,
     replyTo: replyTo || undefined,
@@ -236,6 +241,8 @@ async function sendSmtpMail({
       }
     ]
   });
+
+  return result.messageId || "provider-accepted";
 }
 
 function shouldSendConfirmationCopy(to: string, confirmationCopyEmail: string | null) {
@@ -248,6 +255,7 @@ function shouldSendConfirmationCopy(to: string, confirmationCopyEmail: string | 
 }
 
 async function sendTwilioMms({ to, body, mediaUrl }: { to: string; body: string; mediaUrl: string }) {
+  assertOutboundDeliveryAllowed();
   const accountSid = process.env.TWILIO_ACCOUNT_SID;
   const authToken = process.env.TWILIO_AUTH_TOKEN;
   const from = process.env.TWILIO_FROM_NUMBER;
@@ -275,8 +283,7 @@ async function sendTwilioMms({ to, body, mediaUrl }: { to: string; body: string;
   });
 
   if (!response.ok) {
-    const detail = await response.text();
-    throw new Error(`Twilio could not send the invoice MMS. ${detail.slice(0, 240)}`);
+    throw new Error(`Twilio could not send the invoice MMS (HTTP ${response.status}). Check the provider log before retrying.`);
   }
 }
 
@@ -310,17 +317,8 @@ export function pdfHeaders(filename: string) {
   };
 }
 
-function absoluteAppUrl(path: string) {
-  const baseUrl = process.env.APP_BASE_URL?.replace(/\/$/, "") || (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL.replace(/\/$/, "")}` : "");
-  return baseUrl ? `${baseUrl}${path}` : path;
-}
-
 function requiredAbsoluteAppUrl(path: string) {
-  const url = absoluteAppUrl(path);
-  if (!url.startsWith("https://")) {
-    throw new Error("Set APP_BASE_URL to your public https production URL before sending invoice PDFs by SMS/MMS.");
-  }
-  return url;
+  return requirePublicAppUrl(path);
 }
 
 function normalisePhoneForMessaging(phone: string) {

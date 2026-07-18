@@ -10,6 +10,7 @@ import { formatDateAU } from "@/lib/dates";
 import { formatMoney } from "@/lib/money";
 import { prisma } from "@/lib/prisma";
 import { formatHours, labourTotalCents } from "@/lib/time";
+import { absoluteAppUrl } from "@/lib/app-url";
 
 export const dynamic = "force-dynamic";
 
@@ -31,7 +32,7 @@ export default async function TeamPage({ searchParams }: { searchParams?: Promis
     prisma.teamInvitation.findMany({ where: { ownerId: user.id, status: "PENDING", expiresAt: { gt: new Date() } }, orderBy: { createdAt: "desc" } }),
     prisma.projectAssignment.count({ where: { active: true, teamMember: { userId: user.id, status: "ACTIVE" } } })
   ]);
-  const baseUrl = (process.env.APP_BASE_URL || "https://dhuss.vercel.app").replace(/\/$/, "");
+  const joinUrl = inviteCode ? absoluteAppUrl(`/team/join?code=${encodeURIComponent(inviteCode)}`) : "";
 
   return (
     <main className="page-shell">
@@ -56,7 +57,7 @@ export default async function TeamPage({ searchParams }: { searchParams?: Promis
         </Link>
       ) : null}
 
-      {inviteCode ? <TeamInviteLink code={inviteCode} joinUrl={`${baseUrl}/team/join?code=${encodeURIComponent(inviteCode)}`} /> : null}
+      {inviteCode ? <TeamInviteLink code={inviteCode} joinUrl={joinUrl} /> : null}
 
       <section className="mt-5 grid gap-5 lg:grid-cols-[0.9fr_1.1fr]">
         <form action={createTeamInvitationAction} className="card grid gap-4">

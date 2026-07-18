@@ -11,6 +11,9 @@ import { normaliseRgbValue } from "../src/lib/themes";
 import { isStaleRefreshTokenError, isSupabaseAuthCookie } from "../src/lib/supabase/auth-cookies";
 import { canSkipSessionLookup } from "../src/lib/supabase/middleware-routes";
 import { safeInternalPath } from "../src/lib/navigation";
+import { absoluteAppUrl, resolveAppBaseUrl } from "../src/lib/app-url";
+import { outboundDeliveryAllowed } from "../src/lib/delivery-policy";
+import { invoiceSenderDisplayName } from "../src/lib/platform";
 
 test("currency input is converted to integer cents without silent truncation", () => {
   assert.equal(dollarsToCents("$1,234.50"), 123450);
@@ -46,9 +49,27 @@ test("stale Supabase refresh sessions are recognised and scoped cookies are remo
   assert.equal(isStaleRefreshTokenError({ code: "refresh_token_not_found" }), true);
   assert.equal(isStaleRefreshTokenError(new Error("Invalid Refresh Token: Refresh Token Not Found")), true);
   assert.equal(isStaleRefreshTokenError({ code: "email_not_confirmed" }), false);
-  assert.equal(isSupabaseAuthCookie("sb-kfejfgkkugatnrxrftry-auth-token"), true);
-  assert.equal(isSupabaseAuthCookie("sb-kfejfgkkugatnrxrftry-auth-token.1"), true);
+  assert.equal(isSupabaseAuthCookie("sb-exampleproject-auth-token"), true);
+  assert.equal(isSupabaseAuthCookie("sb-exampleproject-auth-token.1"), true);
   assert.equal(isSupabaseAuthCookie("unrelated-session"), false);
+});
+
+test("platform URLs are environment-driven and never fall back to a personal domain", () => {
+  assert.equal(resolveAppBaseUrl({ APP_BASE_URL: "https://app.example.com/", NODE_ENV: "production" }), "https://app.example.com");
+  assert.equal(resolveAppBaseUrl({ VERCEL_URL: "preview.example.vercel.app", NODE_ENV: "production" }), "https://preview.example.vercel.app");
+  assert.equal(resolveAppBaseUrl({ NODE_ENV: "production" }), null);
+  assert.equal(resolveAppBaseUrl({ APP_BASE_URL: "https://app.example.com/path", NODE_ENV: "production" }), null);
+  assert.equal(absoluteAppUrl("/team/join", { APP_BASE_URL: "https://app.example.com", NODE_ENV: "production" }), "https://app.example.com/team/join");
+});
+
+test("invoice sender identity separates the platform address from the tenant business", () => {
+  assert.equal(invoiceSenderDisplayName("Example Electrical"), "Example Electrical via Trade Invoice Tracker");
+});
+
+test("real outbound delivery is blocked outside production unless deliberately enabled", () => {
+  assert.equal(outboundDeliveryAllowed({ VERCEL_ENV: "production" }), true);
+  assert.equal(outboundDeliveryAllowed({ VERCEL_ENV: "preview" }), false);
+  assert.equal(outboundDeliveryAllowed({ VERCEL_ENV: "preview", ALLOW_NON_PRODUCTION_DELIVERY: "true" }), true);
 });
 
 test("public routes skip remote session lookups while protected routes do not", () => {

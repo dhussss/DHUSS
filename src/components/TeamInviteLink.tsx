@@ -1,5 +1,7 @@
 "use client";
 
+import { platform } from "@/lib/platform";
+
 import { useState } from "react";
 import { Check, Copy } from "lucide-react";
 
@@ -7,7 +9,7 @@ export function TeamInviteLink({ code, joinUrl }: { code: string; joinUrl: strin
   const [copied, setCopied] = useState(false);
 
   async function copyInvite() {
-    await navigator.clipboard.writeText(`Join my Trade Invoice Tracker team:\n${joinUrl}\n\nInvitation code: ${code}`);
+    await navigator.clipboard.writeText(`Join my team on ${platform.name}:\n${joinUrl}\n\nInvitation code: ${code}`);
     setCopied(true);
     window.setTimeout(() => setCopied(false), 1800);
   }

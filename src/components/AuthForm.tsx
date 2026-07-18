@@ -76,6 +76,12 @@ export function AuthForm({ mode }: { mode: "login" | "signup" }) {
         {pending ? "Please wait..." : isSignup ? "Create Account" : "Log In"}
       </button>
 
+      {isSignup ? (
+        <p className="text-center text-xs font-medium leading-5 text-moss">
+          By creating an account, you agree to the <Link className="font-bold text-mint" href="/legal/terms">terms of use</Link> and acknowledge the <Link className="font-bold text-mint" href="/legal/privacy">privacy summary</Link>.
+        </p>
+      ) : null}
+
       {!isSignup ? (
         <Link className="text-center text-sm font-bold text-mint" href="/forgot-password">
           Forgot password?

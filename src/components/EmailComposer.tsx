@@ -159,7 +159,7 @@ export function EmailComposer({
             </div>
           ) : (
             <div className="rounded-lg border border-gum/30 bg-gum/10 p-3 text-sm font-bold leading-6 text-gum">
-              No confirmation copy email is available. Add an email to your business profile or configure SMTP_FROM_EMAIL.
+              No confirmation copy email is available. Add an email to your business profile or configure INVOICE_FROM_EMAIL.
             </div>
           )}
           <label>

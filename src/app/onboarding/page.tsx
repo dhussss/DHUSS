@@ -4,6 +4,7 @@ import { OnboardingWizard } from "@/components/OnboardingWizard";
 import { requireUser } from "@/lib/auth";
 import { centsToDollars } from "@/lib/money";
 import { prisma } from "@/lib/prisma";
+import { platform } from "@/lib/platform";
 
 export const dynamic = "force-dynamic";
 
@@ -33,7 +34,7 @@ export default async function OnboardingPage() {
           <BriefcaseBusiness size={19} aria-hidden="true" />
         </span>
         <div>
-          <p className="text-sm font-black text-ink">Trade Invoice Tracker</p>
+          <p className="text-sm font-black text-ink">{platform.name}</p>
           <p className="text-xs font-semibold text-moss">Quick setup</p>
         </div>
       </div>
