@@ -10,11 +10,13 @@ import { labourTotalCents, parseClockTime } from "../src/lib/time";
 import { normaliseRgbValue } from "../src/lib/themes";
 import { isStaleRefreshTokenError, isSupabaseAuthCookie } from "../src/lib/supabase/auth-cookies";
 import { canSkipSessionLookup } from "../src/lib/supabase/middleware-routes";
-import { safeInternalPath } from "../src/lib/navigation";
+import { safeInternalPath, withInternalPathParams } from "../src/lib/navigation";
 import { absoluteAppUrl, resolveAppBaseUrl } from "../src/lib/app-url";
 import { outboundDeliveryAllowed } from "../src/lib/delivery-policy";
 import { invoiceSenderDisplayName } from "../src/lib/platform";
-import { tutorialByKey, tutorialCategories, tutorials } from "../src/lib/tutorials";
+import { clampTutorialStep, tutorialByKey, tutorialCategories, tutorials } from "../src/lib/tutorials";
+import { buildInvoiceReminderEmailBody } from "../src/lib/invoice-documents";
+import type { InvoiceBusinessDetails, InvoiceClientDetails, InvoiceDocumentData } from "../src/lib/invoice-documents";
 
 test("currency input is converted to integer cents without silent truncation", () => {
   assert.equal(dollarsToCents("$1,234.50"), 123450);
@@ -67,6 +69,73 @@ test("invoice sender identity separates the platform address from the tenant bus
   assert.equal(invoiceSenderDisplayName("Example Electrical"), "Example Electrical via Trade Invoice Tracker");
 });
 
+test("payment reminders stay concise and include the client invoice link", () => {
+  const invoice: InvoiceDocumentData = {
+    id: "invoice-1",
+    invoiceNumber: "INV-2026-0042",
+    status: "SENT",
+    mode: "SIMPLE",
+    invoiceDate: new Date("2026-07-01T00:00:00.000Z"),
+    dueDate: new Date("2026-07-15T00:00:00.000Z"),
+    paymentTermsDays: 14,
+    dateRangeStart: new Date("2026-06-23T00:00:00.000Z"),
+    dateRangeEnd: new Date("2026-06-27T00:00:00.000Z"),
+    labourTotalCents: 120000,
+    itemTotalCents: 0,
+    expensesSubtotalCents: 0,
+    subtotalCents: 120000,
+    gstCents: 12000,
+    grandTotalCents: 132000,
+    totalHours: new Prisma.Decimal(20),
+    totalDurationMinutes: 1200,
+    project: { title: "Workshop Fitout" },
+    lineItems: []
+  };
+  const business: InvoiceBusinessDetails = {
+    name: "Example Electrical",
+    legalName: null,
+    contactName: "Alex Morgan",
+    abn: null,
+    email: null,
+    phone: null,
+    address: null,
+    website: null,
+    bankAccountName: null,
+    bsb: null,
+    accountNumber: null,
+    gstRegistered: true,
+    gstRate: 10,
+    logoPath: null,
+    defaultInvoiceNotes: null,
+    defaultInvoiceEmailMessage: null,
+    signatureFooter: null
+  };
+  const client: InvoiceClientDetails = {
+    businessName: "Sample Builders",
+    contactName: "Jordan",
+    email: "jordan@example.com",
+    phone: null,
+    address: null,
+    abn: null
+  };
+
+  const body = buildInvoiceReminderEmailBody({
+    invoice,
+    business,
+    client,
+    publicUrl: "https://app.example.com/public/invoices/example",
+    today: new Date("2026-07-19T00:00:00.000Z")
+  });
+
+  assert.match(body, /^Hi Jordan,/);
+  assert.match(body, /INV-2026-0042/);
+  assert.match(body, /Amount outstanding: \$1,320\.00/);
+  assert.match(body, /15 July 2026/);
+  assert.match(body, /https:\/\/app\.example\.com\/public\/invoices\/example/);
+  assert.equal(body.match(/Hi Jordan,/g)?.length, 1);
+  assert.ok(body.split("\n").length < 20);
+});
+
 test("real outbound delivery is blocked outside production unless deliberately enabled", () => {
   assert.equal(outboundDeliveryAllowed({ VERCEL_ENV: "production" }), true);
   assert.equal(outboundDeliveryAllowed({ VERCEL_ENV: "preview" }), false);
@@ -99,6 +168,11 @@ test("internal return paths cannot redirect to another origin", () => {
   assert.equal(safeInternalPath(null, "/onboarding"), "/onboarding");
 });
 
+test("repeat-work return paths preserve notices without leaving the app", () => {
+  assert.equal(withInternalPathParams("/?timeSaved=1", { logWork: "time" }), "/?timeSaved=1&logWork=time");
+  assert.equal(withInternalPathParams("https://malicious.example/path", { logWork: "item" }), "/?logWork=item");
+});
+
 test("tutorial catalogue has stable unique keys and complete learning content", () => {
   assert.equal(new Set(tutorials.map((tutorial) => tutorial.key)).size, tutorials.length);
   assert.ok(tutorials.length >= 15);
@@ -107,6 +181,15 @@ test("tutorial catalogue has stable unique keys and complete learning content", 
   assert.ok(tutorials.every((tutorial) => tutorial.demoFrames.length >= 3));
   assert.equal(tutorialByKey("workflow-overview")?.category, "Getting Started");
   assert.equal(tutorialByKey("team-setup")?.employersOnly, true);
+});
+
+test("tutorial deep links clamp invalid steps safely", () => {
+  const tutorial = tutorials[0];
+
+  assert.equal(clampTutorialStep(tutorial.key, -4), 0);
+  assert.equal(clampTutorialStep(tutorial.key, Number.NaN), 0);
+  assert.equal(clampTutorialStep(tutorial.key, 999), tutorial.steps.length - 1);
+  assert.equal(clampTutorialStep("missing-tutorial", 2), 0);
 });
 
 test("today defaults to the Australia/Perth calendar date", () => {

@@ -97,7 +97,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: Da
         </div>
         <div className="dashboard-actions">
           <div className="dashboard-log-action">
-            <LogTimeSheet projects={projects} assignedProjects={assignedProjects} buttonLabel="Log work" />
+            <LogTimeSheet projects={projects} assignedProjects={assignedProjects} buttonLabel="Log work" storageScope={ownerId} />
           </div>
           <Link className="tap-secondary" href="/invoices/new"><ReceiptText size={17} aria-hidden="true" />New invoice</Link>
           <Link className="tap-secondary" href="/projects/new"><FolderKanban size={17} aria-hidden="true" />New project</Link>

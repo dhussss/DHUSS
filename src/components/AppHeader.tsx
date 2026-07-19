@@ -12,6 +12,7 @@ import {
   LayoutDashboard,
   MoreHorizontal,
   ReceiptText,
+  Search,
   UsersRound,
 } from "lucide-react";
 import { isNavigationItemActive, shouldHideAppNavigation } from "@/lib/navigation";
@@ -19,6 +20,7 @@ import { platform } from "@/lib/platform";
 
 const items = [
   { href: "/", label: "Home", icon: LayoutDashboard },
+  { href: "/search", label: "Find", icon: Search },
   { href: "/clients", label: "Clients", icon: UsersRound },
   { href: "/projects", label: "Projects", icon: FolderKanban },
   { href: "/invoices", label: "Invoices", icon: FileText },
@@ -41,6 +43,10 @@ export function AppHeader() {
             <BriefcaseBusiness size={18} strokeWidth={2.4} aria-hidden="true" />
           </span>
           <span className="app-brand-name">{platform.name}</span>
+        </Link>
+
+        <Link href="/search" className="grid size-10 shrink-0 place-items-center rounded-lg border border-line bg-white text-moss lg:hidden" aria-label="Find clients, projects, or invoices">
+          <Search size={19} aria-hidden="true" />
         </Link>
 
         <nav className="app-nav" aria-label="Main navigation">

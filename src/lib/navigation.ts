@@ -22,6 +22,17 @@ export function safeInternalPath(value: string | null | undefined, fallback = "/
   }
 }
 
+export function withInternalPathParams(
+  value: string | null | undefined,
+  params: Record<string, string>,
+  fallback = "/"
+) {
+  const path = safeInternalPath(value, fallback);
+  const parsed = new URL(path, "https://internal.local");
+  for (const [key, paramValue] of Object.entries(params)) parsed.searchParams.set(key, paramValue);
+  return `${parsed.pathname}${parsed.search}${parsed.hash}`;
+}
+
 export function shouldHideAppNavigation(pathname: string) {
   return pathname === "/login" || pathname === "/signup" || pathname === "/forgot-password" || pathname === "/reset-password" || pathname === "/support" || pathname.startsWith("/legal/") || pathname.startsWith("/onboarding") || pathname.startsWith("/auth/") || pathname.startsWith("/public/");
 }

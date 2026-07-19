@@ -2,6 +2,7 @@ import { BookOpenCheck, Route } from "lucide-react";
 import { TutorialLibrary } from "@/components/TutorialLibrary";
 import { requireUserId } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { clampTutorialStep } from "@/lib/tutorials";
 
 export const dynamic = "force-dynamic";
 
@@ -22,7 +23,8 @@ export default async function TutorialsPage({ searchParams }: { searchParams?: P
       select: { tutorialKey: true, status: true, currentStep: true, completedAt: true }
     })
   ]);
-  const step = Math.max(0, Number(paramValue(params, "step") || "1") - 1);
+  const guide = paramValue(params, "guide");
+  const step = clampTutorialStep(guide, Number(paramValue(params, "step") || "1") - 1);
 
   return (
     <main className="page-shell">
@@ -38,8 +40,8 @@ export default async function TutorialsPage({ searchParams }: { searchParams?: P
       <section className="mt-5">
         <TutorialLibrary
           showTeam={profile?.businessStructure === "EMPLOYER"}
-          initialGuide={paramValue(params, "guide")}
-          initialStep={Number.isFinite(step) ? step : 0}
+          initialGuide={guide}
+          initialStep={step}
           initialProgress={progress.map((item) => ({ ...item, completedAt: item.completedAt?.toISOString() ?? null }))}
         />
       </section>

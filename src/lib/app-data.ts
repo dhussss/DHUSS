@@ -708,14 +708,26 @@ export const getClientsPageData = unstable_cache(
 );
 
 export const getInvoicesPageData = unstable_cache(
-  async (ownerId: string, status: "ALL" | "DRAFT" | "SENT" | "OVERDUE" | "PAID" | "VOID" = "ALL", q = "") =>
+  async (
+    ownerId: string,
+    status: "ALL" | "DRAFT" | "SENT" | "OVERDUE" | "PAID" | "VOID" = "ALL",
+    q = "",
+    aging: "ALL" | "RECENT" | "OLD" = "ALL"
+  ) =>
     prisma.invoice.findMany({
       where: {
         ownerId,
         ...(status === "ALL"
           ? {}
           : status === "OVERDUE"
-            ? { status: "SENT", dueDate: { lt: todayInPerth() } }
+            ? {
+                status: "SENT",
+                dueDate: aging === "RECENT"
+                  ? { lt: todayInPerth(), gte: addDays(todayInPerth(), -30) }
+                  : aging === "OLD"
+                    ? { lt: addDays(todayInPerth(), -30) }
+                    : { lt: todayInPerth() }
+              }
             : { status }),
         ...(q
           ? {
@@ -747,6 +759,96 @@ export const getInvoicesPageData = unstable_cache(
     }),
   ["invoices-page-data"],
   { revalidate: SHORT_REVALIDATE_SECONDS, tags: [CACHE_TAGS.invoices] }
+);
+
+export type InvoiceCollectionsSummary = {
+  outstanding: { count: number; valueCents: number };
+  dueSoon: { count: number; valueCents: number };
+  overdueRecent: { count: number; valueCents: number };
+  overdueOld: { count: number; valueCents: number };
+};
+
+export const getInvoiceCollectionsSummary = unstable_cache(
+  async (ownerId: string): Promise<InvoiceCollectionsSummary> => {
+    const today = todayInPerth();
+    const dueSoonEnd = addDays(today, 7);
+    const oldOverdueBoundary = addDays(today, -30);
+    const [row] = await prisma.$queryRaw<{
+      outstandingCount: bigint | number | null;
+      outstandingCents: bigint | number | null;
+      dueSoonCount: bigint | number | null;
+      dueSoonCents: bigint | number | null;
+      overdueRecentCount: bigint | number | null;
+      overdueRecentCents: bigint | number | null;
+      overdueOldCount: bigint | number | null;
+      overdueOldCents: bigint | number | null;
+    }[]>`
+      SELECT
+        COUNT(*) FILTER (WHERE i.status = 'SENT') AS "outstandingCount",
+        COALESCE(SUM(i."grandTotalCents") FILTER (WHERE i.status = 'SENT'), 0) AS "outstandingCents",
+        COUNT(*) FILTER (WHERE i.status = 'SENT' AND i."dueDate" >= ${today} AND i."dueDate" <= ${dueSoonEnd}) AS "dueSoonCount",
+        COALESCE(SUM(i."grandTotalCents") FILTER (WHERE i.status = 'SENT' AND i."dueDate" >= ${today} AND i."dueDate" <= ${dueSoonEnd}), 0) AS "dueSoonCents",
+        COUNT(*) FILTER (WHERE i.status = 'SENT' AND i."dueDate" < ${today} AND i."dueDate" >= ${oldOverdueBoundary}) AS "overdueRecentCount",
+        COALESCE(SUM(i."grandTotalCents") FILTER (WHERE i.status = 'SENT' AND i."dueDate" < ${today} AND i."dueDate" >= ${oldOverdueBoundary}), 0) AS "overdueRecentCents",
+        COUNT(*) FILTER (WHERE i.status = 'SENT' AND i."dueDate" < ${oldOverdueBoundary}) AS "overdueOldCount",
+        COALESCE(SUM(i."grandTotalCents") FILTER (WHERE i.status = 'SENT' AND i."dueDate" < ${oldOverdueBoundary}), 0) AS "overdueOldCents"
+      FROM "Invoice" i
+      WHERE i."ownerId" = ${ownerId}
+    `;
+
+    return {
+      outstanding: { count: numberValue(row?.outstandingCount), valueCents: numberValue(row?.outstandingCents) },
+      dueSoon: { count: numberValue(row?.dueSoonCount), valueCents: numberValue(row?.dueSoonCents) },
+      overdueRecent: { count: numberValue(row?.overdueRecentCount), valueCents: numberValue(row?.overdueRecentCents) },
+      overdueOld: { count: numberValue(row?.overdueOldCount), valueCents: numberValue(row?.overdueOldCents) }
+    };
+  },
+  ["invoice-collections-summary"],
+  { revalidate: SHORT_REVALIDATE_SECONDS, tags: [CACHE_TAGS.invoices] }
+);
+
+export type ClientAccountSummary = {
+  issued: { count: number; valueCents: number };
+  paid: { count: number; valueCents: number };
+  outstanding: { count: number; valueCents: number };
+  overdue: { count: number; valueCents: number };
+};
+
+export const getClientAccountSummary = unstable_cache(
+  async (ownerId: string, clientId: string): Promise<ClientAccountSummary> => {
+    const today = todayInPerth();
+    const [row] = await prisma.$queryRaw<{
+      issuedCount: bigint | number | null;
+      issuedCents: bigint | number | null;
+      paidCount: bigint | number | null;
+      paidCents: bigint | number | null;
+      outstandingCount: bigint | number | null;
+      outstandingCents: bigint | number | null;
+      overdueCount: bigint | number | null;
+      overdueCents: bigint | number | null;
+    }[]>`
+      SELECT
+        COUNT(*) FILTER (WHERE i.status IN ('SENT', 'PAID')) AS "issuedCount",
+        COALESCE(SUM(i."grandTotalCents") FILTER (WHERE i.status IN ('SENT', 'PAID')), 0) AS "issuedCents",
+        COUNT(*) FILTER (WHERE i.status = 'PAID') AS "paidCount",
+        COALESCE(SUM(i."grandTotalCents") FILTER (WHERE i.status = 'PAID'), 0) AS "paidCents",
+        COUNT(*) FILTER (WHERE i.status = 'SENT') AS "outstandingCount",
+        COALESCE(SUM(i."grandTotalCents") FILTER (WHERE i.status = 'SENT'), 0) AS "outstandingCents",
+        COUNT(*) FILTER (WHERE i.status = 'SENT' AND i."dueDate" < ${today}) AS "overdueCount",
+        COALESCE(SUM(i."grandTotalCents") FILTER (WHERE i.status = 'SENT' AND i."dueDate" < ${today}), 0) AS "overdueCents"
+      FROM "Invoice" i
+      WHERE i."ownerId" = ${ownerId} AND i."clientId" = ${clientId}
+    `;
+
+    return {
+      issued: { count: numberValue(row?.issuedCount), valueCents: numberValue(row?.issuedCents) },
+      paid: { count: numberValue(row?.paidCount), valueCents: numberValue(row?.paidCents) },
+      outstanding: { count: numberValue(row?.outstandingCount), valueCents: numberValue(row?.outstandingCents) },
+      overdue: { count: numberValue(row?.overdueCount), valueCents: numberValue(row?.overdueCents) }
+    };
+  },
+  ["client-account-summary"],
+  { revalidate: SHORT_REVALIDATE_SECONDS, tags: [CACHE_TAGS.clients, CACHE_TAGS.invoices] }
 );
 
 export const getExpensesPageData = unstable_cache(

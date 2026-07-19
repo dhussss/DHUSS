@@ -274,6 +274,7 @@ export default async function ProjectDetailPage({
                   Export Hours
                 </Link>
                 <LogTimeSheet
+                  storageScope={ownerId}
                   projects={activeProjects}
                   defaultProjectId={project.id}
                   buttonLabel={onboarding ? "Log your first hours" : "Log Hours"}

@@ -4,7 +4,7 @@ import { ArrowLeft, ExternalLink, Mail } from "lucide-react";
 import { requireUserId } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { invoicePdfFileName } from "@/lib/invoice-data";
-import { buildPreparedInvoiceEmailBody, invoiceDueDate, renderTemplate } from "@/lib/invoice-documents";
+import { buildInvoiceReminderEmailBody, buildPreparedInvoiceEmailBody, invoiceDueDate, renderTemplate } from "@/lib/invoice-documents";
 import { invoiceEmailConfirmationCopyAddress } from "@/lib/invoice-delivery";
 import type { InvoiceBusinessDetails, InvoiceClientDetails, InvoiceDocumentData } from "@/lib/invoice-documents";
 import { formatDateAU } from "@/lib/dates";
@@ -16,8 +16,15 @@ import { invoiceSenderDisplayName } from "@/lib/platform";
 
 export const dynamic = "force-dynamic";
 
-export default async function InvoiceEmailPage({ params }: { params: Promise<{ id: string }> }) {
+export default async function InvoiceEmailPage({
+  params,
+  searchParams
+}: {
+  params: Promise<{ id: string }>;
+  searchParams?: Promise<{ mode?: string }>;
+}) {
   const { id } = await params;
+  const query = await searchParams;
   const ownerId = await requireUserId();
   const [invoice, profile] = await Promise.all([
     prisma.invoice.findFirst({
@@ -36,6 +43,7 @@ export default async function InvoiceEmailPage({ params }: { params: Promise<{ i
   const business = businessDetails(invoice, profile);
   const client = clientDetails(invoice);
   const dueDate = invoiceDueDate(invoice);
+  const isReminder = query?.mode === "reminder" && invoice.status === "SENT";
   const fullPublicUrl = invoice.publicTokenEnabled && invoice.publicToken ? absoluteAppUrl(`/public/invoices/${invoice.publicToken}`) : null;
   const templateValues = {
     invoiceNumber: invoice.invoiceNumber,
@@ -51,20 +59,24 @@ export default async function InvoiceEmailPage({ params }: { params: Promise<{ i
     senderName: business.contactName || business.name
   };
   const subjectTemplate = profile?.defaultInvoiceEmailSubjectTemplate || "Invoice {{invoiceNumber}} from {{businessName}}";
-  const subject = renderTemplate(subjectTemplate, templateValues);
-  const body = buildPreparedInvoiceEmailBody({
-    invoice,
-    business,
-    client,
-    publicUrl: fullPublicUrl,
-    greeting: profile?.defaultEmailGreeting,
-    intro: profile?.defaultEmailIntro,
-    paymentLine: profile?.defaultEmailPaymentLine,
-    signOff: profile?.defaultEmailSignOff,
-    includePaymentDetails: profile?.includePaymentDetailsInEmail ?? false,
-    includeInvoiceSummary: profile?.includeInvoiceSummaryInEmail ?? false,
-    includePublicInvoiceLink: profile?.includePublicInvoiceLinkInEmail ?? true
-  });
+  const subject = isReminder
+    ? `Payment reminder: ${invoice.invoiceNumber} from ${business.name}`
+    : renderTemplate(subjectTemplate, templateValues);
+  const body = isReminder
+    ? buildInvoiceReminderEmailBody({ invoice, business, client, publicUrl: fullPublicUrl })
+    : buildPreparedInvoiceEmailBody({
+        invoice,
+        business,
+        client,
+        publicUrl: fullPublicUrl,
+        greeting: profile?.defaultEmailGreeting,
+        intro: profile?.defaultEmailIntro,
+        paymentLine: profile?.defaultEmailPaymentLine,
+        signOff: profile?.defaultEmailSignOff,
+        includePaymentDetails: profile?.includePaymentDetailsInEmail ?? false,
+        includeInvoiceSummary: profile?.includeInvoiceSummaryInEmail ?? false,
+        includePublicInvoiceLink: profile?.includePublicInvoiceLinkInEmail ?? true
+      });
   const disabledReason = !client.email ? "Add an email address to this client before preparing the email." : "";
   const confirmationCopyEmail = invoiceEmailConfirmationCopyAddress(business.email);
   const replyToEmail = profile?.replyToEmail || business.email;
@@ -80,8 +92,8 @@ export default async function InvoiceEmailPage({ params }: { params: Promise<{ i
 
       <header className="page-header flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
         <div>
-          <p className="section-title">Email invoice</p>
-          <h1 className="page-title">Prepare email</h1>
+          <p className="section-title">{isReminder ? "Payment follow-up" : "Email invoice"}</p>
+          <h1 className="page-title">{isReminder ? "Review reminder" : "Prepare email"}</h1>
           <p className="mt-1 text-xl font-black">{invoice.invoiceNumber}</p>
           <p className="mt-1 text-sm font-bold text-moss">
             {invoice.project.title} - {client.businessName}
@@ -102,6 +114,7 @@ export default async function InvoiceEmailPage({ params }: { params: Promise<{ i
           invoiceStatus={invoice.status}
           confirmIncomplete={invoice.status === "DRAFT" && hasFinaliseWarnings(profile)}
           disabledReason={disabledReason}
+          purpose={isReminder ? "reminder" : "invoice"}
         />
 
         <aside className="grid gap-4">

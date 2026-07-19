@@ -111,6 +111,32 @@ export const tutorials: TutorialDefinition[] = [
     actionLabel: "Open Home"
   },
   {
+    key: "install-iphone",
+    category: "Getting Started",
+    title: "Install the app on iPhone",
+    summary: "Add Trade Invoice Tracker to your Home Screen for quick, full-screen access.",
+    purpose: "A Home Screen icon removes browser-tab friction and makes the tracker feel like an everyday work app without requiring an App Store download.",
+    whenToUse: "Use this once on the iPhone or iPad where you normally record work. Replay it if you change devices or remove the icon.",
+    outcome: "You will know exactly where to find Share, Add to Home Screen and the final Add confirmation.",
+    durationMinutes: 2,
+    icon: "navigation",
+    keywords: ["iphone", "ipad", "install", "home screen", "pwa", "share", "safari"],
+    steps: [
+      { title: "Open the app in your iPhone browser", body: "Safari provides the most familiar installation path. Sign-in is optional before installing." },
+      { title: "Tap Share", body: "Find the square with an upward arrow in the browser toolbar and open the Share menu." },
+      { title: "Choose Add to Home Screen", body: "Scroll if needed, select Add to Home Screen, keep the app name and tap Add." },
+      { title: "Launch from the new icon", body: "Open Trade Invoice Tracker from your Home Screen for a clean, full-screen app experience." }
+    ],
+    demoFrames: [
+      { label: "Share", title: "Open the Share menu", detail: "Tap the square with the upward arrow" },
+      { label: "+", title: "Add to Home Screen", detail: "Scroll to the installation action" },
+      { label: "Add", title: "Confirm", detail: "Keep the name and tap Add" },
+      { label: "App", title: "Launch", detail: "Use the new Home Screen icon" }
+    ],
+    actionHref: "/more?install=iphone",
+    actionLabel: "Open visual install guide"
+  },
+  {
     key: "dashboard",
     category: "Getting Started",
     title: "Read your dashboard",
@@ -529,4 +555,11 @@ export const tutorials: TutorialDefinition[] = [
 
 export function tutorialByKey(key: string) {
   return tutorials.find((tutorial) => tutorial.key === key);
+}
+
+export function clampTutorialStep(key: string | undefined, requestedStep: number) {
+  const tutorial = key ? tutorialByKey(key) : undefined;
+  if (!tutorial || !Number.isFinite(requestedStep)) return 0;
+
+  return Math.max(0, Math.min(Math.trunc(requestedStep), tutorial.steps.length - 1));
 }

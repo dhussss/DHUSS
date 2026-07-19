@@ -17,7 +17,7 @@ import { buildInvoiceLineData, invoiceTotals, summaryText } from "@/lib/invoices
 import { sendInvoiceMmsWithPdf, sendPreparedInvoiceEmailWithPdf } from "@/lib/invoice-delivery";
 import { isQuarterHour, isQuarterHourClock, parseClockTime } from "@/lib/time";
 import { createClient } from "@/lib/supabase/server";
-import { safeInternalPath } from "@/lib/navigation";
+import { safeInternalPath, withInternalPathParams } from "@/lib/navigation";
 
 function text(formData: FormData, key: string) {
   return String(formData.get(key) ?? "").trim();
@@ -63,6 +63,13 @@ function optionalPercentage(formData: FormData, key: string) {
 
 function returnTo(formData: FormData) {
   return safeInternalPath(text(formData, "returnTo"));
+}
+
+function workEntryReturnTo(formData: FormData, mode: "time" | "item") {
+  const destination = returnTo(formData);
+  const params: Record<string, string> = { workSaved: mode };
+  if (text(formData, "continueLogging") === "1") params.logWork = mode;
+  return withInternalPathParams(destination, params);
 }
 
 function revalidateAppData() {
@@ -458,7 +465,7 @@ export async function createTimeEntryAction(formData: FormData) {
     revalidatePath("/");
     revalidatePath("/insights");
     revalidateDataTags(CACHE_TAGS.dashboard, CACHE_TAGS.insights);
-    redirect(returnTo(formData));
+    redirect(workEntryReturnTo(formData, "time"));
   }
 
   let durationMinutes = 0;
@@ -506,7 +513,7 @@ export async function createTimeEntryAction(formData: FormData) {
   revalidatePath("/");
   revalidatePath("/projects");
   revalidateDataTags(CACHE_TAGS.dashboard, CACHE_TAGS.projects, CACHE_TAGS.hoursExport, CACHE_TAGS.insights);
-  redirect(returnTo(formData));
+  redirect(workEntryReturnTo(formData, "time"));
 }
 
 function timeEntryDataFromForm(formData: FormData) {
@@ -633,7 +640,7 @@ export async function createExpenseItemAction(formData: FormData) {
   revalidatePath("/");
   revalidatePath("/projects");
   revalidateDataTags(CACHE_TAGS.dashboard, CACHE_TAGS.projects, CACHE_TAGS.insights);
-  redirect(returnTo(formData));
+  redirect(workEntryReturnTo(formData, "item"));
 }
 
 function expenseItemDataFromForm(formData: FormData) {

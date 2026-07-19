@@ -7,7 +7,7 @@ import { requireUser } from "@/lib/auth";
 import { CACHE_TAGS } from "@/lib/app-data";
 import { parseInputDate, todayInPerth } from "@/lib/dates";
 import { dollarsToCents } from "@/lib/money";
-import { safeInternalPath } from "@/lib/navigation";
+import { safeInternalPath, withInternalPathParams } from "@/lib/navigation";
 import { prisma } from "@/lib/prisma";
 import { isQuarterHour, isQuarterHourClock, parseClockTime } from "@/lib/time";
 
@@ -27,6 +27,13 @@ function positiveRate(formData: FormData, name: string, label: string) {
 
 function safeReturnTo(formData: FormData, fallback: string) {
   return safeInternalPath(value(formData, "returnTo"), fallback);
+}
+
+function timeEntryReturnTo(formData: FormData, fallback: string) {
+  const destination = safeReturnTo(formData, fallback);
+  const params: Record<string, string> = { workSaved: "time" };
+  if (value(formData, "continueLogging") === "1") params.logWork = "time";
+  return withInternalPathParams(destination, params);
 }
 
 function durationFromForm(formData: FormData) {
@@ -231,7 +238,7 @@ export async function createSubcontractorTimeEntryAction(formData: FormData) {
     }
   });
   revalidateTeam(assignment.projectId);
-  redirect(safeReturnTo(formData, "/team/work?saved=1"));
+  redirect(timeEntryReturnTo(formData, "/team/work?saved=1"));
 }
 
 export async function deleteTeamTimeEntryAction(formData: FormData) {

@@ -1,5 +1,14 @@
-const CACHE_NAME = "trade-invoice-tracker-v2";
-const STATIC_ASSETS = ["/manifest.webmanifest", "/icons/icon.svg", "/icons/maskable.svg", "/icons/apple-touch-icon.png"];
+const CACHE_NAME = "trade-invoice-tracker-v3";
+const STATIC_ASSETS = [
+  "/manifest.webmanifest",
+  "/icons/icon.svg",
+  "/icons/maskable.svg",
+  "/icons/apple-touch-icon.png",
+  "/guides/iphone-install-share.png",
+  "/guides/iphone-install-menu.png",
+  "/guides/iphone-install-confirm.png",
+  "/guides/iphone-install-launch.png"
+];
 
 self.addEventListener("install", (event) => {
   event.waitUntil(caches.open(CACHE_NAME).then((cache) => cache.addAll(STATIC_ASSETS)));

@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useEffect, useMemo, useState, useTransition } from "react";
+import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import {
   ArrowLeft,
   ArrowRight,
@@ -35,7 +35,7 @@ import {
   restartTutorialAction,
   saveTutorialProgressAction
 } from "@/app/tutorials/actions";
-import { tutorialCategories, tutorials } from "@/lib/tutorials";
+import { clampTutorialStep, tutorialCategories, tutorials } from "@/lib/tutorials";
 import type { TutorialDefinition, TutorialIcon } from "@/lib/tutorials";
 
 export type TutorialProgressSnapshot = {
@@ -89,10 +89,28 @@ export function TutorialLibrary({
   const [category, setCategory] = useState<string>("All");
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("ALL");
   const [activeKey, setActiveKey] = useState<string | null>(() => available.some((item) => item.key === initialGuide) ? initialGuide ?? null : null);
-  const [activeStep, setActiveStep] = useState(() => Math.max(0, initialStep));
+  const [activeStep, setActiveStep] = useState(() => clampTutorialStep(initialGuide, initialStep));
   const [error, setError] = useState("");
   const [isPending, startTransition] = useTransition();
+  const closeButtonRef = useRef<HTMLButtonElement>(null);
+  const previousFocusRef = useRef<HTMLElement | null>(null);
   const active = available.find((tutorial) => tutorial.key === activeKey) ?? null;
+
+  useEffect(() => {
+    if (!activeKey) return;
+
+    previousFocusRef.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    const frame = window.requestAnimationFrame(() => closeButtonRef.current?.focus());
+
+    return () => {
+      window.cancelAnimationFrame(frame);
+      document.body.style.overflow = previousOverflow;
+      previousFocusRef.current?.focus();
+      previousFocusRef.current = null;
+    };
+  }, [activeKey]);
 
   useEffect(() => {
     if (!active) return;
@@ -127,23 +145,33 @@ export function TutorialLibrary({
     step: number,
     status: "IN_PROGRESS" | "COMPLETED"
   ) {
+    const previous = progress[tutorialKey];
+    const optimistic: TutorialProgressSnapshot = {
+      tutorialKey,
+      currentStep: step,
+      status,
+      completedAt: status === "COMPLETED" ? new Date().toISOString() : null
+    };
     const formData = new FormData();
     formData.set("tutorialKey", tutorialKey);
     formData.set("currentStep", String(step));
     setProgress((current) => ({
       ...current,
-      [tutorialKey]: {
-        tutorialKey,
-        currentStep: step,
-        status,
-        completedAt: status === "COMPLETED" ? new Date().toISOString() : null
-      }
+      [tutorialKey]: optimistic
     }));
     setError("");
     startTransition(async () => {
       try {
         await action(formData);
       } catch {
+        setProgress((current) => {
+          if (current[tutorialKey] !== optimistic) return current;
+          if (previous) return { ...current, [tutorialKey]: previous };
+
+          const next = { ...current };
+          delete next[tutorialKey];
+          return next;
+        });
         setError("Your progress could not be saved. The tutorial is still open, so you can try again.");
       }
     });
@@ -271,7 +299,7 @@ export function TutorialLibrary({
                 <h2 id="tutorial-title" className="mt-1 text-2xl font-semibold text-ink sm:text-3xl">{active.title}</h2>
                 <p id="tutorial-summary" className="mt-1 text-sm font-medium leading-6 text-moss">{active.summary}</p>
               </div>
-              <button type="button" className="grid size-10 shrink-0 place-items-center rounded-lg border border-line bg-white" onClick={closeTutorial} aria-label="Close tutorial"><X size={19} aria-hidden="true" /></button>
+              <button ref={closeButtonRef} type="button" className="grid size-10 shrink-0 place-items-center rounded-lg border border-line bg-white" onClick={closeTutorial} aria-label="Close tutorial"><X size={19} aria-hidden="true" /></button>
             </div>
 
             <div className="overflow-y-auto overscroll-contain">

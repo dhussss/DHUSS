@@ -12,6 +12,7 @@ The default product name is centrally configured and can be changed without edit
 - Draft, sent, paid, unpaid, unsent, void, restored, and deleted invoice workflows
 - Server-generated PDF invoices, reviewed SMTP email delivery, optional Twilio MMS delivery, and token-based client links
 - Dashboard, billing calendar, hours export, expenses, and business insights
+- Tenant-safe Finder for clients, owned or assigned projects, and invoices
 - Installable PWA behaviour for iPhone and desktop
 
 Quotes and receipt-photo storage are not currently supported.
@@ -187,7 +188,7 @@ New users select sole trader or team setup, learn the complete client -> project
 
 The learning centre remains available under **More > Tutorials** and includes:
 
-- 18 reusable, role-aware tutorials organised by workflow
+- 20 reusable, role-aware tutorials organised by workflow
 - search by topic, feature, and real-world use case
 - completed, in-progress, and not-started filters
 - owner-scoped progress saved across devices
@@ -210,6 +211,8 @@ Clients can be created, viewed, edited, and deleted only when no protected billi
 
 Time uses integer minutes and a snapshotted hourly rate. Expense and wage values use integer cents. Billed entries cannot be edited or deleted until the related invoice is returned to draft, voided, or deleted through the guarded workflow.
 
+Log Work remembers the last valid project on each account and supports **Save & log another** for consecutive entries. Unfinished time and item forms are stored only on that device, scoped to the signed-in account, and restored for up to 14 days. Saving is disabled while the browser is offline so a weak connection cannot masquerade as a successful submission.
+
 ### Team and Wages
 
 1. The owner creates an invitation under **More > Team** with default pay and charge rates.
@@ -225,6 +228,9 @@ Historical time and invoice lines retain pay/charge snapshots when later rates c
 ### Invoices
 
 - Draft creation reserves its selected time/expense sources from other new drafts without marking them billed.
+- The invoice register groups outstanding balances into due-soon, 1–30 day overdue, and 31+ day overdue collections views.
+- Sent invoices can open a reviewed, editable payment reminder with the invoice PDF and active client link attached.
+- Client pages calculate issued, paid, outstanding, and overdue totals across full invoice history while keeping the visible recent list concise.
 - Invoice numbering advances from the highest existing sequence for the owner's prefix and year, so deleted numbers are not reused.
 - Sending by reviewed email or confirmed MMS automatically marks a draft invoice sent and records its sources as billed.
 - A provider-accepted delivery followed by a failed status transition produces a prominent warning telling the user not to blindly resend.
@@ -235,7 +241,9 @@ Historical time and invoice lines retain pay/charge snapshots when later rates c
 
 ## PWA and Caching
 
-The service worker caches only explicit public static assets such as the manifest and app icons. It does not cache authenticated HTML, page data, invoice responses, or API traffic. This avoids stale or cross-session business data on shared devices.
+On the first browser visit from an iPhone or iPad, the app opens a four-step visual guide showing Share, **Add to Home Screen**, the final **Add** confirmation, and the installed icon. It does not appear inside the installed standalone app or on public client invoice links. Users can dismiss it and replay it later from **More > Install on iPhone** or the Tutorials library.
+
+The service worker caches only explicit public static assets such as the manifest, app icons, and installation-guide images. It does not cache authenticated HTML, page data, invoice responses, or API traffic. This avoids stale or cross-session business data on shared devices.
 
 Read-heavy dashboard/list data uses short owner-scoped server caches. Mutations revalidate the relevant cache tags and routes.
 

@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { AlertTriangle, ArrowLeft, Banknote, ExternalLink, Link2, RefreshCcw, RotateCcw, Send, Trash2, XCircle } from "lucide-react";
+import { AlertTriangle, ArrowLeft, Banknote, BellRing, ExternalLink, Link2, RefreshCcw, RotateCcw, Send, Trash2, XCircle } from "lucide-react";
 import {
   deleteInvoiceAction,
   enableInvoicePublicLinkAction,
@@ -137,6 +137,12 @@ export default async function InvoiceDetailPage({ params }: { params: Promise<{ 
                 disabledReason={emailDisabledReason}
                 smsDisabledReason={smsDisabledReason}
               />
+              {invoice.status === "SENT" && !emailDisabledReason ? (
+                <Link href={`/invoices/${invoice.id}/email?mode=reminder`} className="tap-secondary w-full">
+                  <BellRing size={19} aria-hidden="true" />
+                  Review Payment Reminder
+                </Link>
+              ) : null}
             </div>
           </section>
 

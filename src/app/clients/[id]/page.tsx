@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import { ArrowLeft, BriefcaseBusiness, Edit, FilePlus, FileText, Mail, Phone, UsersRound } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { requireUserId } from "@/lib/auth";
+import { getClientAccountSummary } from "@/lib/app-data";
 import { prisma } from "@/lib/prisma";
 import { formatDateAU } from "@/lib/dates";
 import { formatMoney } from "@/lib/money";
@@ -24,51 +25,53 @@ export default async function ClientDetailPage({
   const { id } = await params;
   const query = await searchParams;
   const ownerId = await requireUserId();
-  const client = await prisma.client.findFirst({
-    where: { id, ownerId },
-    select: {
-      id: true,
-      businessName: true,
-      contactName: true,
-      email: true,
-      phone: true,
-      abn: true,
-      address: true,
-      notes: true,
-      projects: {
-        select: {
-          id: true,
-          title: true,
-          status: true,
-          currentHourlyRateCents: true,
-          updatedAt: true
+  const [client, account] = await Promise.all([
+    prisma.client.findFirst({
+      where: { id, ownerId },
+      select: {
+        id: true,
+        businessName: true,
+        contactName: true,
+        email: true,
+        phone: true,
+        abn: true,
+        address: true,
+        notes: true,
+        projects: {
+          select: {
+            id: true,
+            title: true,
+            status: true,
+            currentHourlyRateCents: true,
+            updatedAt: true
+          },
+          orderBy: [{ status: "asc" }, { title: "asc" }]
         },
-        orderBy: [{ status: "asc" }, { title: "asc" }]
-      },
-      invoices: {
-        select: {
-          id: true,
-          invoiceNumber: true,
-          status: true,
-          invoiceDate: true,
-          dueDate: true,
-          grandTotalCents: true,
-          project: { select: { title: true } }
-        },
-        orderBy: [{ invoiceDate: "desc" }, { invoiceNumber: "desc" }],
-        take: 6
+        invoices: {
+          select: {
+            id: true,
+            invoiceNumber: true,
+            status: true,
+            invoiceDate: true,
+            dueDate: true,
+            grandTotalCents: true,
+            project: { select: { title: true } }
+          },
+          orderBy: [{ invoiceDate: "desc" }, { invoiceNumber: "desc" }],
+          take: 6
+        }
       }
-    }
-  });
+    }),
+    getClientAccountSummary(ownerId, id)
+  ]);
 
   if (!client) notFound();
 
   const activeProjectCount = client.projects.filter((project) => project.status === "ACTIVE").length;
   const archivedProjectCount = client.projects.length - activeProjectCount;
-  const activeInvoices = client.invoices.filter((invoice) => invoice.status !== "VOID");
-  const invoiceValueCents = activeInvoices.reduce((sum, invoice) => sum + invoice.grandTotalCents, 0);
   const saved = query?.saved === "client-created" || query?.saved === "client-updated";
   const addProjectHref = `/projects/new?clientId=${encodeURIComponent(client.id)}`;
+  const allInvoicesHref = `/invoices?q=${encodeURIComponent(client.businessName)}`;
 
   return (
     <main className="page-shell">
@@ -106,10 +109,11 @@ export default async function ClientDetailPage({
         </div>
       ) : null}
 
-      <section className="mt-5 grid gap-3 md:grid-cols-3">
-        <SummaryTile label="Active projects" value={String(activeProjectCount)} />
-        <SummaryTile label="Archived projects" value={String(archivedProjectCount)} />
-        <SummaryTile label="Invoice value" value={formatMoney(invoiceValueCents)} />
+      <section className="mt-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-4" aria-label="Client account summary">
+        <SummaryTile label="Outstanding" value={formatMoney(account.outstanding.valueCents)} note={`${account.outstanding.count} awaiting payment`} />
+        <SummaryTile label="Overdue" value={formatMoney(account.overdue.valueCents)} note={`${account.overdue.count} need follow-up`} urgent={account.overdue.count > 0} />
+        <SummaryTile label="Paid" value={formatMoney(account.paid.valueCents)} note={`${account.paid.count} paid invoices`} />
+        <SummaryTile label="Lifetime issued" value={formatMoney(account.issued.valueCents)} note={`${account.issued.count} sent or paid`} />
       </section>
 
       <section className="mt-5 grid gap-5 lg:grid-cols-[0.9fr_1.1fr]">
@@ -129,7 +133,7 @@ export default async function ClientDetailPage({
             <div className="surface-header flex items-center justify-between gap-3">
               <div>
                 <p className="section-title">Projects</p>
-                <h2 className="mt-1 text-xl font-black">Linked jobs</h2>
+                <h2 className="mt-1 text-xl font-black">Linked jobs <span className="text-sm font-bold text-moss">({activeProjectCount} active · {archivedProjectCount} archived)</span></h2>
               </div>
               <Link href={addProjectHref} className="text-sm font-bold text-mint">
                 Add Project
@@ -155,9 +159,12 @@ export default async function ClientDetailPage({
           </section>
 
           <section className="surface-panel">
-            <div className="surface-header">
-              <p className="section-title">Invoices</p>
-              <h2 className="mt-1 text-xl font-black">Recent invoices</h2>
+            <div className="surface-header flex items-center justify-between gap-3">
+              <div>
+                <p className="section-title">Invoices</p>
+                <h2 className="mt-1 text-xl font-black">Recent invoices</h2>
+              </div>
+              <Link href={allInvoicesHref} className="text-sm font-bold text-mint">View all</Link>
             </div>
             <div className="grid gap-3 p-3">
               {client.invoices.length ? (
@@ -186,11 +193,12 @@ export default async function ClientDetailPage({
   );
 }
 
-function SummaryTile({ label, value }: { label: string; value: string }) {
+function SummaryTile({ label, value, note, urgent = false }: { label: string; value: string; note: string; urgent?: boolean }) {
   return (
-    <article className="card">
-      <p className="text-xs font-black uppercase text-moss">{label}</p>
-      <p className="mt-3 text-3xl font-black text-ink">{value}</p>
+    <article className={`card ${urgent ? "border-gum/35" : ""}`}>
+      <p className={`text-xs font-black uppercase ${urgent ? "text-gum" : "text-moss"}`}>{label}</p>
+      <p className={`mt-3 text-3xl font-black ${urgent ? "text-gum" : "text-ink"}`}>{value}</p>
+      <p className="mt-1 text-xs font-bold text-moss">{note}</p>
     </article>
   );
 }

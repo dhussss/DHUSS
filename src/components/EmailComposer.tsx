@@ -15,7 +15,8 @@ export function EmailComposer({
   confirmationCopyEmail,
   invoiceStatus,
   confirmIncomplete,
-  disabledReason
+  disabledReason,
+  purpose = "invoice"
 }: {
   invoiceId: string;
   pdfHref: string;
@@ -27,6 +28,7 @@ export function EmailComposer({
   invoiceStatus: string;
   confirmIncomplete: boolean;
   disabledReason?: string;
+  purpose?: "invoice" | "reminder";
 }) {
   const router = useRouter();
   const [to, setTo] = useState(initialTo);
@@ -45,7 +47,8 @@ export function EmailComposer({
     setHasWarning(false);
 
     const statusNote = invoiceStatus === "DRAFT" ? " It will also be marked sent and its work recorded as billed." : "";
-    if (!window.confirm(`Send this invoice to ${to || "the client"} with the PDF attached?${statusNote}`)) return;
+    const deliveryLabel = purpose === "reminder" ? "payment reminder" : "invoice";
+    if (!window.confirm(`Send this ${deliveryLabel} to ${to || "the client"} with the PDF attached?${statusNote}`)) return;
 
     startTransition(async () => {
       try {
@@ -137,9 +140,9 @@ export function EmailComposer({
       <div className="card grid gap-4">
         <div>
           <p className="section-title">Review email</p>
-          <h2 className="mt-1 text-2xl font-black text-ink">Confirm before sending</h2>
+          <h2 className="mt-1 text-2xl font-black text-ink">{purpose === "reminder" ? "Review the follow-up" : "Confirm before sending"}</h2>
           <p className="mt-2 text-sm font-bold leading-6 text-moss">
-            This sends the email from the app through your configured SMTP account with the invoice PDF attached. A confirmation copy will be sent to your email so you have a real record.
+            This sends {purpose === "reminder" ? "the reminder" : "the email"} through your configured SMTP account with the invoice PDF attached. A confirmation copy will be sent to your email so you have a real record.
             {invoiceStatus === "DRAFT" ? " Sending will also mark this invoice as sent and record its included work as billed." : ""}
           </p>
         </div>
@@ -177,7 +180,7 @@ export function EmailComposer({
             ) : (
               <>
                 <Mail size={20} aria-hidden="true" />
-                Send Email with PDF
+                {purpose === "reminder" ? "Send Reminder with PDF" : "Send Email with PDF"}
               </>
             )}
           </button>

@@ -1,5 +1,5 @@
 import type { InvoiceMode, InvoiceStatus, LineItemType } from "@prisma/client";
-import { addDays, formatDateAU } from "@/lib/dates";
+import { addDays, formatDateAU, todayInPerth } from "@/lib/dates";
 import { formatMoney } from "@/lib/money";
 import { formatHours } from "@/lib/time";
 
@@ -181,6 +181,43 @@ export function buildPreparedInvoiceEmailBody({
     .replace(/[ \t]+\n/g, "\n")
     .replace(/\n{3,}/g, "\n\n")
     .trim();
+}
+
+export function buildInvoiceReminderEmailBody({
+  invoice,
+  business,
+  client,
+  publicUrl,
+  today = todayInPerth()
+}: {
+  invoice: InvoiceDocumentData;
+  business: InvoiceBusinessDetails;
+  client: InvoiceClientDetails;
+  publicUrl?: string | null;
+  today?: Date;
+}) {
+  const dueDate = invoiceDueDate(invoice);
+  const isOverdue = dueDate < today;
+  const blocks = [
+    `Hi ${client.contactName || client.businessName},`,
+    "",
+    isOverdue
+      ? `Just a friendly reminder that invoice ${invoice.invoiceNumber} for ${invoice.project.title} is now overdue.`
+      : `Just a friendly reminder that invoice ${invoice.invoiceNumber} for ${invoice.project.title} is due soon.`,
+    "",
+    `Amount outstanding: ${formatMoney(invoice.grandTotalCents)}`,
+    `Due date: ${formatEmailDate(dueDate)}`,
+    "",
+    "Please let us know if payment has already been arranged or if you have any questions."
+  ];
+
+  if (publicUrl) {
+    blocks.push("", "View invoice online:", publicUrl);
+  }
+
+  blocks.push("", "Kind regards,", business.contactName || business.name, business.name);
+
+  return blocks.join("\n").trim();
 }
 
 function formatEmailDate(date: Date | string | number) {

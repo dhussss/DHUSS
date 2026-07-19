@@ -1,8 +1,11 @@
 import type { Metadata, Viewport } from "next";
+import { Suspense } from "react";
 import "./globals.css";
 import { AppHeader } from "@/components/AppHeader";
 import { BuildIndicator } from "@/components/BuildIndicator";
 import { BottomNav } from "@/components/BottomNav";
+import { IphoneInstallGuide } from "@/components/IphoneInstallGuide";
+import { ConnectionStatus } from "@/components/ConnectionStatus";
 import { ServiceWorkerRegister } from "@/components/ServiceWorkerRegister";
 import { ThemeVars } from "@/components/ThemeVars";
 import { resolveAppBaseUrl } from "@/lib/app-url";
@@ -53,6 +56,10 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
       <body>
         <ThemeVars />
         <ServiceWorkerRegister />
+        <Suspense fallback={null}>
+          <IphoneInstallGuide />
+        </Suspense>
+        <ConnectionStatus />
         <AppHeader />
         <BuildIndicator />
         {children}

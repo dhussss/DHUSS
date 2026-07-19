@@ -1,11 +1,25 @@
 import Link from "next/link";
-import { ArrowRight, BarChart3, BookOpenCheck, Building2, Clock3, FileDown, HelpCircle, LogOut, ReceiptText, Settings2, ShieldCheck, UsersRound } from "lucide-react";
+import { ArrowRight, BarChart3, BookOpenCheck, Building2, Clock3, FileDown, HelpCircle, LogOut, ReceiptText, Search, Settings2, ShieldCheck, Smartphone, UsersRound } from "lucide-react";
 import { logoutAction } from "@/app/actions";
 import { requireUserId } from "@/lib/auth";
 
 export const dynamic = "force-dynamic";
 
 const links = [
+  {
+    href: "/search",
+    label: "Find anything",
+    body: "Search clients, projects, assigned work, and invoices from one place.",
+    icon: Search,
+    group: "Work"
+  },
+  {
+    href: "/more?install=iphone",
+    label: "Install on iPhone",
+    body: "Replay the visual steps for adding Trade Invoice Tracker to your Home Screen.",
+    icon: Smartphone,
+    group: "Help"
+  },
   {
     href: "/tutorials",
     label: "Tutorials",
