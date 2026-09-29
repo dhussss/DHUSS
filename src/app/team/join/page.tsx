@@ -1,7 +1,9 @@
+
+import { ActionForm } from "@/components/ActionForm";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { ArrowLeft, Link2 } from "lucide-react";
-import { acceptTeamInvitationAction } from "@/app/team/actions";
+import { acceptTeamInvitationAction } from "@/app/form-actions";
 import { SubmitButton } from "@/components/SubmitButton";
 import { getUser } from "@/lib/auth";
 
@@ -19,10 +21,10 @@ export default async function JoinTeamPage({ searchParams }: { searchParams?: Pr
         <span className="icon-tile"><Link2 size={21} aria-hidden="true" /></span>
         <h1 className="mt-4 text-3xl font-black">Join a contractor team</h1>
         <p className="mt-2 text-sm font-medium leading-6 text-moss">This links only projects assigned to you. Your private clients, invoices, expenses, and dashboard remain separate.</p>
-        <form action={acceptTeamInvitationAction} className="mt-5 grid gap-4">
+        <ActionForm action={acceptTeamInvitationAction} className="mt-5 grid gap-4">
           <label>Invitation code<input name="code" defaultValue={code} autoCapitalize="characters" required /></label>
           <SubmitButton className="tap-primary" pendingLabel="Joining team..."><Link2 size={19} aria-hidden="true" />Accept invitation</SubmitButton>
-        </form>
+        </ActionForm>
       </section>
     </main>
   );

@@ -128,7 +128,16 @@ label {
   gap: 0.4rem;
   font-size: 0.85rem;
   font-weight: 600;
-  color: #454c48;
+  color: var(--app-ink);
+}
+
+@media (max-width: 640px) {
+  input,
+  select,
+  textarea {
+    min-width: 0;
+    font-size: 16px;
+  }
 }
 
 ::selection {
@@ -1557,6 +1566,123 @@ label {
   place-items: center;
 }
 
+.project-position,
+.project-money-trail {
+  overflow: hidden;
+  border: 1px solid var(--app-line);
+  border-radius: 8px;
+  background: white;
+  box-shadow: 0 1px 2px rgb(23 26 29 / 0.035);
+}
+
+.project-position-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.project-position-grid > div {
+  min-width: 0;
+  padding: 1rem;
+  border-left: 1px solid var(--app-line);
+}
+
+.project-position-grid > div:first-child {
+  border-left: 0;
+}
+
+.project-position-grid > div.is-highlighted {
+  background: rgb(var(--color-accent-rgb) / 0.055);
+}
+
+.money-trail-row {
+  display: flex;
+  min-height: 4.5rem;
+  align-items: center;
+  gap: 0.8rem;
+  border-bottom: 1px solid var(--app-line);
+  padding: 0.85rem 1rem;
+  transition: background-color 150ms ease;
+}
+
+.money-trail-row:last-child {
+  border-bottom: 0;
+}
+
+.money-trail-icon {
+  display: grid;
+  width: 2.25rem;
+  height: 2.25rem;
+  flex: 0 0 auto;
+  place-items: center;
+  border-radius: 8px;
+}
+
+.money-trail-icon.is-income {
+  background: rgb(var(--color-accent-rgb) / 0.1);
+  color: rgb(var(--color-accent-rgb));
+}
+
+.money-trail-icon.is-cost {
+  background: rgb(var(--color-secondary-rgb) / 0.1);
+  color: rgb(var(--color-secondary-rgb));
+}
+
+.pay-run-entry {
+  display: flex;
+  min-height: 4rem;
+  cursor: pointer;
+  align-items: center;
+  gap: 0.75rem;
+  border-bottom: 1px solid var(--app-line);
+  padding: 0.75rem 1rem;
+  transition: background-color 150ms ease;
+}
+
+.pay-run-entry:last-child {
+  border-bottom: 0;
+}
+
+.pay-run-entry:hover,
+.pay-run-entry.is-selected {
+  background: rgb(var(--color-accent-rgb) / 0.045);
+}
+
+.pay-run-check {
+  display: grid;
+  width: 1.35rem;
+  height: 1.35rem;
+  flex: 0 0 auto;
+  place-items: center;
+  border: 1px solid var(--app-line);
+  border-radius: 5px;
+  color: white;
+}
+
+.pay-run-entry.is-selected .pay-run-check {
+  border-color: rgb(var(--color-accent-rgb));
+  background: rgb(var(--color-accent-rgb));
+}
+
+.payroll-row {
+  grid-template-columns: auto minmax(0, 1fr) auto auto auto;
+}
+
+@media (max-width: 640px) {
+  .payroll-row {
+    grid-template-columns: auto minmax(0, 1fr) auto;
+  }
+
+  .payroll-row > .collection-meta {
+    grid-column: 2;
+  }
+
+  .payroll-row > .collection-value,
+  .payroll-row > span.text-right {
+    grid-column: 2 / 4;
+    text-align: left;
+  }
+}
+
 /* Invoice detail controls */
 .invoice-primary-action,
 .invoice-control-group {
@@ -1655,6 +1781,18 @@ label {
   .project-metrics-strip {
     overflow-x: auto;
     grid-template-columns: repeat(3, minmax(8.5rem, 1fr));
+  }
+
+  .project-position-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .project-position-grid > div:nth-child(3) {
+    border-left: 0;
+  }
+
+  .project-position-grid > div:nth-child(n+3) {
+    border-top: 1px solid var(--app-line);
   }
 }
 

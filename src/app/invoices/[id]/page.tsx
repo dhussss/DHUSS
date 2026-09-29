@@ -1,18 +1,9 @@
+
+import { ActionForm } from "@/components/ActionForm";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { AlertTriangle, ArrowLeft, Banknote, BellRing, ExternalLink, Link2, RefreshCcw, RotateCcw, Send, Trash2, XCircle } from "lucide-react";
-import {
-  deleteInvoiceAction,
-  enableInvoicePublicLinkAction,
-  markInvoicePaidAction,
-  markInvoiceSentAction,
-  markInvoiceUnpaidAction,
-  markInvoiceUnsentAction,
-  regenerateInvoicePublicLinkAction,
-  revokeInvoicePublicLinkAction,
-  unvoidInvoiceAction,
-  voidInvoiceAction
-} from "@/app/actions";
+import { deleteInvoiceAction, enableInvoicePublicLinkAction, markInvoicePaidAction, markInvoiceSentAction, markInvoiceUnpaidAction, markInvoiceUnsentAction, regenerateInvoicePublicLinkAction, revokeInvoicePublicLinkAction, unvoidInvoiceAction, voidInvoiceAction } from "@/app/form-actions";
 import { ConfirmSubmitButton } from "@/components/ConfirmSubmitButton";
 import { EmailInvoiceButton } from "@/components/EmailInvoiceButton";
 import { InvoiceDocumentView } from "@/components/InvoiceDocumentView";
@@ -162,7 +153,7 @@ export default async function InvoiceDetailPage({ params }: { params: Promise<{ 
                       Open
                     </Link>
                   </div>
-                  <form action={regenerateInvoicePublicLinkAction}>
+                  <ActionForm action={regenerateInvoicePublicLinkAction}>
                     <input type="hidden" name="invoiceId" value={invoice.id} />
                     <ConfirmSubmitButton
                       className="tap-secondary w-full"
@@ -173,8 +164,8 @@ export default async function InvoiceDetailPage({ params }: { params: Promise<{ 
                       <RefreshCcw size={18} aria-hidden="true" />
                       Regenerate Link
                     </ConfirmSubmitButton>
-                  </form>
-                  <form action={revokeInvoicePublicLinkAction}>
+                  </ActionForm>
+                  <ActionForm action={revokeInvoicePublicLinkAction}>
                     <input type="hidden" name="invoiceId" value={invoice.id} />
                     <ConfirmSubmitButton
                       className="tap-danger w-full"
@@ -185,16 +176,16 @@ export default async function InvoiceDetailPage({ params }: { params: Promise<{ 
                       <XCircle size={18} aria-hidden="true" />
                       Revoke Link
                     </ConfirmSubmitButton>
-                  </form>
+                  </ActionForm>
                 </>
               ) : canSharePublicLink ? (
-                <form action={enableInvoicePublicLinkAction}>
+                <ActionForm action={enableInvoicePublicLinkAction}>
                   <input type="hidden" name="invoiceId" value={invoice.id} />
                   <SubmitButton className="tap-secondary w-full" pendingLabel="Creating link...">
                     <Link2 size={18} aria-hidden="true" />
                     Create Client Link
                   </SubmitButton>
-                </form>
+                </ActionForm>
               ) : (
                 <p className="rounded-lg border border-line bg-paper p-3 text-sm font-bold text-moss">
                   Void invoices cannot have an active client link.
@@ -212,7 +203,7 @@ export default async function InvoiceDetailPage({ params }: { params: Promise<{ 
             <summary><span>Invoice status</span><span>{invoice.status.toLowerCase()}</span></summary>
             <div className="invoice-control-body grid gap-2">
             <p className="text-xs leading-5 text-moss">Correct delivery or payment state when needed.</p>
-            <form action={markInvoiceSentAction}>
+            <ActionForm action={markInvoiceSentAction}>
               <input type="hidden" name="invoiceId" value={invoice.id} />
               {finaliseWarnings.length ? <input type="hidden" name="confirmIncomplete" value="on" /> : null}
               {finaliseWarnings.length ? (
@@ -232,8 +223,8 @@ export default async function InvoiceDetailPage({ params }: { params: Promise<{ 
                   Mark as Sent
                 </SubmitButton>
               )}
-            </form>
-            <form action={markInvoicePaidAction}>
+            </ActionForm>
+            <ActionForm action={markInvoicePaidAction}>
               <input type="hidden" name="invoiceId" value={invoice.id} />
               {finaliseWarnings.length ? <input type="hidden" name="confirmIncomplete" value="on" /> : null}
               {finaliseWarnings.length ? (
@@ -253,9 +244,9 @@ export default async function InvoiceDetailPage({ params }: { params: Promise<{ 
                   Mark Paid
                 </SubmitButton>
               )}
-            </form>
+            </ActionForm>
             {invoice.status === "PAID" ? (
-              <form action={markInvoiceUnpaidAction}>
+              <ActionForm action={markInvoiceUnpaidAction}>
                 <input type="hidden" name="invoiceId" value={invoice.id} />
                 <ConfirmSubmitButton
                   className="tap-secondary w-full"
@@ -266,10 +257,10 @@ export default async function InvoiceDetailPage({ params }: { params: Promise<{ 
                   <RotateCcw size={20} aria-hidden="true" />
                   Mark Unpaid
                 </ConfirmSubmitButton>
-              </form>
+              </ActionForm>
             ) : null}
             {invoice.status === "SENT" ? (
-              <form action={markInvoiceUnsentAction}>
+              <ActionForm action={markInvoiceUnsentAction}>
                 <input type="hidden" name="invoiceId" value={invoice.id} />
                 <ConfirmSubmitButton
                   className="tap-secondary w-full"
@@ -280,27 +271,27 @@ export default async function InvoiceDetailPage({ params }: { params: Promise<{ 
                   <RotateCcw size={20} aria-hidden="true" />
                   Mark Unsent
                 </ConfirmSubmitButton>
-              </form>
+              </ActionForm>
             ) : null}
             {invoice.status === "VOID" ? (
-              <form action={unvoidInvoiceAction}>
+              <ActionForm action={unvoidInvoiceAction}>
                 <input type="hidden" name="invoiceId" value={invoice.id} />
                 <SubmitButton className="tap-secondary w-full" pendingLabel="Restoring...">
                   <RotateCcw size={20} aria-hidden="true" />
                   Unvoid Invoice
                 </SubmitButton>
-              </form>
+              </ActionForm>
             ) : (
-              <form action={voidInvoiceAction}>
+              <ActionForm action={voidInvoiceAction}>
                 <input type="hidden" name="invoiceId" value={invoice.id} />
                 <SubmitButton className="tap-danger w-full" pendingLabel="Voiding...">
                   <XCircle size={20} aria-hidden="true" />
                   Void Invoice
                 </SubmitButton>
-              </form>
+              </ActionForm>
             )}
 
-            <form action={deleteInvoiceAction}>
+            <ActionForm action={deleteInvoiceAction}>
               <input type="hidden" name="invoiceId" value={invoice.id} />
               <ConfirmSubmitButton
                 className="tap-danger w-full"
@@ -311,7 +302,7 @@ export default async function InvoiceDetailPage({ params }: { params: Promise<{ 
                 <Trash2 size={20} aria-hidden="true" />
                 Delete Invoice
               </ConfirmSubmitButton>
-            </form>
+            </ActionForm>
             </div>
           </details>
         </aside>

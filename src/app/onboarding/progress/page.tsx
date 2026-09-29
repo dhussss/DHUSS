@@ -1,6 +1,8 @@
+
+import { ActionForm } from "@/components/ActionForm";
 import { redirect } from "next/navigation";
 import { BriefcaseBusiness, Check, Clock3, FileText, FolderKanban, UserRound } from "lucide-react";
-import { finishOnboardingAction } from "@/app/actions";
+import { finishOnboardingAction } from "@/app/form-actions";
 import { SubmitButton } from "@/components/SubmitButton";
 import { requireUserId } from "@/lib/auth";
 import { dateInputValue } from "@/lib/dates";
@@ -54,9 +56,9 @@ export default async function OnboardingProgressPage() {
               <CompletedLine icon={FileText} text="Created an invoice draft" />
             </div>
           </div>
-          <form action={finishOnboardingAction} className="border-t border-line bg-paper/50 p-4 sm:px-8 sm:py-5">
+          <ActionForm action={finishOnboardingAction} className="border-t border-line bg-paper/50 p-4 sm:px-8 sm:py-5">
             <SubmitButton className="tap-primary w-full" pendingLabel="Opening your dashboard...">Open my dashboard<Check size={18} aria-hidden="true" /></SubmitButton>
-          </form>
+          </ActionForm>
         </section>
       </div>
     </main>

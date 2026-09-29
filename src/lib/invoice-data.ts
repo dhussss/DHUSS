@@ -55,7 +55,7 @@ type InvoiceWithSnapshots = InvoiceDocumentData & {
 };
 
 function snapshot(frozen: boolean, frozenValue: string | null | undefined, liveValue: string | null | undefined) {
-  return frozen ? frozenValue ?? liveValue ?? null : liveValue ?? null;
+  return frozen ? frozenValue ?? null : liveValue ?? null;
 }
 
 export function invoiceBusinessDetails(invoice: InvoiceWithSnapshots, profile: BusinessProfileForInvoice): InvoiceBusinessDetails {
@@ -86,7 +86,7 @@ export function invoiceClientDetails(invoice: InvoiceWithSnapshots): InvoiceClie
   const frozen = invoice.status !== "DRAFT";
 
   return {
-    businessName: snapshot(frozen, invoice.clientBusinessNameSnapshot, invoice.client.businessName) ?? invoice.client.businessName,
+    businessName: snapshot(frozen, invoice.clientBusinessNameSnapshot, invoice.client.businessName) ?? "Client",
     contactName: snapshot(frozen, invoice.clientContactNameSnapshot, invoice.client.contactName),
     email: snapshot(frozen, invoice.clientEmailSnapshot, invoice.client.email),
     phone: snapshot(frozen, invoice.clientPhoneSnapshot, invoice.client.phone),

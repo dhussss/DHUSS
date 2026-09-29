@@ -1,9 +1,11 @@
 "use client";
+import { ActionForm } from "@/components/ActionForm";
+
 
 import Link from "next/link";
 import { useState, type FormEvent } from "react";
 import { ArrowLeft, Save } from "lucide-react";
-import { updateClientAction } from "@/app/actions";
+import { updateClientAction } from "@/app/form-actions";
 import { SubmitButton } from "@/components/SubmitButton";
 
 type ClientEditValue = {
@@ -41,7 +43,7 @@ export function ClientEditForm({ client }: { client: ClientEditValue }) {
   }
 
   return (
-    <form action={updateClientAction} onSubmit={validateSubmit} noValidate className="grid gap-5">
+    <ActionForm action={updateClientAction} onSubmit={validateSubmit} noValidate className="grid gap-5">
       <input type="hidden" name="clientId" value={client.id} />
 
       {error ? (
@@ -94,6 +96,6 @@ export function ClientEditForm({ client }: { client: ClientEditValue }) {
           Save Client
         </SubmitButton>
       </div>
-    </form>
+    </ActionForm>
   );
 }

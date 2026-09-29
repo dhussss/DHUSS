@@ -1,6 +1,8 @@
+
+import { ActionForm } from "@/components/ActionForm";
 import Link from "next/link";
 import { CheckCircle2, Eye, Plus, Search, Trash2, UsersRound } from "lucide-react";
-import { deleteClientAction } from "@/app/actions";
+import { deleteClientAction } from "@/app/form-actions";
 import { requireUserId } from "@/lib/auth";
 import { getClientsPageData } from "@/lib/app-data";
 import { ConfirmSubmitButton } from "@/components/ConfirmSubmitButton";
@@ -69,7 +71,7 @@ export default async function ClientsPage({
                       <Eye size={18} aria-hidden="true" />
                       View
                     </Link>
-                    <form action={deleteClientAction}>
+                    <ActionForm action={deleteClientAction}>
                       <input type="hidden" name="clientId" value={client.id} />
                       <ConfirmSubmitButton
                         className="tap-danger w-full"
@@ -80,7 +82,7 @@ export default async function ClientsPage({
                         <Trash2 size={18} aria-hidden="true" />
                         Remove
                       </ConfirmSubmitButton>
-                    </form>
+                    </ActionForm>
                   </div>
               </article>
             );

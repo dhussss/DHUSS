@@ -1,6 +1,8 @@
+
+import { ActionForm } from "@/components/ActionForm";
 import Link from "next/link";
-import { ArrowLeft, BriefcaseBusiness, CheckCircle2, Clock3, RotateCcw, Trash2, WalletCards } from "lucide-react";
-import { deleteMyTimeEntryAction } from "@/app/team/actions";
+import { ArrowLeft, BriefcaseBusiness, CheckCircle2, Clock3, Pencil, RotateCcw, Trash2, WalletCards } from "lucide-react";
+import { deleteMyTimeEntryAction } from "@/app/form-actions";
 import { SubcontractorTimeForm } from "@/components/SubcontractorTimeForm";
 import { ConfirmSubmitButton } from "@/components/ConfirmSubmitButton";
 import { LiveTeamRefresh } from "@/components/LiveTeamRefresh";
@@ -12,7 +14,8 @@ import { formatHours, labourTotalCents } from "@/lib/time";
 
 export const dynamic = "force-dynamic";
 
-export default async function AssignedWorkPage() {
+export default async function AssignedWorkPage({ searchParams }: { searchParams?: Promise<{ timeUpdated?: string }> }) {
+  const notices = await searchParams;
   const user = await requireUser();
   const [assignments, entries, payments] = await Promise.all([
     prisma.projectAssignment.findMany({
@@ -51,6 +54,7 @@ export default async function AssignedWorkPage() {
     <main className="page-shell">
       <LiveTeamRefresh />
       <Link href="/team" className="mb-4 inline-flex items-center gap-2 text-sm font-bold text-mint"><ArrowLeft size={18} aria-hidden="true" />Team</Link>
+      {notices?.timeUpdated === "1" ? <div className="mb-4 flex items-center gap-2 rounded-lg border border-mint/30 bg-mint/10 p-3 text-sm font-bold text-moss" role="status"><CheckCircle2 size={18} aria-hidden="true" />Hours updated and shared with the project owner.</div> : null}
       <header className="page-header"><p className="section-title">Assigned work</p><h1 className="page-title">Log subcontractor hours</h1><p className="page-subtitle">Hours appear in the project owner&apos;s billing and wages ledger immediately. Your agreed pay rate is shown; their client rate remains private.</p></header>
 
       {assignments.length ? (
@@ -100,18 +104,21 @@ export default async function AssignedWorkPage() {
                   <p className="text-sm font-semibold text-moss">{formatMoney(labourTotalCents(entry.durationMinutes, entry.payRateCentsSnapshot || 0))}</p>
                   {entry.paymentStatus === "PAID" ? <CheckCircle2 className="ml-auto mt-2 text-mint" size={17} aria-label="Paid" /> : null}
                   {canDelete ? (
-                    <form action={deleteMyTimeEntryAction} className="mt-2">
-                      <input type="hidden" name="entryId" value={entry.id} />
-                      <ConfirmSubmitButton
-                        className="tap-danger min-h-9 px-3 py-1.5 text-xs"
-                        message={`Delete this ${formatHours(entry.durationMinutes)}h entry for ${entry.project.title}? This cannot be undone.`}
-                        pendingLabel="Deleting..."
-                        showDefaultIcon={false}
-                      >
-                        <Trash2 size={14} aria-hidden="true" />
-                        Delete
-                      </ConfirmSubmitButton>
-                    </form>
+                    <div className="mt-2 flex justify-end gap-2">
+                      <Link href={`/team/time-entries/${entry.id}/edit?returnTo=${encodeURIComponent("/team/work")}`} className="tap-secondary min-h-9 px-3 py-1.5 text-xs"><Pencil size={14} aria-hidden="true" />Edit</Link>
+                      <ActionForm action={deleteMyTimeEntryAction}>
+                        <input type="hidden" name="entryId" value={entry.id} />
+                        <ConfirmSubmitButton
+                          className="tap-danger min-h-9 px-3 py-1.5 text-xs"
+                          message={`Delete this ${formatHours(entry.durationMinutes)}h entry for ${entry.project.title}? This cannot be undone.`}
+                          pendingLabel="Deleting..."
+                          showDefaultIcon={false}
+                        >
+                          <Trash2 size={14} aria-hidden="true" />
+                          Delete
+                        </ConfirmSubmitButton>
+                      </ActionForm>
+                    </div>
                   ) : null}
                 </div>
               </article>

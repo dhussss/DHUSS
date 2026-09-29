@@ -1,6 +1,8 @@
+
+import { ActionForm } from "@/components/ActionForm";
 import Link from "next/link";
 import { ArrowRight, BarChart3, BookOpenCheck, Building2, Clock3, FileDown, HelpCircle, LogOut, ReceiptText, Search, Settings2, ShieldCheck, Smartphone, UsersRound } from "lucide-react";
-import { logoutAction } from "@/app/actions";
+import { logoutAction } from "@/app/form-actions";
 import { requireUserId } from "@/lib/auth";
 
 export const dynamic = "force-dynamic";
@@ -44,7 +46,7 @@ const links = [
   {
     href: "/team",
     label: "Team",
-    body: "Invite subcontractors, assign projects, review hours, and track payments.",
+    body: "Add subcontractors, assign projects, log or receive hours, and track payments.",
     icon: UsersRound,
     group: "Work"
   },
@@ -123,12 +125,12 @@ export default async function MorePage() {
         ))}
       </section>
 
-      <form action={logoutAction} className="mt-3">
+      <ActionForm action={logoutAction} className="mt-3">
         <button className="tap-secondary w-full justify-start" type="submit">
           <LogOut size={20} aria-hidden="true" />
           Logout
         </button>
-      </form>
+      </ActionForm>
     </main>
   );
 }

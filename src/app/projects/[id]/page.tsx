@@ -1,10 +1,12 @@
+
+import { ActionForm } from "@/components/ActionForm";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { AlertTriangle, ArrowLeft, Banknote, CalendarDays, CheckCircle2, ChevronLeft, ChevronRight, Clock3, Edit, FilePlus, FileText, ReceiptText, RotateCcw } from "lucide-react";
+import { AlertTriangle, ArrowDownLeft, ArrowLeft, ArrowUpRight, Banknote, CalendarDays, CheckCircle2, ChevronLeft, ChevronRight, Clock3, Edit, FilePlus, FileText, ReceiptText, RotateCcw } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import type { Prisma } from "@prisma/client";
-import { deleteExpenseItemAction, deleteTimeEntryAction, deleteWorkExpenseAction, unarchiveProjectAction } from "@/app/actions";
-import { deleteTeamTimeEntryAction } from "@/app/team/actions";
+import { deleteExpenseItemAction, deleteTimeEntryAction, deleteWorkExpenseAction, unarchiveProjectAction } from "@/app/form-actions";
+import { deleteTeamTimeEntryAction } from "@/app/form-actions";
 import { requireUserId } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { addDays, dateInputValue, formatDateAU, startOfWeekMonday, todayInPerth } from "@/lib/dates";
@@ -16,6 +18,7 @@ import { LogTimeSheet } from "@/components/LogTimeSheet";
 import { SubcontractorTimeForm } from "@/components/SubcontractorTimeForm";
 import { LiveTeamRefresh } from "@/components/LiveTeamRefresh";
 import { expenseCategoryLabel } from "@/lib/expenses";
+import { projectFinancialPosition } from "@/lib/project-control";
 
 export const dynamic = "force-dynamic";
 
@@ -24,7 +27,7 @@ export default async function ProjectDetailPage({
   searchParams
 }: {
   params: Promise<{ id: string }>;
-  searchParams: Promise<{ month?: string; onboarding?: string }>;
+  searchParams: Promise<{ month?: string; onboarding?: string; timeUpdated?: string }>;
 }) {
   const [{ id }, query] = await Promise.all([params, searchParams]);
   const ownerId = await requireUserId();
@@ -35,7 +38,7 @@ export default async function ProjectDetailPage({
   const monthEnd = new Date(Date.UTC(calendarMonth.getUTCFullYear(), calendarMonth.getUTCMonth() + 1, 0));
   const calendarStart = startOfWeekMonday(monthStart);
   const calendarEnd = addDays(startOfWeekMonday(monthEnd), 6);
-  const [project, assignment, activeProjects, monthlyEntries, monthlyDraftLines, dayOffLogs] = await Promise.all([
+  const [project, assignment, activeProjects, monthlyEntries, monthlyDraftLines, dayOffLogs, managedTeamMembers] = await Promise.all([
     prisma.project.findFirst({
       where: { id, ownerId },
       select: {
@@ -58,7 +61,9 @@ export default async function ProjectDetailPage({
             teamMemberId: true,
             workerDisplayNameSnapshot: true,
             approvalStatus: true,
-            paymentStatus: true
+            paymentStatus: true,
+            payRateCentsSnapshot: true,
+            projectAssignment: { select: { payRateCents: true } }
           },
           orderBy: [{ date: "desc" }, { createdAt: "desc" }]
         },
@@ -85,7 +90,8 @@ export default async function ProjectDetailPage({
             amountCents: true,
             gstIncluded: true,
             gstAmountCents: true,
-            notes: true
+            notes: true,
+            wagePayment: { select: { id: true } }
           },
           orderBy: [{ date: "desc" }, { createdAt: "desc" }]
         },
@@ -94,11 +100,25 @@ export default async function ProjectDetailPage({
             id: true,
             invoiceNumber: true,
             status: true,
+            invoiceDate: true,
+            dueDate: true,
+            paymentDate: true,
             dateRangeStart: true,
             dateRangeEnd: true,
             grandTotalCents: true
           },
           orderBy: { invoiceDate: "desc" }
+        },
+        wagePayments: {
+          select: {
+            id: true,
+            paidAt: true,
+            reversedAt: true,
+            amountCents: true,
+            status: true,
+            teamMember: { select: { id: true, displayName: true } }
+          },
+          orderBy: { paidAt: "desc" }
         }
       }
     }),
@@ -167,6 +187,11 @@ export default async function ProjectDetailPage({
         plannedWorkDay: true
       },
       select: { date: true }
+    }),
+    prisma.teamMember.findMany({
+      where: { ownerId, status: "ACTIVE" },
+      select: { id: true, displayName: true },
+      orderBy: { displayName: "asc" }
     })
   ]);
 
@@ -210,6 +235,20 @@ export default async function ProjectDetailPage({
   }, new Map<string, { minutes: number; valueCents: number; isEmployee: boolean }>());
   const hasUnbilledWork = unbilledTimeEntries.length > 0 || unbilledExpenseItems.length > 0;
   const activeInvoiceCount = project.invoices.filter((invoice) => invoice.status !== "VOID").length;
+  const issuedRevenueCents = project.invoices
+    .filter((invoice) => invoice.status === "SENT" || invoice.status === "PAID")
+    .reduce((sum, invoice) => sum + invoice.grandTotalCents, 0);
+  const recordedExpenseCents = project.workExpenses.reduce((sum, expense) => sum + expense.amountCents, 0);
+  const unpaidWageCents = project.timeEntries
+    .filter((entry) => entry.teamMemberId && entry.approvalStatus === "APPROVED" && entry.paymentStatus === "UNPAID")
+    .reduce((sum, entry) => sum + labourTotalCents(entry.durationMinutes, entry.payRateCentsSnapshot ?? entry.projectAssignment?.payRateCents ?? 0), 0);
+  const financialPosition = projectFinancialPosition({
+    issuedRevenueCents,
+    unbilledValueCents: unbilledTotalCents,
+    recordedExpenseCents,
+    unpaidWageCents
+  });
+  const moneyTrail = buildProjectMoneyTrail(project.invoices, project.workExpenses, project.wagePayments);
   const monthLabel = new Intl.DateTimeFormat("en-AU", { month: "long", year: "numeric", timeZone: "UTC" }).format(calendarMonth);
   const monthlyActivityCells = buildMonthlyActivityCells(
     monthlyEntries,
@@ -232,6 +271,12 @@ export default async function ProjectDetailPage({
           <h2 className="mt-1 text-xl font-black text-ink">Log real work on this job</h2>
           <p className="mt-1 text-sm font-semibold leading-6 text-moss">Add the hours you have worked. Saving them will take you straight to the invoice step.</p>
         </section>
+      ) : null}
+      {query.timeUpdated === "1" ? (
+        <div className="mb-4 flex items-center gap-2 rounded-lg border border-mint/30 bg-mint/10 p-3 text-sm font-bold text-moss" role="status">
+          <CheckCircle2 size={18} aria-hidden="true" />
+          Subcontractor hours updated. Billing and wages now use the corrected entry.
+        </div>
       ) : null}
 
       <header className="project-detail-header">
@@ -256,13 +301,13 @@ export default async function ProjectDetailPage({
               Edit
             </Link>
             {project.status === "ARCHIVED" ? (
-              <form action={unarchiveProjectAction}>
+              <ActionForm action={unarchiveProjectAction}>
                 <input type="hidden" name="projectId" value={project.id} />
                 <button className="tap-primary w-full" type="submit">
                   <RotateCcw size={20} aria-hidden="true" />
                   Unarchive
                 </button>
-              </form>
+              </ActionForm>
             ) : (
               <>
                 <Link href={`/invoices/new?${projectQuery.toString()}`} className="tap-secondary">
@@ -276,6 +321,7 @@ export default async function ProjectDetailPage({
                 <LogTimeSheet
                   storageScope={ownerId}
                   projects={activeProjects}
+                  managedTeamMembers={managedTeamMembers}
                   defaultProjectId={project.id}
                   buttonLabel={onboarding ? "Log your first hours" : "Log Hours"}
                   returnTo={onboarding ? `/onboarding/progress?projectId=${project.id}` : undefined}
@@ -334,6 +380,27 @@ export default async function ProjectDetailPage({
         ) : null}
       </section>
 
+      <section className="project-position mt-5" aria-labelledby="project-position-title">
+        <div className="flex flex-col gap-2 border-b border-line p-4 sm:flex-row sm:items-end sm:justify-between sm:p-5">
+          <div>
+            <p className="section-title">Job position</p>
+            <h2 id="project-position-title" className="mt-1 text-xl font-semibold text-ink">What this project is worth</h2>
+          </div>
+          <p className="text-xs font-medium text-moss">Operational estimate · before owner labour, tax and overhead</p>
+        </div>
+        <div className="project-position-grid">
+          <FinancialMetric label="Issued to client" value={formatMoney(financialPosition.issuedRevenueCents)} detail="Sent and paid invoices" />
+          <FinancialMetric label="Ready to bill" value={formatMoney(financialPosition.unbilledValueCents)} detail="Approved unbilled work" highlight={financialPosition.unbilledValueCents > 0} />
+          <FinancialMetric label="Committed costs" value={formatMoney(financialPosition.committedCostCents)} detail={`${formatMoney(recordedExpenseCents)} recorded · ${formatMoney(unpaidWageCents)} wages due`} />
+          <FinancialMetric
+            label="Projected margin"
+            value={formatMoney(financialPosition.projectedMarginCents)}
+            detail={financialPosition.projectedMarginPercent === null ? "No project revenue yet" : `${financialPosition.projectedMarginPercent}% of projected revenue`}
+            positive={financialPosition.projectedMarginCents >= 0}
+          />
+        </div>
+      </section>
+
       <section className="project-metrics-strip mt-5">
         <ProjectMetric label="Current rate" value={`${formatMoney(project.currentHourlyRateCents)}/h`} icon={Banknote} />
         <ProjectMetric label="Logged entries" value={String(project.timeEntries.length)} icon={Clock3} />
@@ -347,6 +414,47 @@ export default async function ProjectDetailPage({
         today={today}
         cells={monthlyActivityCells}
       />
+
+      <section className="project-money-trail mt-7" aria-labelledby="money-trail-title">
+        <div className="flex items-end justify-between gap-4 border-b border-line p-4 sm:p-5">
+          <div>
+            <p className="section-title">Money trail</p>
+            <h2 id="money-trail-title" className="mt-1 text-xl font-semibold text-ink">Latest project transactions</h2>
+          </div>
+          <span className="text-xs font-medium text-moss">Newest first</span>
+        </div>
+        {moneyTrail.length ? (
+          <div>
+            {moneyTrail.map((entry) => {
+              const content = (
+                <>
+                  <span className={`money-trail-icon ${entry.direction === "in" ? "is-income" : "is-cost"}`}>
+                    {entry.direction === "in" ? <ArrowDownLeft size={18} aria-hidden="true" /> : <ArrowUpRight size={18} aria-hidden="true" />}
+                  </span>
+                  <span className="min-w-0 flex-1">
+                    <strong className="block truncate text-sm font-semibold text-ink">{entry.title}</strong>
+                    <small className="mt-1 block text-xs font-medium text-moss">{formatDateAU(entry.date)} · {entry.detail}</small>
+                  </span>
+                  <span className="shrink-0 text-right">
+                    <strong className={`block text-sm font-semibold ${entry.reversed ? "text-moss line-through" : "text-ink"}`}>
+                      {entry.direction === "out" && !entry.reversed ? "−" : ""}{formatMoney(entry.amountCents)}
+                    </strong>
+                    <small className="mt-1 block text-xs font-semibold text-moss">{entry.status}</small>
+                  </span>
+                </>
+              );
+
+              return entry.href ? (
+                <Link key={entry.key} href={entry.href} className="money-trail-row hover:bg-paper">{content}</Link>
+              ) : (
+                <div key={entry.key} className="money-trail-row">{content}</div>
+              );
+            })}
+          </div>
+        ) : (
+          <div className="p-5 text-sm font-medium text-moss">Invoices, project expenses and wage payments will appear here as the job progresses.</div>
+        )}
+      </section>
 
       <section className="mt-7 grid gap-6 lg:grid-cols-2">
         <div>
@@ -384,7 +492,7 @@ export default async function ProjectDetailPage({
                           <Edit size={18} aria-hidden="true" />
                           Edit
                         </Link>
-                        <form action={deleteTimeEntryAction}>
+                        <ActionForm action={deleteTimeEntryAction}>
                           <input type="hidden" name="entryId" value={entry.id} />
                           <input type="hidden" name="projectId" value={project.id} />
                           <input type="hidden" name="returnTo" value={`/projects/${project.id}`} />
@@ -394,23 +502,31 @@ export default async function ProjectDetailPage({
                           >
                             Delete
                           </ConfirmSubmitButton>
-                        </form>
+                        </ActionForm>
                       </div>
                     ) : entry.billingStatus === "UNBILLED" && entry.teamMemberId ? (
-                      <form action={deleteTeamTimeEntryAction}>
-                        <input type="hidden" name="entryId" value={entry.id} />
-                        <input type="hidden" name="returnTo" value={`/projects/${project.id}`} />
-                        <ConfirmSubmitButton
-                          className="tap-danger px-3"
-                          message={
-                            entry.paymentStatus === "PAID"
-                              ? `Delete this paid ${formatHours(entry.durationMinutes)}h entry for ${entry.workerDisplayNameSnapshot || "this subcontractor"} on ${formatDateAU(entry.date)}? This will also reverse the wage payment it belongs to (other paid entries in that same payment will return to unpaid). This permanently removes it.`
-                              : `Delete this ${formatHours(entry.durationMinutes)}h entry for ${entry.workerDisplayNameSnapshot || "this subcontractor"} on ${formatDateAU(entry.date)}? This permanently removes it.`
-                          }
-                        >
-                          Delete
-                        </ConfirmSubmitButton>
-                      </form>
+                      <div className="flex gap-2">
+                        {entry.paymentStatus === "UNPAID" ? (
+                          <Link href={`/team/time-entries/${entry.id}/edit?returnTo=${encodeURIComponent(`/projects/${project.id}`)}`} className="tap-secondary px-3">
+                            <Edit size={18} aria-hidden="true" />
+                            Edit
+                          </Link>
+                        ) : null}
+                        <ActionForm action={deleteTeamTimeEntryAction}>
+                          <input type="hidden" name="entryId" value={entry.id} />
+                          <input type="hidden" name="returnTo" value={`/projects/${project.id}`} />
+                          <ConfirmSubmitButton
+                            className="tap-danger px-3"
+                            message={
+                              entry.paymentStatus === "PAID"
+                                ? `Delete this paid ${formatHours(entry.durationMinutes)}h entry for ${entry.workerDisplayNameSnapshot || "this subcontractor"} on ${formatDateAU(entry.date)}? This will also reverse the wage payment it belongs to (other paid entries in that same payment will return to unpaid). This permanently removes it.`
+                                : `Delete this ${formatHours(entry.durationMinutes)}h entry for ${entry.workerDisplayNameSnapshot || "this subcontractor"} on ${formatDateAU(entry.date)}? This permanently removes it.`
+                            }
+                          >
+                            Delete
+                          </ConfirmSubmitButton>
+                        </ActionForm>
+                      </div>
                     ) : null}
                   </div>
                 </article>
@@ -445,7 +561,7 @@ export default async function ProjectDetailPage({
                           <Edit size={18} aria-hidden="true" />
                           Edit
                         </Link>
-                        <form action={deleteExpenseItemAction}>
+                        <ActionForm action={deleteExpenseItemAction}>
                           <input type="hidden" name="itemId" value={item.id} />
                           <input type="hidden" name="projectId" value={project.id} />
                           <input type="hidden" name="returnTo" value={`/projects/${project.id}`} />
@@ -455,7 +571,7 @@ export default async function ProjectDetailPage({
                           >
                             Delete
                           </ConfirmSubmitButton>
-                        </form>
+                        </ActionForm>
                       </div>
                     ) : (
                       <p className="mt-3 text-xs font-black uppercase text-moss">Billed item locked</p>
@@ -493,7 +609,7 @@ export default async function ProjectDetailPage({
                         <Edit size={18} aria-hidden="true" />
                         Edit
                       </Link>
-                      <form action={deleteWorkExpenseAction}>
+                      <ActionForm action={deleteWorkExpenseAction}>
                         <input type="hidden" name="expenseId" value={expense.id} />
                         <input type="hidden" name="returnTo" value={`/projects/${project.id}`} />
                         <ConfirmSubmitButton
@@ -502,7 +618,7 @@ export default async function ProjectDetailPage({
                         >
                           Delete
                         </ConfirmSubmitButton>
-                      </form>
+                      </ActionForm>
                     </div>
                   </article>
                 ))
@@ -609,7 +725,7 @@ function AssignedProjectView({ assignment, employerName }: { assignment: Assigne
           {entries.length ? entries.map((entry) => (
             <article key={entry.id} className="card flex items-start justify-between gap-4">
               <div><p className="font-black">{formatDateAU(entry.date)}</p><p className="mt-1 text-sm font-medium text-moss">{entry.notes || "No notes"}</p><p className="mt-2 text-xs font-black uppercase text-moss">Logged · {entry.billingStatus.toLowerCase()} · {entry.paymentStatus?.toLowerCase()}</p></div>
-              <div className="text-right"><p className="text-lg font-black">{formatHours(entry.durationMinutes)}h</p><p className="text-sm font-semibold text-moss">{formatMoney(labourTotalCents(entry.durationMinutes, entry.payRateCentsSnapshot || assignment.payRateCents))}</p></div>
+              <div className="text-right"><p className="text-lg font-black">{formatHours(entry.durationMinutes)}h</p><p className="text-sm font-semibold text-moss">{formatMoney(labourTotalCents(entry.durationMinutes, entry.payRateCentsSnapshot || assignment.payRateCents))}</p>{entry.billingStatus === "UNBILLED" && entry.paymentStatus === "UNPAID" ? <Link href={`/team/time-entries/${entry.id}/edit?returnTo=${encodeURIComponent(`/projects/${assignment.project.id}`)}`} className="mt-2 inline-flex items-center gap-1 text-xs font-bold text-mint"><Edit size={14} aria-hidden="true" />Edit</Link> : null}</div>
             </article>
           )) : <EmptyPanel icon={Clock3} title="No hours submitted" text="Log your first shift for this assigned project." />}
         </div>
@@ -649,6 +765,102 @@ function UnbilledStat({ label, value, dark }: { label: string; value: string; da
       <strong>{value}</strong>
     </div>
   );
+}
+
+function FinancialMetric({
+  label,
+  value,
+  detail,
+  highlight = false,
+  positive
+}: {
+  label: string;
+  value: string;
+  detail: string;
+  highlight?: boolean;
+  positive?: boolean;
+}) {
+  return (
+    <div className={highlight ? "is-highlighted" : ""}>
+      <p className="text-xs font-semibold text-moss">{label}</p>
+      <strong className={`mt-2 block text-2xl font-semibold tabular-nums ${positive === false ? "text-gum" : "text-ink"}`}>{value}</strong>
+      <p className="mt-2 text-xs font-medium leading-5 text-moss">{detail}</p>
+    </div>
+  );
+}
+
+type ProjectMoneyTrailEntry = {
+  key: string;
+  date: Date;
+  title: string;
+  detail: string;
+  status: string;
+  amountCents: number;
+  direction: "in" | "out";
+  reversed?: boolean;
+  href?: string;
+};
+
+function buildProjectMoneyTrail(
+  invoices: Array<{
+    id: string;
+    invoiceNumber: string;
+    status: "DRAFT" | "SENT" | "PAID" | "VOID";
+    invoiceDate: Date;
+    paymentDate: Date | null;
+    grandTotalCents: number;
+  }>,
+  expenses: Array<{
+    id: string;
+    description: string;
+    date: Date;
+    category: Parameters<typeof expenseCategoryLabel>[0];
+    amountCents: number;
+    wagePayment: { id: string } | null;
+  }>,
+  wagePayments: Array<{
+    id: string;
+    paidAt: Date;
+    reversedAt: Date | null;
+    amountCents: number;
+    status: "PAID" | "VOID";
+    teamMember: { id: string; displayName: string };
+  }>
+): ProjectMoneyTrailEntry[] {
+  return [
+    ...invoices.map((invoice): ProjectMoneyTrailEntry => ({
+      key: `invoice-${invoice.id}`,
+      date: invoice.status === "PAID" && invoice.paymentDate ? invoice.paymentDate : invoice.invoiceDate,
+      title: invoice.invoiceNumber,
+      detail: "Client invoice",
+      status: invoice.status === "SENT" ? "Awaiting payment" : invoice.status.toLowerCase(),
+      amountCents: invoice.grandTotalCents,
+      direction: "in",
+      reversed: invoice.status === "VOID",
+      href: `/invoices/${invoice.id}`
+    })),
+    ...expenses.filter((expense) => !expense.wagePayment).map((expense): ProjectMoneyTrailEntry => ({
+      key: `expense-${expense.id}`,
+      date: expense.date,
+      title: expense.description,
+      detail: expenseCategoryLabel(expense.category),
+      status: "Recorded expense",
+      amountCents: expense.amountCents,
+      direction: "out",
+      href: `/expenses/${expense.id}/edit`
+    })),
+    ...wagePayments.map((payment): ProjectMoneyTrailEntry => ({
+      key: `wage-${payment.id}`,
+      date: payment.reversedAt ?? payment.paidAt,
+      title: payment.teamMember.displayName,
+      detail: "Subcontractor wage payment",
+      status: payment.status === "VOID" ? "Reversed" : "Paid",
+      amountCents: payment.amountCents,
+      direction: "out",
+      reversed: payment.status === "VOID",
+      href: `/team/${payment.teamMember.id}`
+    }))
+  ].sort((a, b) => b.date.getTime() - a.date.getTime()).slice(0, 10);
 }
 
 type MonthlyActivityCell = {

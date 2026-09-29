@@ -1,3 +1,5 @@
+
+import { ActionForm } from "@/components/ActionForm";
 import type { WorkExpenseCategory } from "@prisma/client";
 import { Save } from "lucide-react";
 import Link from "next/link";
@@ -33,14 +35,14 @@ export function WorkExpenseForm({
   returnTo,
   submitLabel = "Save Expense"
 }: {
-  action: (formData: FormData) => Promise<void>;
+  action: (formData: FormData) => Promise<void | import("@/lib/form-feedback").FormActionResult>;
   projects: ExpenseProjectOption[];
   expense?: WorkExpenseValue;
   returnTo: string;
   submitLabel?: string;
 }) {
   return (
-    <form action={action} className="card grid gap-4">
+    <ActionForm action={action} className="card grid gap-4">
       {expense?.id ? <input type="hidden" name="expenseId" value={expense.id} /> : null}
       <input type="hidden" name="returnTo" value={returnTo} />
       <input type="hidden" name="status" value="LOGGED" />
@@ -111,6 +113,6 @@ export function WorkExpenseForm({
           Cancel
         </Link>
       </div>
-    </form>
+    </ActionForm>
   );
 }

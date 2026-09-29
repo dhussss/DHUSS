@@ -1,21 +1,24 @@
 "use client";
+import { ActionForm } from "@/components/ActionForm";
+
 
 import { useState } from "react";
 import { Save } from "lucide-react";
-import { createProjectAction } from "@/app/actions";
+import { createProjectAction } from "@/app/form-actions";
 import { SubmitButton } from "@/components/SubmitButton";
+import { centsToDollars } from "@/lib/money";
 
 type ClientOption = {
   id: string;
   businessName: string;
 };
 
-export function CreateProjectForm({ clients, defaultClientId, onboarding = false }: { clients: ClientOption[]; defaultClientId?: string; onboarding?: boolean }) {
+export function CreateProjectForm({ clients, defaultClientId, defaultHourlyRateCents, onboarding = false }: { clients: ClientOption[]; defaultClientId?: string; defaultHourlyRateCents?: number; onboarding?: boolean }) {
   const initialClientId = defaultClientId && clients.some((client) => client.id === defaultClientId) ? defaultClientId : clients[0]?.id ?? "__new";
   const [clientId, setClientId] = useState(initialClientId);
 
   return (
-    <form action={createProjectAction} className="grid gap-5">
+    <ActionForm action={createProjectAction} className="grid gap-5">
       {onboarding ? <input type="hidden" name="onboarding" value="1" /> : null}
       <label>
         Project/job name
@@ -71,7 +74,7 @@ export function CreateProjectForm({ clients, defaultClientId, onboarding = false
 
       <label>
         Hourly rate
-        <input name="hourlyRate" type="number" inputMode="decimal" min="0.01" step="0.01" placeholder="95.00" required />
+        <input name="hourlyRate" type="number" inputMode="decimal" min="0.01" step="0.01" placeholder="95.00" defaultValue={defaultHourlyRateCents ? centsToDollars(defaultHourlyRateCents) : ""} required />
       </label>
 
       <label>
@@ -83,6 +86,6 @@ export function CreateProjectForm({ clients, defaultClientId, onboarding = false
         <Save size={20} aria-hidden="true" />
         {onboarding ? "Save and log work" : "Save Project"}
       </SubmitButton>
-    </form>
+    </ActionForm>
   );
 }

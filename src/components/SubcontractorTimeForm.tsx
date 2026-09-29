@@ -1,8 +1,10 @@
 "use client";
+import { ActionForm } from "@/components/ActionForm";
+
 
 import { useMemo, useState } from "react";
 import { Clock3 } from "lucide-react";
-import { createSubcontractorTimeEntryAction } from "@/app/team/actions";
+import { createManagedTeamTimeEntryAction, createSubcontractorTimeEntryAction } from "@/app/form-actions";
 import { todayInputValue } from "@/lib/dates";
 import { formatHours, parseClockTime } from "@/lib/time";
 import { SubmitButton } from "@/components/SubmitButton";
@@ -13,7 +15,19 @@ type AssignmentOption = {
   project: { title: string; client: { businessName: string } };
 };
 
-export function SubcontractorTimeForm({ assignments, returnTo = "/team/work?saved=1", hideProjectSelector = false }: { assignments: AssignmentOption[]; returnTo?: string; hideProjectSelector?: boolean }) {
+export function SubcontractorTimeForm({
+  assignments,
+  returnTo = "/team/work?saved=1",
+  hideProjectSelector = false,
+  managedByOwner = false,
+  workerName
+}: {
+  assignments: AssignmentOption[];
+  returnTo?: string;
+  hideProjectSelector?: boolean;
+  managedByOwner?: boolean;
+  workerName?: string;
+}) {
   const [entryMode, setEntryMode] = useState<"duration" | "range">("duration");
   const [startTime, setStartTime] = useState("07:00");
   const [endTime, setEndTime] = useState("15:00");
@@ -26,8 +40,15 @@ export function SubcontractorTimeForm({ assignments, returnTo = "/team/work?save
   if (!assignments.length) return null;
 
   return (
-    <form action={createSubcontractorTimeEntryAction} className="card mt-4 grid gap-4">
+    <ActionForm action={managedByOwner ? createManagedTeamTimeEntryAction : createSubcontractorTimeEntryAction} className="card mt-4 grid gap-4">
       <input type="hidden" name="returnTo" value={returnTo} />
+      {managedByOwner ? (
+        <div>
+          <p className="section-title">Log on their behalf</p>
+          <h2 className="mt-1 text-xl font-semibold text-ink">Add hours for {workerName || "subcontractor"}</h2>
+          <p className="mt-1 text-sm font-medium text-moss">These hours are immediately included in project billing and unpaid wages.</p>
+        </div>
+      ) : null}
       {hideProjectSelector ? <input type="hidden" name="assignmentId" value={assignments[0].id} /> : (
         <label>
           Assigned project
@@ -70,8 +91,8 @@ export function SubcontractorTimeForm({ assignments, returnTo = "/team/work?save
       </label>
       <SubmitButton className="tap-primary" pendingLabel="Submitting hours...">
         <Clock3 size={19} aria-hidden="true" />
-        Submit hours
+        {managedByOwner ? "Save subcontractor hours" : "Submit hours"}
       </SubmitButton>
-    </form>
+    </ActionForm>
   );
 }

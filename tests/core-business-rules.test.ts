@@ -16,6 +16,8 @@ import { outboundDeliveryAllowed } from "../src/lib/delivery-policy";
 import { invoiceSenderDisplayName } from "../src/lib/platform";
 import { clampTutorialStep, tutorialByKey, tutorialCategories, tutorials } from "../src/lib/tutorials";
 import { buildInvoiceReminderEmailBody } from "../src/lib/invoice-documents";
+import { projectCloseoutReadiness, projectFinancialPosition } from "../src/lib/project-control";
+import { payRunSelectionIsCurrent, teamTimeEntryEditBlockReason } from "../src/lib/payroll";
 import type { InvoiceBusinessDetails, InvoiceClientDetails, InvoiceDocumentData } from "../src/lib/invoice-documents";
 
 test("currency input is converted to integer cents without silent truncation", () => {
@@ -258,4 +260,59 @@ test("labour and GST totals stay in integer cents", () => {
     },
     { labour: 11938, expenses: 1062, subtotal: 13000, gst: 1300, total: 14300 }
   );
+});
+
+test("project position counts recorded expenses and unpaid wages once", () => {
+  assert.deepEqual(
+    projectFinancialPosition({
+      issuedRevenueCents: 240000,
+      unbilledValueCents: 60000,
+      recordedExpenseCents: 45000,
+      unpaidWageCents: 35000
+    }),
+    {
+      issuedRevenueCents: 240000,
+      unbilledValueCents: 60000,
+      recordedExpenseCents: 45000,
+      unpaidWageCents: 35000,
+      projectedRevenueCents: 300000,
+      committedCostCents: 80000,
+      projectedMarginCents: 220000,
+      projectedMarginPercent: 73.3
+    }
+  );
+});
+
+test("project closeout blocks unfinished obligations but allows outstanding client collection", () => {
+  const blocked = projectCloseoutReadiness({
+    unbilledTimeCount: 2,
+    unbilledExpenseCount: 1,
+    draftInvoiceCount: 1,
+    unpaidWageCount: 3,
+    outstandingInvoiceCount: 0
+  });
+  assert.equal(blocked.canArchive, false);
+  assert.equal(blocked.blockers.length, 4);
+
+  const awaitingPayment = projectCloseoutReadiness({
+    unbilledTimeCount: 0,
+    unbilledExpenseCount: 0,
+    draftInvoiceCount: 0,
+    unpaidWageCount: 0,
+    outstandingInvoiceCount: 2
+  });
+  assert.equal(awaitingPayment.canArchive, true);
+  assert.match(awaitingPayment.warnings[0], /2 sent invoices/);
+});
+
+test("subcontractor hours can only be corrected before billing and payment", () => {
+  assert.equal(teamTimeEntryEditBlockReason({ billingStatus: "UNBILLED", paymentStatus: "UNPAID" }), null);
+  assert.equal(teamTimeEntryEditBlockReason({ billingStatus: "BILLED", paymentStatus: "UNPAID" }), "billed");
+  assert.equal(teamTimeEntryEditBlockReason({ billingStatus: "UNBILLED", paymentStatus: "PAID" }), "paid");
+});
+
+test("pay runs reject stale or incomplete source-entry selections", () => {
+  assert.equal(payRunSelectionIsCurrent(["entry-1", "entry-2"], ["entry-2", "entry-1"]), true);
+  assert.equal(payRunSelectionIsCurrent(["entry-1", "entry-2"], ["entry-1"]), false);
+  assert.equal(payRunSelectionIsCurrent(["entry-1"], ["entry-1", "entry-2"]), false);
 });

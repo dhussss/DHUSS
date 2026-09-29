@@ -1,9 +1,11 @@
 "use client";
+import { ActionForm } from "@/components/ActionForm";
+
 
 import Link from "next/link";
 import { useState, type FormEvent } from "react";
 import { ArrowLeft, Save } from "lucide-react";
-import { createClientAction } from "@/app/actions";
+import { createClientAction } from "@/app/form-actions";
 import { SubmitButton } from "@/components/SubmitButton";
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -30,7 +32,7 @@ export function ClientCreateForm({ onboarding = false }: { onboarding?: boolean 
   }
 
   return (
-    <form action={createClientAction} onSubmit={validateSubmit} noValidate className="grid gap-5">
+    <ActionForm action={createClientAction} onSubmit={validateSubmit} noValidate className="grid gap-5">
       {onboarding ? <input type="hidden" name="onboarding" value="1" /> : null}
       {error ? (
         <p className="rounded-lg border border-gum/30 bg-gum/10 p-3 text-sm font-bold text-gum" role="alert">
@@ -82,6 +84,6 @@ export function ClientCreateForm({ onboarding = false }: { onboarding?: boolean 
           {onboarding ? "Save and continue" : "Save Client"}
         </SubmitButton>
       </div>
-    </form>
+    </ActionForm>
   );
 }

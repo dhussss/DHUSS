@@ -34,6 +34,7 @@ export type DashboardData = {
   } | null;
   projects: { id: string; title: string; client: { businessName: string } }[];
   assignedProjects: { id: string; project: { id: string; title: string; client: { businessName: string } } }[];
+  managedTeamMembers: { id: string; displayName: string }[];
   unpaidWageGroups: {
     teamMemberId: string;
     employee: string;
@@ -132,6 +133,7 @@ type DashboardRow = {
   overdueInvoiceCount: bigint | number | null;
   overdueInvoiceCents: bigint | number | null;
   assignedProjects: DashboardData["assignedProjects"];
+  managedTeamMembers: DashboardData["managedTeamMembers"];
   unpaidWageGroups: DashboardData["unpaidWageGroups"];
 };
 
@@ -447,6 +449,21 @@ export async function loadDashboardData(ownerId: string): Promise<DashboardData>
         AND tm.status = 'ACTIVE'
         AND p.status = 'ACTIVE'
     ),
+    managed_team_members AS (
+      SELECT COALESCE(
+        jsonb_agg(
+          jsonb_build_object(
+            'id', tm.id,
+            'displayName', tm."displayName"
+          )
+          ORDER BY tm."displayName" ASC
+        ),
+        '[]'::jsonb
+      ) AS data
+      FROM "TeamMember" tm
+      WHERE tm."ownerId" = ${ownerId}
+        AND tm.status = 'ACTIVE'
+    ),
     business_profile AS (
       SELECT jsonb_build_object(
         'id', bp.id,
@@ -488,8 +505,9 @@ export async function loadDashboardData(ownerId: string): Promise<DashboardData>
       overdue_invoices.overdue_count AS "overdueInvoiceCount",
       overdue_invoices.overdue_total AS "overdueInvoiceCents",
       assigned_projects.data AS "assignedProjects",
+      managed_team_members.data AS "managedTeamMembers",
       unpaid_wage_groups.data AS "unpaidWageGroups"
-    FROM active_projects, top_active_projects, invoice_snapshots, sent_invoices, overdue_invoices, unbilled_time, unbilled_items, rolling_30_work, previous_week_entries, current_week_entries, assigned_projects, unpaid_wage_groups
+    FROM active_projects, top_active_projects, invoice_snapshots, sent_invoices, overdue_invoices, unbilled_time, unbilled_items, rolling_30_work, previous_week_entries, current_week_entries, assigned_projects, managed_team_members, unpaid_wage_groups
     LEFT JOIN business_profile ON true
   `;
 
@@ -544,6 +562,7 @@ export async function loadDashboardData(ownerId: string): Promise<DashboardData>
     profile: row?.profile ?? null,
     projects: row?.projects ?? [],
     assignedProjects: row?.assignedProjects ?? [],
+    managedTeamMembers: row?.managedTeamMembers ?? [],
     unpaidWageGroups: (row?.unpaidWageGroups ?? []).map((group) => ({
       ...group,
       minutes: numberValue(group.minutes),
@@ -621,6 +640,63 @@ export type ProjectListRow = {
   unbilledMinutes: number;
   unbilledValueCents: number;
 };
+
+export type ProjectControlSummary = {
+  invoiceCount: number;
+  billedTimeCount: number;
+  billedExpenseCount: number;
+  paidWagePaymentCount: number;
+  reversedWagePaymentCount: number;
+  unbilledTimeCount: number;
+  unbilledExpenseCount: number;
+  assignmentCount: number;
+  draftInvoiceCount: number;
+  unpaidWageCount: number;
+  outstandingInvoiceCount: number;
+};
+
+export async function loadProjectControlSummary(ownerId: string, projectId: string): Promise<ProjectControlSummary> {
+  const [row] = await prisma.$queryRaw<{
+    invoiceCount: bigint | number | null;
+    billedTimeCount: bigint | number | null;
+    billedExpenseCount: bigint | number | null;
+    paidWagePaymentCount: bigint | number | null;
+    reversedWagePaymentCount: bigint | number | null;
+    unbilledTimeCount: bigint | number | null;
+    unbilledExpenseCount: bigint | number | null;
+    assignmentCount: bigint | number | null;
+    draftInvoiceCount: bigint | number | null;
+    unpaidWageCount: bigint | number | null;
+    outstandingInvoiceCount: bigint | number | null;
+  }[]>`
+    SELECT
+      (SELECT COUNT(*) FROM "Invoice" i WHERE i."ownerId" = ${ownerId} AND i."projectId" = ${projectId}) AS "invoiceCount",
+      (SELECT COUNT(*) FROM "TimeEntry" t WHERE t."ownerId" = ${ownerId} AND t."projectId" = ${projectId} AND t."billingStatus" = 'BILLED') AS "billedTimeCount",
+      (SELECT COUNT(*) FROM "ExpenseItem" e WHERE e."ownerId" = ${ownerId} AND e."projectId" = ${projectId} AND e."billingStatus" = 'BILLED') AS "billedExpenseCount",
+      (SELECT COUNT(*) FROM "WagePayment" w WHERE w."ownerId" = ${ownerId} AND w."projectId" = ${projectId} AND w.status = 'PAID') AS "paidWagePaymentCount",
+      (SELECT COUNT(*) FROM "WagePayment" w WHERE w."ownerId" = ${ownerId} AND w."projectId" = ${projectId} AND w.status = 'VOID') AS "reversedWagePaymentCount",
+      (SELECT COUNT(*) FROM "TimeEntry" t WHERE t."ownerId" = ${ownerId} AND t."projectId" = ${projectId} AND t."billingStatus" = 'UNBILLED') AS "unbilledTimeCount",
+      (SELECT COUNT(*) FROM "ExpenseItem" e WHERE e."ownerId" = ${ownerId} AND e."projectId" = ${projectId} AND e."billingStatus" = 'UNBILLED') AS "unbilledExpenseCount",
+      (SELECT COUNT(*) FROM "ProjectAssignment" a WHERE a."ownerId" = ${ownerId} AND a."projectId" = ${projectId}) AS "assignmentCount",
+      (SELECT COUNT(*) FROM "Invoice" i WHERE i."ownerId" = ${ownerId} AND i."projectId" = ${projectId} AND i.status = 'DRAFT') AS "draftInvoiceCount",
+      (SELECT COUNT(*) FROM "TimeEntry" t WHERE t."ownerId" = ${ownerId} AND t."projectId" = ${projectId} AND t."teamMemberId" IS NOT NULL AND t."paymentStatus" = 'UNPAID') AS "unpaidWageCount",
+      (SELECT COUNT(*) FROM "Invoice" i WHERE i."ownerId" = ${ownerId} AND i."projectId" = ${projectId} AND i.status = 'SENT') AS "outstandingInvoiceCount"
+  `;
+
+  return {
+    invoiceCount: numberValue(row?.invoiceCount),
+    billedTimeCount: numberValue(row?.billedTimeCount),
+    billedExpenseCount: numberValue(row?.billedExpenseCount),
+    paidWagePaymentCount: numberValue(row?.paidWagePaymentCount),
+    reversedWagePaymentCount: numberValue(row?.reversedWagePaymentCount),
+    unbilledTimeCount: numberValue(row?.unbilledTimeCount),
+    unbilledExpenseCount: numberValue(row?.unbilledExpenseCount),
+    assignmentCount: numberValue(row?.assignmentCount),
+    draftInvoiceCount: numberValue(row?.draftInvoiceCount),
+    unpaidWageCount: numberValue(row?.unpaidWageCount),
+    outstandingInvoiceCount: numberValue(row?.outstandingInvoiceCount)
+  };
+}
 
 export const getProjectsPageData = unstable_cache(
   async (ownerId: string, q: string): Promise<ProjectListRow[]> => {

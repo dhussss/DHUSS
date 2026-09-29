@@ -1,8 +1,11 @@
 "use client";
+import { ActionForm } from "@/components/ActionForm";
+
 
 import { useMemo, useState } from "react";
 import { Save } from "lucide-react";
-import { updateTimeEntryAction } from "@/app/actions";
+import { updateTimeEntryAction } from "@/app/form-actions";
+import { updateTeamTimeEntryAction } from "@/app/form-actions";
 import { formatHours, parseClockTime } from "@/lib/time";
 import { SubmitButton } from "@/components/SubmitButton";
 
@@ -16,7 +19,7 @@ type EditableTimeEntry = {
   notes: string;
 };
 
-export function EditTimeEntryForm({ entry }: { entry: EditableTimeEntry }) {
+export function EditTimeEntryForm({ entry, team = false, returnTo }: { entry: EditableTimeEntry; team?: boolean; returnTo?: string }) {
   const initialMode = entry.startTime && entry.endTime ? "range" : "duration";
   const [entryMode, setEntryMode] = useState<"duration" | "range">(initialMode);
   const [startTime, setStartTime] = useState(entry.startTime ?? "07:00");
@@ -31,9 +34,10 @@ export function EditTimeEntryForm({ entry }: { entry: EditableTimeEntry }) {
   }, [startTime, endTime]);
 
   return (
-    <form action={updateTimeEntryAction} className="card grid gap-4">
+    <ActionForm action={team ? updateTeamTimeEntryAction : updateTimeEntryAction} className="card grid gap-4">
       <input type="hidden" name="entryId" value={entry.id} />
       <input type="hidden" name="projectId" value={entry.projectId} />
+      {returnTo ? <input type="hidden" name="returnTo" value={returnTo} /> : null}
 
       <label>
         Date
@@ -105,6 +109,6 @@ export function EditTimeEntryForm({ entry }: { entry: EditableTimeEntry }) {
         <Save size={20} aria-hidden="true" />
         Save Changes
       </SubmitButton>
-    </form>
+    </ActionForm>
   );
 }

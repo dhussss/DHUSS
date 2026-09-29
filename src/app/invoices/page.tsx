@@ -1,7 +1,9 @@
+
+import { ActionForm } from "@/components/ActionForm";
 import Link from "next/link";
 import { AlertTriangle, Banknote, CalendarClock, CircleDollarSign, Eye, FileText, Mail, Plus, RotateCcw, Search } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
-import { markInvoicePaidAction, markInvoiceUnpaidAction } from "@/app/actions";
+import { markInvoicePaidAction, markInvoiceUnpaidAction } from "@/app/form-actions";
 import { requireUserId } from "@/lib/auth";
 import { getInvoiceCollectionsSummary, getInvoicesPageData } from "@/lib/app-data";
 import { formatDateAU, todayInPerth } from "@/lib/dates";
@@ -136,7 +138,7 @@ export default async function InvoicesPage({
                 {overdue ? "Follow Up" : "Email Invoice"}
               </Link>
               {invoice.status === "PAID" ? (
-                <form action={markInvoiceUnpaidAction} className="flex-1">
+                <ActionForm action={markInvoiceUnpaidAction} className="flex-1">
                   <input type="hidden" name="invoiceId" value={invoice.id} />
                   <ConfirmSubmitButton
                     className="tap-secondary w-full"
@@ -147,15 +149,15 @@ export default async function InvoicesPage({
                     <RotateCcw size={18} aria-hidden="true" />
                     Mark Unpaid
                   </ConfirmSubmitButton>
-                </form>
+                </ActionForm>
               ) : (
-                <form action={markInvoicePaidAction} className="flex-1">
+                <ActionForm action={markInvoicePaidAction} className="flex-1">
                   <input type="hidden" name="invoiceId" value={invoice.id} />
                   <SubmitButton className="tap-primary w-full bg-mint hover:bg-ink" pendingLabel="Marking paid..." disabled={invoice.status === "VOID"}>
                     <Banknote size={18} aria-hidden="true" />
                     Mark Paid
                   </SubmitButton>
-                </form>
+                </ActionForm>
               )}
             </div>
           </article>

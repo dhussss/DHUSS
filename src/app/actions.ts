@@ -1,13 +1,15 @@
 "use server";
+import { UserInputError } from "@/lib/form-feedback";
+
 
 import crypto from "node:crypto";
 import { Prisma } from "@prisma/client";
-import type { InvoiceMode, ProjectStatus, WorkExpenseCategory, WorkExpenseStatus } from "@prisma/client";
+import type { InvoiceMode, WorkExpenseCategory, WorkExpenseStatus } from "@prisma/client";
 import { revalidatePath, revalidateTag } from "next/cache";
 import { redirect } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { requireUserId } from "@/lib/auth";
-import { CACHE_TAGS } from "@/lib/app-data";
+import { CACHE_TAGS, loadProjectControlSummary } from "@/lib/app-data";
 import { dollarsToCents } from "@/lib/money";
 import { addDays, endOfDay, parseInputDate, todayInPerth } from "@/lib/dates";
 import { expenseCategoryOptions, expenseStatusOptions } from "@/lib/expenses";
@@ -18,6 +20,7 @@ import { sendInvoiceMmsWithPdf, sendPreparedInvoiceEmailWithPdf } from "@/lib/in
 import { isQuarterHour, isQuarterHourClock, parseClockTime } from "@/lib/time";
 import { createClient } from "@/lib/supabase/server";
 import { safeInternalPath, withInternalPathParams } from "@/lib/navigation";
+import { projectCloseoutReadiness } from "@/lib/project-control";
 
 function text(formData: FormData, key: string) {
   return String(formData.get(key) ?? "").trim();
@@ -25,7 +28,7 @@ function text(formData: FormData, key: string) {
 
 function positive(value: number, message: string) {
   if (!Number.isFinite(value) || value <= 0) {
-    throw new Error(message);
+    throw new UserInputError(message);
   }
 }
 
@@ -37,9 +40,9 @@ function optionalPositiveCents(formData: FormData, key: string) {
 function optionalInt(formData: FormData, key: string, fallback: number) {
   const raw = text(formData, key);
   if (!raw) return fallback;
-  if (!/^\d+$/.test(raw)) throw new Error(`${key} must be a valid whole number.`);
+  if (!/^\d+$/.test(raw)) throw new UserInputError(`${key} must be a valid whole number.`);
   const value = Number(raw);
-  if (!Number.isSafeInteger(value)) throw new Error(`${key} must be a valid whole number.`);
+  if (!Number.isSafeInteger(value)) throw new UserInputError(`${key} must be a valid whole number.`);
   return value;
 }
 
@@ -47,7 +50,7 @@ function optionalDecimal(formData: FormData, key: string, fallback: number) {
   const raw = text(formData, key);
   if (!raw) return fallback;
   const value = Number(raw);
-  if (!Number.isFinite(value) || value < 0) throw new Error(`${key} must be a valid number.`);
+  if (!Number.isFinite(value) || value < 0) throw new UserInputError(`${key} must be a valid number.`);
   return value;
 }
 
@@ -56,7 +59,7 @@ function optionalPercentage(formData: FormData, key: string) {
   if (!raw) return null;
   const value = Number(raw);
   if (!Number.isFinite(value) || value < 0 || value > 100) {
-    throw new Error(`${key} must be between 0 and 100.`);
+    throw new UserInputError(`${key} must be between 0 and 100.`);
   }
   return value;
 }
@@ -98,13 +101,13 @@ export async function saveOnboardingSetupAction(formData: FormData) {
   const defaultHourlyRateCents = optionalPositiveCents(formData, "defaultHourlyRate");
 
   if (businessStructure !== "SOLE_TRADER" && businessStructure !== "EMPLOYER") {
-    throw new Error("Choose whether you work independently or have people working for you.");
+    throw new UserInputError("Choose whether you work independently or have people working for you.");
   }
-  if (!tradingName) throw new Error("Business or trading name is required.");
-  if (!contactName) throw new Error("Your name is required.");
-  if (!defaultHourlyRateCents) throw new Error("Enter your usual hourly charge rate.");
-  if (invoicePrefix.length > 16) throw new Error("Invoice prefix must be 16 characters or fewer.");
-  if (paymentTermsDays < 1 || paymentTermsDays > 90) throw new Error("Payment terms must be between 1 and 90 days.");
+  if (!tradingName) throw new UserInputError("Business or trading name is required.");
+  if (!contactName) throw new UserInputError("Your name is required.");
+  if (!defaultHourlyRateCents) throw new UserInputError("Enter your usual hourly charge rate.");
+  if (invoicePrefix.length > 16) throw new UserInputError("Invoice prefix must be 16 characters or fewer.");
+  if (paymentTermsDays < 1 || paymentTermsDays > 90) throw new UserInputError("Payment terms must be between 1 and 90 days.");
 
   await prisma.businessProfile.upsert({
     where: { ownerId },
@@ -185,17 +188,17 @@ function parseEmailList(value: string, label: string, required = false) {
     .map((email) => email.trim())
     .filter(Boolean);
 
-  if (required && emails.length === 0) throw new Error(`${label} email is required.`);
+  if (required && emails.length === 0) throw new UserInputError(`${label} email is required.`);
 
   for (const email of emails) {
-    if (!EMAIL_RE.test(email)) throw new Error(`${label} contains an invalid email address.`);
+    if (!EMAIL_RE.test(email)) throw new UserInputError(`${label} contains an invalid email address.`);
   }
 
   return emails;
 }
 
 function validateOptionalEmail(value: string) {
-  if (value && !EMAIL_RE.test(value)) throw new Error("Enter a valid email address.");
+  if (value && !EMAIL_RE.test(value)) throw new UserInputError("Enter a valid email address.");
 }
 
 async function generateUniqueInvoiceToken() {
@@ -205,7 +208,7 @@ async function generateUniqueInvoiceToken() {
     if (!existing) return token;
   }
 
-  throw new Error("Could not generate a public invoice link. Please try again.");
+  throw new UserInputError("Could not generate a public invoice link. Please try again.");
 }
 
 function digitsOnly(value: string) {
@@ -214,33 +217,33 @@ function digitsOnly(value: string) {
 
 function validateBusinessProfileInput(formData: FormData, gstRegistered: boolean) {
   const invoicePrefix = text(formData, "invoicePrefix");
-  if (!invoicePrefix) throw new Error("Invoice prefix is required.");
-  if (invoicePrefix.length > 16) throw new Error("Invoice prefix must be 16 characters or fewer.");
+  if (!invoicePrefix) throw new UserInputError("Invoice prefix is required.");
+  if (invoicePrefix.length > 16) throw new UserInputError("Invoice prefix must be 16 characters or fewer.");
 
   const abn = digitsOnly(text(formData, "abn"));
-  if (abn && abn.length !== 11) throw new Error("ABN must be 11 digits.");
+  if (abn && abn.length !== 11) throw new UserInputError("ABN must be 11 digits.");
 
   const acn = digitsOnly(text(formData, "acn"));
-  if (acn && acn.length !== 9) throw new Error("ACN must be 9 digits.");
+  if (acn && acn.length !== 9) throw new UserInputError("ACN must be 9 digits.");
 
   const email = text(formData, "email");
-  if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) throw new Error("Enter a valid email address.");
+  if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) throw new UserInputError("Enter a valid email address.");
 
   const replyToEmail = text(formData, "replyToEmail");
   if (replyToEmail && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(replyToEmail)) {
-    throw new Error("Enter a valid reply-to email address.");
+    throw new UserInputError("Enter a valid reply-to email address.");
   }
 
   const bsb = digitsOnly(text(formData, "bsb"));
-  if (bsb && bsb.length !== 6) throw new Error("BSB must be 6 digits.");
+  if (bsb && bsb.length !== 6) throw new UserInputError("BSB must be 6 digits.");
 
   const accountNumber = digitsOnly(text(formData, "accountNumber"));
   if (accountNumber && (accountNumber.length < 5 || accountNumber.length > 12)) {
-    throw new Error("Account number must be 5 to 12 digits.");
+    throw new UserInputError("Account number must be 5 to 12 digits.");
   }
 
   const gstRate = gstRegistered ? optionalDecimal(formData, "gstRate", 10) : 0;
-  if (gstRate > 100) throw new Error("GST rate must be between 0 and 100.");
+  if (gstRate > 100) throw new UserInputError("GST rate must be between 0 and 100.");
 
   return { invoicePrefix, gstRate };
 }
@@ -248,7 +251,7 @@ function validateBusinessProfileInput(formData: FormData, gstRegistered: boolean
 export async function updateBusinessProfileAction(formData: FormData) {
   const ownerId = await requireUserId();
   const tradingName = text(formData, "tradingName");
-  if (!tradingName) throw new Error("Trading/business name is required.");
+  if (!tradingName) throw new UserInputError("Trading/business name is required.");
 
   const gstRegistered = text(formData, "gstRegistered") === "on";
   const { invoicePrefix, gstRate } = validateBusinessProfileInput(formData, gstRegistered);
@@ -271,10 +274,10 @@ export async function updateBusinessProfileAction(formData: FormData) {
 
   if (submittedLogoPath) {
     if (!submittedLogoPath.startsWith(`${ownerId}/`)) {
-      throw new Error("Logo path is invalid.");
+      throw new UserInputError("Logo path is invalid.");
     }
     if (!/\.(png|jpg|jpeg|webp|svg)$/i.test(submittedLogoPath)) {
-      throw new Error("Logo must be PNG, JPG, WEBP, or SVG.");
+      throw new UserInputError("Logo must be PNG, JPG, WEBP, or SVG.");
     }
     logoPath = submittedLogoPath;
   }
@@ -377,17 +380,17 @@ export async function updateSettingsAction(formData: FormData) {
   const ownerId = await requireUserId();
   const themeAccent = text(formData, "themeAccent") || "emerald";
   if (!["emerald", "blue", "slate", "amber", "purple"].includes(themeAccent)) {
-    throw new Error("Choose one of the available colour themes.");
+    throw new UserInputError("Choose one of the available colour themes.");
   }
 
   const themeMode = text(formData, "themeMode") || "system";
   if (!["system", "light", "dark"].includes(themeMode)) {
-    throw new Error("Choose a valid display mode.");
+    throw new UserInputError("Choose a valid display mode.");
   }
 
   const customTaxPercentageOverride = optionalPercentage(formData, "customTaxPercentageOverride");
   const superContributionPercentage = optionalDecimal(formData, "superContributionPercentage", 11.5);
-  if (superContributionPercentage > 100) throw new Error("Super contribution percentage must be between 0 and 100.");
+  if (superContributionPercentage > 100) throw new UserInputError("Super contribution percentage must be between 0 and 100.");
 
   const existing = await prisma.businessProfile.findUnique({
     where: { ownerId },
@@ -442,7 +445,7 @@ export async function createTimeEntryAction(formData: FormData) {
 
   const project = await prisma.project.findFirst({ where: { id: projectId, ownerId } });
   if (!project || project.status !== "ACTIVE") {
-    throw new Error("Choose an active project.");
+    throw new UserInputError("Choose an active project.");
   }
 
   if (logDayOff) {
@@ -479,11 +482,11 @@ export async function createTimeEntryAction(formData: FormData) {
     const end = parseClockTime(endTime);
 
     if (start === null || end === null || end <= start) {
-      throw new Error("Enter a valid start and end time.");
+      throw new UserInputError("Enter a valid start and end time.");
     }
 
     if (!isQuarterHourClock(start) || !isQuarterHourClock(end)) {
-      throw new Error("Start and end times must use 15-minute increments.");
+      throw new UserInputError("Start and end times must use 15-minute increments.");
     }
 
     durationMinutes = end - start;
@@ -493,7 +496,7 @@ export async function createTimeEntryAction(formData: FormData) {
     durationMinutes = Math.round(hours * 60);
 
     if (!isQuarterHour(durationMinutes)) {
-      throw new Error("Manual hours must be in 15-minute increments.");
+      throw new UserInputError("Manual hours must be in 15-minute increments.");
     }
   }
 
@@ -532,11 +535,11 @@ function timeEntryDataFromForm(formData: FormData) {
     const end = parseClockTime(endTime);
 
     if (start === null || end === null || end <= start) {
-      throw new Error("Enter a valid start and end time.");
+      throw new UserInputError("Enter a valid start and end time.");
     }
 
     if (!isQuarterHourClock(start) || !isQuarterHourClock(end)) {
-      throw new Error("Start and end times must use 15-minute increments.");
+      throw new UserInputError("Start and end times must use 15-minute increments.");
     }
 
     durationMinutes = end - start;
@@ -546,7 +549,7 @@ function timeEntryDataFromForm(formData: FormData) {
     durationMinutes = Math.round(hours * 60);
 
     if (!isQuarterHour(durationMinutes)) {
-      throw new Error("Manual hours must be in 15-minute increments.");
+      throw new UserInputError("Manual hours must be in 15-minute increments.");
     }
   }
 
@@ -562,11 +565,11 @@ export async function updateTimeEntryAction(formData: FormData) {
     select: { id: true, projectId: true, billingStatus: true, teamMemberId: true }
   });
 
-  if (!entry || entry.projectId !== projectId) throw new Error("Time entry not found.");
+  if (!entry || entry.projectId !== projectId) throw new UserInputError("Time entry not found.");
   const project = await prisma.project.findFirst({ where: { id: projectId, ownerId }, select: { id: true } });
-  if (!project) throw new Error("Time entry not found.");
-  if (entry.teamMemberId) throw new Error("Review subcontractor hours from the Team section.");
-  if (entry.billingStatus !== "UNBILLED") throw new Error("Billed time entries cannot be edited.");
+  if (!project) throw new UserInputError("Time entry not found.");
+  if (entry.teamMemberId) throw new UserInputError("Review subcontractor hours from the Team section.");
+  if (entry.billingStatus !== "UNBILLED") throw new UserInputError("Billed time entries cannot be edited.");
 
   await prisma.timeEntry.update({
     where: { id: entryId },
@@ -590,11 +593,11 @@ export async function deleteTimeEntryAction(formData: FormData) {
     select: { id: true, projectId: true, billingStatus: true, teamMemberId: true }
   });
 
-  if (!entry || entry.projectId !== projectId) throw new Error("Time entry not found.");
+  if (!entry || entry.projectId !== projectId) throw new UserInputError("Time entry not found.");
   const project = await prisma.project.findFirst({ where: { id: projectId, ownerId }, select: { id: true } });
-  if (!project) throw new Error("Time entry not found.");
-  if (entry.teamMemberId) throw new Error("Review subcontractor hours from the Team section.");
-  if (entry.billingStatus !== "UNBILLED") throw new Error("Billed time entries cannot be deleted.");
+  if (!project) throw new UserInputError("Time entry not found.");
+  if (entry.teamMemberId) throw new UserInputError("Review subcontractor hours from the Team section.");
+  if (entry.billingStatus !== "UNBILLED") throw new UserInputError("Billed time entries cannot be deleted.");
 
   await prisma.timeEntry.delete({ where: { id: entryId } });
 
@@ -615,13 +618,13 @@ export async function createExpenseItemAction(formData: FormData) {
   const unitCostCents = dollarsToCents(formData.get("unitCost"));
   const notes = text(formData, "itemNotes") || null;
 
-  if (!description) throw new Error("Description is required.");
+  if (!description) throw new UserInputError("Description is required.");
   positive(quantity, "Quantity must be greater than zero.");
   positive(unitCostCents, "Unit cost must be greater than zero.");
 
   const project = await prisma.project.findFirst({ where: { id: projectId, ownerId } });
   if (!project || project.status !== "ACTIVE") {
-    throw new Error("Choose an active project.");
+    throw new UserInputError("Choose an active project.");
   }
 
   await prisma.expenseItem.create({
@@ -650,7 +653,7 @@ function expenseItemDataFromForm(formData: FormData) {
   const unitCostCents = dollarsToCents(formData.get("unitCost"));
   const notes = text(formData, "itemNotes") || null;
 
-  if (!description) throw new Error("Description is required.");
+  if (!description) throw new UserInputError("Description is required.");
   positive(quantity, "Quantity must be greater than zero.");
   positive(unitCostCents, "Unit cost must be greater than zero.");
 
@@ -673,10 +676,10 @@ export async function updateExpenseItemAction(formData: FormData) {
     select: { id: true, projectId: true, billingStatus: true }
   });
 
-  if (!item || item.projectId !== projectId) throw new Error("Expense item not found.");
+  if (!item || item.projectId !== projectId) throw new UserInputError("Expense item not found.");
   const project = await prisma.project.findFirst({ where: { id: projectId, ownerId }, select: { id: true } });
-  if (!project) throw new Error("Expense item not found.");
-  if (item.billingStatus !== "UNBILLED") throw new Error("Billed expense items cannot be edited.");
+  if (!project) throw new UserInputError("Expense item not found.");
+  if (item.billingStatus !== "UNBILLED") throw new UserInputError("Billed expense items cannot be edited.");
 
   await prisma.expenseItem.update({
     where: { id: item.id },
@@ -700,10 +703,10 @@ export async function deleteExpenseItemAction(formData: FormData) {
     select: { id: true, projectId: true, billingStatus: true }
   });
 
-  if (!item || item.projectId !== projectId) throw new Error("Expense item not found.");
+  if (!item || item.projectId !== projectId) throw new UserInputError("Expense item not found.");
   const project = await prisma.project.findFirst({ where: { id: projectId, ownerId }, select: { id: true } });
-  if (!project) throw new Error("Expense item not found.");
-  if (item.billingStatus !== "UNBILLED") throw new Error("Billed expense items cannot be deleted.");
+  if (!project) throw new UserInputError("Expense item not found.");
+  if (item.billingStatus !== "UNBILLED") throw new UserInputError("Billed expense items cannot be deleted.");
 
   await prisma.expenseItem.delete({ where: { id: item.id } });
 
@@ -731,11 +734,11 @@ function parseWorkExpenseData(formData: FormData, gstRate = 10) {
   // business's configured GST rate rather than assuming 10% for everyone.
   const gstAmountCents = gstIncluded ? (submittedGstAmount ?? Math.round((amountCents * gstRate) / (100 + gstRate))) : 0;
 
-  if (!expenseCategoryValues.has(category)) throw new Error("Choose a valid expense category.");
-  if (!expenseStatusValues.has(status)) throw new Error("Choose a valid expense status.");
-  if (!description) throw new Error("Expense description is required.");
+  if (!expenseCategoryValues.has(category)) throw new UserInputError("Choose a valid expense category.");
+  if (!expenseStatusValues.has(status)) throw new UserInputError("Choose a valid expense status.");
+  if (!description) throw new UserInputError("Expense description is required.");
   positive(amountCents, "Expense amount must be greater than zero.");
-  if (gstAmountCents > amountCents) throw new Error("GST amount cannot be more than the expense amount.");
+  if (gstAmountCents > amountCents) throw new UserInputError("GST amount cannot be more than the expense amount.");
 
   return {
     projectId,
@@ -757,7 +760,7 @@ function parseWorkExpenseData(formData: FormData, gstRate = 10) {
 async function assertOwnedProject(ownerId: string, projectId: string | null) {
   if (!projectId) return;
   const project = await prisma.project.findFirst({ where: { id: projectId, ownerId }, select: { id: true } });
-  if (!project) throw new Error("Choose one of your projects.");
+  if (!project) throw new UserInputError("Choose one of your projects.");
 }
 
 async function ownerGstRate(ownerId: string) {
@@ -787,7 +790,7 @@ export async function createWorkExpenseAction(formData: FormData) {
 
 async function assertNotWageLinkedExpense(ownerId: string, expenseId: string) {
   const wagePayment = await prisma.wagePayment.findFirst({ where: { workExpenseId: expenseId, ownerId }, select: { id: true, teamMemberId: true } });
-  if (wagePayment) throw new Error("This expense was generated from a wage payment. Manage it from the subcontractor's Team page instead.");
+  if (wagePayment) throw new UserInputError("This expense was generated from a wage payment. Manage it from the subcontractor's Team page instead.");
 }
 
 export async function updateWorkExpenseAction(formData: FormData) {
@@ -797,7 +800,7 @@ export async function updateWorkExpenseAction(formData: FormData) {
     where: { id: expenseId, ownerId },
     select: { id: true, projectId: true, status: true }
   });
-  if (!existing) throw new Error("Expense not found.");
+  if (!existing) throw new UserInputError("Expense not found.");
   await assertNotWageLinkedExpense(ownerId, expenseId);
 
   const data = parseWorkExpenseData(formData, await ownerGstRate(ownerId));
@@ -822,7 +825,7 @@ export async function archiveWorkExpenseAction(formData: FormData) {
   const ownerId = await requireUserId();
   const expenseId = text(formData, "expenseId");
   const expense = await prisma.workExpense.findFirst({ where: { id: expenseId, ownerId }, select: { id: true, projectId: true } });
-  if (!expense) throw new Error("Expense not found.");
+  if (!expense) throw new UserInputError("Expense not found.");
   await assertNotWageLinkedExpense(ownerId, expenseId);
 
   await prisma.workExpense.update({ where: { id: expense.id }, data: { archivedAt: new Date() } });
@@ -838,7 +841,7 @@ export async function restoreWorkExpenseAction(formData: FormData) {
   const ownerId = await requireUserId();
   const expenseId = text(formData, "expenseId");
   const expense = await prisma.workExpense.findFirst({ where: { id: expenseId, ownerId }, select: { id: true, projectId: true } });
-  if (!expense) throw new Error("Expense not found.");
+  if (!expense) throw new UserInputError("Expense not found.");
 
   await prisma.workExpense.update({ where: { id: expense.id }, data: { archivedAt: null } });
   revalidatePath("/");
@@ -856,7 +859,7 @@ export async function deleteWorkExpenseAction(formData: FormData) {
     where: { id: expenseId, ownerId },
     select: { id: true, projectId: true }
   });
-  if (!expense) throw new Error("Expense not found.");
+  if (!expense) throw new UserInputError("Expense not found.");
   await assertNotWageLinkedExpense(ownerId, expenseId);
 
   await prisma.workExpense.delete({ where: { id: expense.id } });
@@ -877,12 +880,12 @@ export async function createProjectAction(formData: FormData) {
   let createdClient = false;
   const notes = text(formData, "notes") || null;
 
-  if (!title) throw new Error("Project name is required.");
+  if (!title) throw new UserInputError("Project name is required.");
   positive(rateCents, "Hourly rate must be greater than zero.");
 
   if (clientId === "__new") {
     const businessName = text(formData, "newClientBusinessName");
-    if (!businessName) throw new Error("New client business/name is required.");
+    if (!businessName) throw new UserInputError("New client business/name is required.");
 
     const client = await prisma.client.create({
       data: {
@@ -900,9 +903,9 @@ export async function createProjectAction(formData: FormData) {
     createdClient = true;
   }
 
-  if (!clientId) throw new Error("Choose or add a client.");
+  if (!clientId) throw new UserInputError("Choose or add a client.");
   const client = await prisma.client.findFirst({ where: { id: clientId, ownerId }, select: { id: true } });
-  if (!client) throw new Error("Choose one of your clients.");
+  if (!client) throw new UserInputError("Choose one of your clients.");
 
   const project = await prisma.project.create({
     data: {
@@ -938,7 +941,7 @@ export async function createClientAction(formData: FormData) {
   const address = text(formData, "address") || null;
   const notes = text(formData, "notes") || null;
 
-  if (!businessName) throw new Error("Business name is required.");
+  if (!businessName) throw new UserInputError("Business name is required.");
   validateOptionalEmail(email ?? "");
 
   const client = await prisma.client.create({
@@ -973,7 +976,7 @@ export async function updateClientAction(formData: FormData) {
   const address = text(formData, "address") || null;
   const notes = text(formData, "notes") || null;
 
-  if (!businessName) throw new Error("Business name is required.");
+  if (!businessName) throw new UserInputError("Business name is required.");
   validateOptionalEmail(email ?? "");
 
   const existing = await prisma.client.findFirst({
@@ -984,7 +987,7 @@ export async function updateClientAction(formData: FormData) {
     }
   });
 
-  if (!existing) throw new Error("Client not found.");
+  if (!existing) throw new UserInputError("Client not found.");
 
   await prisma.client.update({
     where: { id: existing.id },
@@ -1007,17 +1010,16 @@ export async function updateProjectAction(formData: FormData) {
   const title = text(formData, "title");
   const clientId = text(formData, "clientId");
   const rateCents = dollarsToCents(formData.get("hourlyRate"));
-  const status = text(formData, "status") as ProjectStatus;
   const notes = text(formData, "notes") || null;
 
-  if (!title) throw new Error("Project name is required.");
-  if (!clientId) throw new Error("Choose a client.");
+  if (!title) throw new UserInputError("Project name is required.");
+  if (!clientId) throw new UserInputError("Choose a client.");
   positive(rateCents, "Hourly rate must be greater than zero.");
 
   const existing = await prisma.project.findFirst({ where: { id: projectId, ownerId } });
-  if (!existing) throw new Error("Project not found.");
+  if (!existing) throw new UserInputError("Project not found.");
   const client = await prisma.client.findFirst({ where: { id: clientId, ownerId }, select: { id: true } });
-  if (!client) throw new Error("Choose one of your clients.");
+  if (!client) throw new UserInputError("Choose one of your clients.");
 
   await prisma.$transaction(async (tx) => {
     await tx.project.update({
@@ -1026,7 +1028,7 @@ export async function updateProjectAction(formData: FormData) {
         title,
         clientId,
         currentHourlyRateCents: rateCents,
-        status: status === "ARCHIVED" ? "ARCHIVED" : "ACTIVE",
+        status: existing.status,
         notes
       }
     });
@@ -1051,12 +1053,19 @@ export async function updateProjectAction(formData: FormData) {
 export async function archiveProjectAction(formData: FormData) {
   const ownerId = await requireUserId();
   const projectId = text(formData, "projectId");
+  const project = await prisma.project.findFirst({ where: { id: projectId, ownerId }, select: { id: true } });
+  if (!project) redirect("/projects");
+
+  const closeout = projectCloseoutReadiness(await loadProjectControlSummary(ownerId, projectId));
+  if (!closeout.canArchive) {
+    redirect(`/projects/${projectId}/edit?archiveError=${encodeURIComponent(`This project is not ready to archive: ${closeout.blockers.join(", ")}.`)}`);
+  }
 
   const result = await prisma.project.updateMany({
     where: { id: projectId, ownerId },
     data: { status: "ARCHIVED" }
   });
-  if (result.count === 0) throw new Error("Project not found.");
+  if (result.count === 0) throw new UserInputError("Project not found.");
 
   revalidatePath("/projects");
   revalidateDataTags(CACHE_TAGS.dashboard, CACHE_TAGS.projects, CACHE_TAGS.hoursExport, CACHE_TAGS.insights);
@@ -1071,7 +1080,7 @@ export async function unarchiveProjectAction(formData: FormData) {
     where: { id: projectId, ownerId },
     data: { status: "ACTIVE" }
   });
-  if (result.count === 0) throw new Error("Project not found.");
+  if (result.count === 0) throw new UserInputError("Project not found.");
 
   revalidatePath("/");
   revalidatePath("/projects");
@@ -1178,7 +1187,7 @@ export async function deleteClientAction(formData: FormData) {
     select: { id: true }
   });
 
-  if (!client) throw new Error("Client not found.");
+  if (!client) throw new UserInputError("Client not found.");
 
   await prisma.$transaction(async (tx) => {
     const projects = await tx.project.findMany({
@@ -1200,7 +1209,7 @@ export async function deleteClientAction(formData: FormData) {
     ]);
 
     if (invoiceCount || billedTimeCount || billedExpenseCount || wagePaymentCount) {
-      throw new Error("This client has invoice, billed, or wage payment history. Archive their projects instead of deleting the client.");
+      throw new UserInputError("This client has invoice, billed, or wage payment history. Archive their projects instead of deleting the client.");
     }
 
     const reversedWagePayments = await tx.wagePayment.findMany({
@@ -1293,7 +1302,7 @@ export async function createInvoiceDraftAction(formData: FormData) {
   const mode = invoiceModeFromForm(formData);
 
   if (end < start) {
-    throw new Error("End date must be after start date.");
+    throw new UserInputError("End date must be after start date.");
   }
 
   const [project, profile] = await Promise.all([
@@ -1303,7 +1312,7 @@ export async function createInvoiceDraftAction(formData: FormData) {
     }),
     prisma.businessProfile.findUnique({ where: { ownerId } })
   ]);
-  if (!project) throw new Error("Project not found.");
+  if (!project) throw new UserInputError("Project not found.");
 
   const [entries, expenses] = await Promise.all([
     prisma.timeEntry.findMany({
@@ -1340,7 +1349,7 @@ export async function createInvoiceDraftAction(formData: FormData) {
   ]);
 
   if (entries.length === 0 && expenses.length === 0) {
-    throw new Error("There are no unbilled entries or items in this date range.");
+    throw new UserInputError("There are no unbilled entries or items in this date range.");
   }
 
   const paymentTermsDays = profile?.paymentTermsDays ?? 14;
@@ -1391,7 +1400,7 @@ export async function createInvoiceDraftAction(formData: FormData) {
     }
   }
 
-  if (!invoice) throw new Error("Could not create the invoice. Please try again.");
+  if (!invoice) throw new UserInputError("Could not create the invoice. Please try again.");
 
   revalidatePath("/invoices");
   revalidateDataTags(CACHE_TAGS.dashboard, CACHE_TAGS.invoices);
@@ -1408,18 +1417,18 @@ async function finaliseInvoice(ownerId: string, invoiceId: string, status: "SENT
     }
   });
 
-  if (!invoice) throw new Error("Invoice not found.");
-  if (invoice.ownerId !== ownerId) throw new Error("Invoice not found.");
-  if (invoice.status === "VOID") throw new Error("Void invoices cannot be finalised.");
-  if (invoice.status === "PAID") throw new Error("Invoice is already paid.");
+  if (!invoice) throw new UserInputError("Invoice not found.");
+  if (invoice.ownerId !== ownerId) throw new UserInputError("Invoice not found.");
+  if (invoice.status === "VOID") throw new UserInputError("Void invoices cannot be finalised.");
+  if (invoice.status === "PAID") throw new UserInputError("Invoice is already paid.");
 
   if (invoice.status === "SENT") {
-    if (status !== "PAID") throw new Error("Sent invoices cannot be resent.");
+    if (status !== "PAID") throw new UserInputError("Sent invoices cannot be resent.");
     const updated = await prisma.invoice.updateMany({
       where: { id: invoiceId, ownerId, status: "SENT" },
       data: { status: "PAID", paymentDate: new Date() }
     });
-    if (updated.count !== 1) throw new Error("Invoice status changed. Refresh the page and try again.");
+    if (updated.count !== 1) throw new UserInputError("Invoice status changed. Refresh the page and try again.");
     return;
   }
 
@@ -1437,7 +1446,7 @@ async function finaliseInvoice(ownerId: string, invoiceId: string, status: "SENT
   const profile = await prisma.businessProfile.findUnique({ where: { ownerId } });
   const profileIssues = criticalInvoiceProfileIssues(profile);
   if (profileIssues.length && !confirmedIncomplete) {
-    throw new Error(`Invoice is missing important business details: ${profileIssues.join(" ")}`);
+    throw new UserInputError(`Invoice is missing important business details: ${profileIssues.join(" ")}`);
   }
 
   const client = invoice.project.client;
@@ -1461,7 +1470,7 @@ async function finaliseInvoice(ownerId: string, invoiceId: string, status: "SENT
       select: { status: true }
     });
     if (currentInvoice?.status !== "DRAFT") {
-      throw new Error("Invoice status changed. Refresh the page and try again.");
+      throw new UserInputError("Invoice status changed. Refresh the page and try again.");
     }
 
     const updatedEntries = timeEntryIds.length
@@ -1492,7 +1501,7 @@ async function finaliseInvoice(ownerId: string, invoiceId: string, status: "SENT
       : { count: 0 };
 
     if (updatedEntries.count !== timeEntryIds.length || updatedExpenses.count !== expenseItemIds.length) {
-      throw new Error("One or more invoice items have already been billed elsewhere.");
+      throw new UserInputError("One or more invoice items have already been billed elsewhere.");
     }
 
     const updatedInvoice = await tx.invoice.updateMany({
@@ -1536,7 +1545,7 @@ async function finaliseInvoice(ownerId: string, invoiceId: string, status: "SENT
       }
     });
     if (updatedInvoice.count !== 1) {
-      throw new Error("Invoice status changed. Refresh the page and try again.");
+      throw new UserInputError("Invoice status changed. Refresh the page and try again.");
     }
   });
 
@@ -1569,14 +1578,14 @@ export async function markInvoiceUnpaidAction(formData: FormData) {
     select: { id: true, status: true }
   });
 
-  if (!invoice) throw new Error("Invoice not found.");
-  if (invoice.status !== "PAID") throw new Error("Only paid invoices can be marked unpaid.");
+  if (!invoice) throw new UserInputError("Invoice not found.");
+  if (invoice.status !== "PAID") throw new UserInputError("Only paid invoices can be marked unpaid.");
 
   const updated = await prisma.invoice.updateMany({
     where: { id: invoiceId, ownerId, status: "PAID" },
     data: { status: "SENT", paymentDate: null }
   });
-  if (updated.count !== 1) throw new Error("Invoice status changed. Refresh the page and try again.");
+  if (updated.count !== 1) throw new UserInputError("Invoice status changed. Refresh the page and try again.");
 
   revalidatePath("/");
   revalidatePath("/invoices");
@@ -1592,9 +1601,9 @@ export async function markInvoiceUnsentAction(formData: FormData) {
     include: { lineItems: true }
   });
 
-  if (!invoice) throw new Error("Invoice not found.");
-  if (invoice.ownerId !== ownerId) throw new Error("Invoice not found.");
-  if (invoice.status !== "SENT") throw new Error("Only sent invoices can be marked unsent.");
+  if (!invoice) throw new UserInputError("Invoice not found.");
+  if (invoice.ownerId !== ownerId) throw new UserInputError("Invoice not found.");
+  if (invoice.status !== "SENT") throw new UserInputError("Only sent invoices can be marked unsent.");
 
   const timeEntryIds = invoice.lineItems
     .map((line) => line.timeEntryId)
@@ -1608,7 +1617,7 @@ export async function markInvoiceUnsentAction(formData: FormData) {
       where: { id: invoiceId, ownerId, status: "SENT" },
       data: { status: "DRAFT", paymentDate: null }
     });
-    if (updated.count !== 1) throw new Error("Invoice status changed. Refresh the page and try again.");
+    if (updated.count !== 1) throw new UserInputError("Invoice status changed. Refresh the page and try again.");
 
     await tx.timeEntry.updateMany({
       where: { ownerId, id: { in: timeEntryIds }, invoiceId },
@@ -1636,9 +1645,9 @@ export async function voidInvoiceAction(formData: FormData) {
     include: { lineItems: true }
   });
 
-  if (!invoice) throw new Error("Invoice not found.");
-  if (invoice.ownerId !== ownerId) throw new Error("Invoice not found.");
-  if (invoice.status === "VOID") throw new Error("Invoice is already void.");
+  if (!invoice) throw new UserInputError("Invoice not found.");
+  if (invoice.ownerId !== ownerId) throw new UserInputError("Invoice not found.");
+  if (invoice.status === "VOID") throw new UserInputError("Invoice is already void.");
 
   const timeEntryIds = invoice.lineItems
     .map((line) => line.timeEntryId)
@@ -1652,7 +1661,7 @@ export async function voidInvoiceAction(formData: FormData) {
       where: { id: invoiceId, ownerId, status: invoice.status },
       data: { status: "VOID", paymentDate: null, publicTokenEnabled: false }
     });
-    if (updated.count !== 1) throw new Error("Invoice status changed. Refresh the page and try again.");
+    if (updated.count !== 1) throw new UserInputError("Invoice status changed. Refresh the page and try again.");
 
     await tx.timeEntry.updateMany({
       where: { ownerId, id: { in: timeEntryIds }, invoiceId },
@@ -1677,14 +1686,14 @@ export async function unvoidInvoiceAction(formData: FormData) {
   const invoiceId = text(formData, "invoiceId");
 
   const invoice = await prisma.invoice.findFirst({ where: { id: invoiceId, ownerId } });
-  if (!invoice) throw new Error("Invoice not found.");
-  if (invoice.status !== "VOID") throw new Error("Only void invoices can be restored.");
+  if (!invoice) throw new UserInputError("Invoice not found.");
+  if (invoice.status !== "VOID") throw new UserInputError("Only void invoices can be restored.");
 
   const updated = await prisma.invoice.updateMany({
     where: { id: invoiceId, ownerId, status: "VOID" },
     data: { status: "DRAFT", paymentDate: null }
   });
-  if (updated.count !== 1) throw new Error("Invoice status changed. Refresh the page and try again.");
+  if (updated.count !== 1) throw new UserInputError("Invoice status changed. Refresh the page and try again.");
 
   revalidatePath("/");
   revalidatePath("/invoices");
@@ -1700,8 +1709,8 @@ export async function deleteInvoiceAction(formData: FormData) {
     include: { lineItems: true }
   });
 
-  if (!invoice) throw new Error("Invoice not found.");
-  if (invoice.ownerId !== ownerId) throw new Error("Invoice not found.");
+  if (!invoice) throw new UserInputError("Invoice not found.");
+  if (invoice.ownerId !== ownerId) throw new UserInputError("Invoice not found.");
 
   const timeEntryIds = invoice.lineItems
     .map((line) => line.timeEntryId)
@@ -1722,7 +1731,7 @@ export async function deleteInvoiceAction(formData: FormData) {
     const deleted = await tx.invoice.deleteMany({
       where: { id: invoiceId, ownerId, status: invoice.status }
     });
-    if (deleted.count !== 1) throw new Error("Invoice status changed. Refresh the page and try again.");
+    if (deleted.count !== 1) throw new UserInputError("Invoice status changed. Refresh the page and try again.");
   });
 
   revalidatePath("/");
@@ -1734,7 +1743,7 @@ export async function deleteInvoiceAction(formData: FormData) {
 }
 
 function assertInvoiceCanBeShared(status: "DRAFT" | "SENT" | "PAID" | "VOID") {
-  if (!canShareInvoicePublicly(status)) throw new Error("Void invoices cannot be shared.");
+  if (!canShareInvoicePublicly(status)) throw new UserInputError("Void invoices cannot be shared.");
 }
 
 async function loadOwnedInvoiceForSharing(ownerId: string, invoiceId: string) {
@@ -1748,7 +1757,7 @@ async function loadOwnedInvoiceForSharing(ownerId: string, invoiceId: string) {
       publicTokenEnabled: true
     }
   });
-  if (!invoice) throw new Error("Invoice not found.");
+  if (!invoice) throw new UserInputError("Invoice not found.");
   return invoice;
 }
 
@@ -1810,14 +1819,14 @@ export async function prepareInvoiceEmailAction(formData: FormData) {
     select: { id: true, invoiceNumber: true, status: true }
   });
 
-  if (!invoice) throw new Error("Invoice not found.");
-  if (invoice.status === "VOID") throw new Error("Void invoices cannot be emailed.");
+  if (!invoice) throw new UserInputError("Invoice not found.");
+  if (invoice.status === "VOID") throw new UserInputError("Void invoices cannot be emailed.");
 
   parseEmailList(text(formData, "to"), "To", true);
   const subject = text(formData, "subject");
   const message = text(formData, "message");
-  if (!subject) throw new Error("Email subject is required.");
-  if (!message) throw new Error("Email message is required.");
+  if (!subject) throw new UserInputError("Email subject is required.");
+  if (!message) throw new UserInputError("Email message is required.");
 
   await prisma.invoice.update({
     where: { id: invoiceId },
@@ -1838,14 +1847,14 @@ export async function prepareInvoiceSmsAction(formData: FormData) {
     select: { id: true, invoiceNumber: true, status: true }
   });
 
-  if (!invoice) throw new Error("Invoice not found.");
-  if (invoice.status === "VOID") throw new Error("Void invoices cannot be sent.");
+  if (!invoice) throw new UserInputError("Invoice not found.");
+  if (invoice.status === "VOID") throw new UserInputError("Void invoices cannot be sent.");
 
   const phone = text(formData, "phone");
-  if (digitsOnly(phone).length < 8) throw new Error("Client phone number is required.");
+  if (digitsOnly(phone).length < 8) throw new UserInputError("Client phone number is required.");
 
   const message = text(formData, "message");
-  if (!message) throw new Error("SMS message is required.");
+  if (!message) throw new UserInputError("SMS message is required.");
 
   return { ok: true };
 }
@@ -1858,20 +1867,20 @@ export async function sendInvoiceEmailAction(formData: FormData) {
   const message = text(formData, "message");
   const confirmedIncomplete = text(formData, "confirmIncomplete") === "on";
 
-  if (formData.has("subject") && !subject) throw new Error("Email subject is required.");
-  if (formData.has("message") && !message) throw new Error("Email message is required.");
+  if (formData.has("subject") && !subject) throw new UserInputError("Email subject is required.");
+  if (formData.has("message") && !message) throw new UserInputError("Email message is required.");
 
   const invoice = await prisma.invoice.findFirst({
     where: { id: invoiceId, ownerId },
     select: { status: true }
   });
-  if (!invoice) throw new Error("Invoice not found.");
+  if (!invoice) throw new UserInputError("Invoice not found.");
 
   if (invoice.status === "DRAFT" && !confirmedIncomplete) {
     const profile = await prisma.businessProfile.findUnique({ where: { ownerId } });
     const profileIssues = criticalInvoiceProfileIssues(profile);
     if (profileIssues.length) {
-      throw new Error(`Invoice is missing important business details: ${profileIssues.join(" ")}`);
+      throw new UserInputError(`Invoice is missing important business details: ${profileIssues.join(" ")}`);
     }
   }
 
@@ -1906,13 +1915,13 @@ export async function sendInvoiceSmsAction(formData: FormData) {
     where: { id: invoiceId, ownerId },
     select: { status: true }
   });
-  if (!invoice) throw new Error("Invoice not found.");
+  if (!invoice) throw new UserInputError("Invoice not found.");
 
   if (invoice.status === "DRAFT" && !confirmedIncomplete) {
     const profile = await prisma.businessProfile.findUnique({ where: { ownerId } });
     const profileIssues = criticalInvoiceProfileIssues(profile);
     if (profileIssues.length) {
-      throw new Error(`Invoice is missing important business details: ${profileIssues.join(" ")}`);
+      throw new UserInputError(`Invoice is missing important business details: ${profileIssues.join(" ")}`);
     }
   }
 

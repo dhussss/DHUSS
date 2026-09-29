@@ -15,11 +15,11 @@ export default async function NewProjectPage({
   const ownerId = await requireUserId();
   const defaultClientId = typeof params?.clientId === "string" ? params.clientId : undefined;
   const onboarding = params?.onboarding === "1";
-  const clients = await prisma.client.findMany({
+  const [clients, profile] = await Promise.all([prisma.client.findMany({
     where: { ownerId },
     select: { id: true, businessName: true },
     orderBy: { businessName: "asc" }
-  });
+  }), prisma.businessProfile.findUnique({ where: { ownerId }, select: { defaultHourlyRateCents: true } })]);
 
   return (
     <main className="page-shell">
@@ -34,7 +34,7 @@ export default async function NewProjectPage({
       </header>
 
       <section className="card mt-6 max-w-2xl">
-        <CreateProjectForm clients={clients} defaultClientId={defaultClientId} onboarding={onboarding} />
+        <CreateProjectForm clients={clients} defaultClientId={defaultClientId} defaultHourlyRateCents={profile?.defaultHourlyRateCents ?? undefined} onboarding={onboarding} />
       </section>
     </main>
   );

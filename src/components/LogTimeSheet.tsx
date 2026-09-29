@@ -1,10 +1,14 @@
 "use client";
+import { ActionForm } from "@/components/ActionForm";
+
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
+import Link from "next/link";
 import { usePathname, useSearchParams } from "next/navigation";
 import { CalendarPlus, ClipboardPlus, Clock3, CloudOff, PackagePlus, RotateCcw, Trash2, X } from "lucide-react";
-import { createExpenseItemAction, createTimeEntryAction } from "@/app/actions";
-import { createSubcontractorTimeEntryAction } from "@/app/team/actions";
+import { createExpenseItemAction, createTimeEntryAction } from "@/app/form-actions";
+import { createManagedTeamTimeEntryAction, createSubcontractorTimeEntryAction } from "@/app/form-actions";
 import { todayInputValue } from "@/lib/dates";
 import { formatHours, parseClockTime } from "@/lib/time";
 import { SubmitButton } from "@/components/SubmitButton";
@@ -21,9 +25,15 @@ type AssignedProjectOption = {
   project: ProjectOption;
 };
 
+type ManagedTeamMemberOption = {
+  id: string;
+  displayName: string;
+};
+
 type WorkDraft = {
   updatedAt: string;
   mode: "time" | "item";
+  selectedWorker?: string;
   selectedTimeProject: string;
   entryMode: "duration" | "range";
   startTime: string;
@@ -42,6 +52,7 @@ type WorkDraft = {
 
 function hasMeaningfulDraft(draft: WorkDraft, today: string, savedMode: string | null) {
   const timeChanged = savedMode !== "time" && (
+    (draft.selectedWorker && draft.selectedWorker !== "me") ||
     draft.timeDate !== today || draft.timeNotes.trim() || draft.entryMode !== "duration" ||
     draft.durationHours !== "8" || draft.startTime !== "07:00" || draft.endTime !== "15:00" || draft.logDayOff
   );
@@ -55,6 +66,7 @@ function hasMeaningfulDraft(draft: WorkDraft, today: string, savedMode: string |
 export function LogTimeSheet({
   projects,
   assignedProjects = [],
+  managedTeamMembers = [],
   defaultProjectId,
   buttonLabel = "Log Time",
   returnTo,
@@ -62,6 +74,7 @@ export function LogTimeSheet({
 }: {
   projects: ProjectOption[];
   assignedProjects?: AssignedProjectOption[];
+  managedTeamMembers?: ManagedTeamMemberOption[];
   defaultProjectId?: string;
   buttonLabel?: string;
   returnTo?: string;
@@ -82,6 +95,7 @@ export function LogTimeSheet({
   const [logDayOff, setLogDayOff] = useState(false);
   const [timeDate, setTimeDate] = useState(defaultDate);
   const [timeNotes, setTimeNotes] = useState("");
+  const [selectedWorker, setSelectedWorker] = useState("me");
   const [selectedItemProject, setSelectedItemProject] = useState(defaultProjectId ?? projects[0]?.id ?? "");
   const [itemDate, setItemDate] = useState(defaultDate);
   const [itemDescription, setItemDescription] = useState("");
@@ -92,6 +106,7 @@ export function LogTimeSheet({
   const [restoredDraft, setRestoredDraft] = useState(false);
   const draftLoadedRef = useRef(false);
   const closeButtonRef = useRef<HTMLButtonElement>(null);
+  const dialogRef = useRef<HTMLDialogElement>(null);
   const initialTimeProject = defaultProjectId
     ? `owned:${defaultProjectId}`
     : projects[0]
@@ -109,8 +124,10 @@ export function LogTimeSheet({
   );
   const selectedAssignmentId = selectedTimeProject.startsWith("assigned:") ? selectedTimeProject.slice("assigned:".length) : "";
   const selectedOwnedProjectId = selectedTimeProject.startsWith("owned:") ? selectedTimeProject.slice("owned:".length) : "";
-  const isAssignedTime = Boolean(selectedAssignmentId);
-  const timeReturnTo = returnTo ?? (pathname === "/" ? (isAssignedTime ? "/?assignedTimeSaved=1" : "/?timeSaved=1") : pathname);
+  const selectedTeamMember = managedTeamMembers.find((member) => member.id === selectedWorker);
+  const isManagedTime = Boolean(selectedTeamMember);
+  const isAssignedTime = !isManagedTime && Boolean(selectedAssignmentId);
+  const timeReturnTo = returnTo ?? (pathname === "/" ? (isManagedTime ? "/?teamTimeSaved=1" : isAssignedTime ? "/?assignedTimeSaved=1" : "/?timeSaved=1") : pathname);
 
   useEffect(() => {
     if (defaultProjectId) return;
@@ -136,7 +153,10 @@ export function LogTimeSheet({
       const fresh = draft && Date.now() - new Date(draft.updatedAt).getTime() < 14 * 24 * 60 * 60 * 1000;
 
       if (draft && fresh) {
-        if (savedMode !== "time") {
+        if (savedMode !== "time" || searchParams.get("logWork") === "time") {
+          if (draft.selectedWorker && (draft.selectedWorker === "me" || managedTeamMembers.some((member) => member.id === draft.selectedWorker))) {
+            setSelectedWorker(draft.selectedWorker);
+          }
           if (availableProjectKeys.has(draft.selectedTimeProject)) setSelectedTimeProject(draft.selectedTimeProject);
           setEntryMode(draft.entryMode === "range" ? "range" : "duration");
           setStartTime(draft.startTime || "07:00");
@@ -144,7 +164,7 @@ export function LogTimeSheet({
           setDurationHours(draft.durationHours || "8");
           setLogDayOff(Boolean(draft.logDayOff));
           setTimeDate(draft.timeDate || defaultDate);
-          setTimeNotes(draft.timeNotes || "");
+          setTimeNotes(savedMode === "time" ? "" : draft.timeNotes || "");
         }
         if (savedMode !== "item") {
           if (projects.some((project) => project.id === draft.selectedItemProject)) setSelectedItemProject(draft.selectedItemProject);
@@ -165,11 +185,30 @@ export function LogTimeSheet({
       }
     }
     setDraftReady(true);
-  }, [availableProjectKeys, defaultDate, draftKey, projects, searchParams]);
+  }, [availableProjectKeys, defaultDate, draftKey, managedTeamMembers, projects, searchParams]);
 
   useEffect(() => {
     const requestedMode = searchParams.get("logWork");
     const savedMode = searchParams.get("workSaved");
+    if (savedMode === "time") {
+      setTimeNotes("");
+      setLogDayOff(false);
+      setRestoredDraft(false);
+      if (requestedMode !== "time") {
+        setSelectedWorker("me");
+        setOpen(false);
+        setDurationHours("8");
+        setTimeDate(todayInputValue());
+      }
+    }
+    if (savedMode === "item") {
+      setItemDescription("");
+      setItemNotes("");
+      setItemQuantity("1");
+      setItemUnitCost("");
+      setRestoredDraft(false);
+      if (requestedMode !== "item") setOpen(false);
+    }
     if (requestedMode === "time" || requestedMode === "item") {
       setMode(requestedMode === "item" && projects.length === 0 ? "time" : requestedMode);
       setOpen(true);
@@ -185,7 +224,7 @@ export function LogTimeSheet({
     if (!draftReady) return;
     const timer = window.setTimeout(() => {
       const draft: WorkDraft = {
-        updatedAt: new Date().toISOString(), mode, selectedTimeProject, entryMode, startTime, endTime,
+        updatedAt: new Date().toISOString(), mode, selectedWorker, selectedTimeProject, entryMode, startTime, endTime,
         durationHours, logDayOff, timeDate, timeNotes, selectedItemProject, itemDate,
         itemDescription, itemQuantity, itemUnitCost, itemNotes
       };
@@ -196,7 +235,7 @@ export function LogTimeSheet({
       }
     }, 250);
     return () => window.clearTimeout(timer);
-  }, [draftKey, draftReady, durationHours, endTime, entryMode, itemDate, itemDescription, itemNotes, itemQuantity, itemUnitCost, logDayOff, mode, selectedItemProject, selectedTimeProject, startTime, timeDate, timeNotes]);
+  }, [draftKey, draftReady, durationHours, endTime, entryMode, itemDate, itemDescription, itemNotes, itemQuantity, itemUnitCost, logDayOff, mode, selectedItemProject, selectedTimeProject, selectedWorker, startTime, timeDate, timeNotes]);
 
   function discardDraft() {
     setEntryMode("duration");
@@ -206,6 +245,7 @@ export function LogTimeSheet({
     setLogDayOff(false);
     setTimeDate(defaultDate);
     setTimeNotes("");
+    setSelectedWorker("me");
     setSelectedItemProject(defaultProjectId ?? projects[0]?.id ?? "");
     setItemDate(defaultDate);
     setItemDescription("");
@@ -225,15 +265,11 @@ export function LogTimeSheet({
 
     const previousOverflow = document.body.style.overflow;
     document.body.style.overflow = "hidden";
+    dialogRef.current?.showModal();
     closeButtonRef.current?.focus();
-    const closeOnEscape = (event: KeyboardEvent) => {
-      if (event.key === "Escape") setOpen(false);
-    };
-    window.addEventListener("keydown", closeOnEscape);
 
     return () => {
       document.body.style.overflow = previousOverflow;
-      window.removeEventListener("keydown", closeOnEscape);
     };
   }, [open]);
 
@@ -290,6 +326,21 @@ export function LogTimeSheet({
     </label>
   );
 
+  const managedProjectSelect = projects.length ? (
+    <label>
+      Project
+      <select
+        value={selectedOwnedProjectId || projects[0].id}
+        onChange={(event) => setSelectedTimeProject(`owned:${event.target.value}`)}
+        required
+      >
+        {projects.map((project) => <option key={project.id} value={project.id}>{project.title} - {project.client.businessName}</option>)}
+      </select>
+    </label>
+  ) : (
+    <div className="rounded-lg border border-yolk/30 bg-yolk/10 p-3 text-sm font-semibold text-ink">Create an active project before logging subcontractor hours.</div>
+  );
+
   return (
     <>
       <button type="button" className="tap-primary w-full sm:w-auto" onClick={() => setOpen(true)}>
@@ -297,9 +348,12 @@ export function LogTimeSheet({
         {buttonLabel}
       </button>
 
-      {open ? (
-        <div
-          className="fixed inset-0 z-50 flex items-end bg-ink/40 p-3 backdrop-blur-sm sm:items-center sm:justify-center"
+      {open ? createPortal(
+        <dialog
+          ref={dialogRef}
+          aria-labelledby="log-work-title"
+          className="fixed inset-0 m-0 flex h-dvh max-h-none w-full max-w-none items-end bg-ink/40 p-3 backdrop-blur-sm sm:items-center sm:justify-center"
+          onCancel={(event) => { event.preventDefault(); setOpen(false); }}
           onMouseDown={(event) => {
             if (event.target === event.currentTarget) setOpen(false);
           }}
@@ -307,9 +361,6 @@ export function LogTimeSheet({
           <div
             className="w-full max-w-lg overflow-auto rounded-lg border border-line bg-paper p-4 pb-[max(1rem,env(safe-area-inset-bottom))] text-ink shadow-lift"
             style={{ maxHeight: "calc(100dvh - 1.5rem)" }}
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="log-work-title"
           >
             <div className="flex items-center justify-between gap-4">
               <div>
@@ -332,6 +383,7 @@ export function LogTimeSheet({
                 type="button"
                 className={`min-h-11 rounded-md text-sm font-bold ${mode === "time" ? "bg-ink text-white" : "text-moss"}`}
                 onClick={() => setMode("time")}
+                aria-pressed={mode === "time"}
               >
                 <Clock3 className="mx-auto mb-1" size={18} aria-hidden="true" />
                 Time
@@ -340,6 +392,7 @@ export function LogTimeSheet({
                 type="button"
                 className={`min-h-11 rounded-md text-sm font-bold ${mode === "item" ? "bg-ink text-white" : "text-moss"}`}
                 onClick={() => setMode("item")}
+                aria-pressed={mode === "item"}
                 disabled={!projects.length}
                 title={!projects.length ? "Items can only be added to your own projects" : undefined}
               >
@@ -365,16 +418,42 @@ export function LogTimeSheet({
             ) : null}
 
             {mode === "time" ? (
-              <form action={isAssignedTime ? createSubcontractorTimeEntryAction : createTimeEntryAction} className="mt-5 grid gap-4">
+              <ActionForm action={isManagedTime ? createManagedTeamTimeEntryAction : isAssignedTime ? createSubcontractorTimeEntryAction : createTimeEntryAction} className="mt-5 grid gap-4">
                 <input type="hidden" name="returnTo" value={timeReturnTo} />
-                {isAssignedTime ? <input type="hidden" name="assignmentId" value={selectedAssignmentId} /> : <input type="hidden" name="projectId" value={selectedOwnedProjectId} />}
-                {timeProjectSelect}
+                {isManagedTime ? (
+                  <><input type="hidden" name="teamMemberId" value={selectedTeamMember?.id} /><input type="hidden" name="projectId" value={selectedOwnedProjectId || projects[0]?.id || ""} /></>
+                ) : isAssignedTime ? <input type="hidden" name="assignmentId" value={selectedAssignmentId} /> : <input type="hidden" name="projectId" value={selectedOwnedProjectId} />}
+                  <label>
+                    Worker
+                    <select
+                      value={selectedWorker}
+                      onChange={(event) => {
+                        const workerId = event.target.value;
+                        setSelectedWorker(workerId);
+                        if (workerId !== "me") {
+                          setLogDayOff(false);
+                          if (!selectedOwnedProjectId && projects[0]) setSelectedTimeProject(`owned:${projects[0].id}`);
+                        }
+                      }}
+                    >
+                      <option value="me">Me</option>
+                      {managedTeamMembers.length > 0 && (
+                        <optgroup label="My team">
+                          {managedTeamMembers.map((member) => <option key={member.id} value={member.id}>{member.displayName}</option>)}
+                        </optgroup>
+                      )}
+                    </select>
+                  </label>
+                {!managedTeamMembers.length && <Link href="/team" className="text-sm font-semibold text-mint underline">Add a team member</Link>}
+                {isManagedTime ? managedProjectSelect : availableProjectKeys.size ? timeProjectSelect : (
+                  <p className="rounded-lg border border-line p-3 text-sm text-moss">Add a project to start logging work. <Link className="font-semibold text-mint underline" href="/projects/new">Create project</Link></p>
+                )}
                 <label>
                   Date
                   <input name="date" type="date" value={timeDate} onChange={(event) => setTimeDate(event.target.value)} required />
                 </label>
 
-                {!isAssignedTime ? <label className="flex min-h-12 grid-cols-none flex-row items-center gap-3 rounded-lg border border-line bg-white px-3">
+                {!isAssignedTime && !isManagedTime ? <label className="flex min-h-12 grid-cols-none flex-row items-center gap-3 rounded-lg border border-line bg-white px-3">
                   <input
                     className="size-5 min-h-0 w-auto"
                     type="checkbox"
@@ -383,7 +462,7 @@ export function LogTimeSheet({
                     onChange={(event) => setLogDayOff(event.target.checked)}
                   />
                   Log day off
-                </label> : <p className="rounded-lg border border-mint/20 bg-mint/10 p-3 text-sm font-bold text-moss">These hours will be submitted directly to the assigning contractor.</p>}
+                </label> : <p className="rounded-lg border border-mint/20 bg-mint/10 p-3 text-sm font-bold text-moss">{isManagedTime ? `These hours will be billed under ${selectedTeamMember?.displayName} and added to their unpaid wages.` : "These hours will be submitted directly to the assigning contractor."}</p>}
 
                 {logDayOff ? (
                   <div className="rounded-lg border border-mint/25 bg-mint/10 p-3 text-sm font-bold leading-6 text-moss">
@@ -396,6 +475,7 @@ export function LogTimeSheet({
                         type="button"
                         className={`min-h-11 rounded-md text-sm font-bold ${entryMode === "duration" ? "bg-mint text-white" : "text-moss"}`}
                         onClick={() => setEntryMode("duration")}
+                        aria-pressed={entryMode === "duration"}
                       >
                         Total hours
                       </button>
@@ -403,6 +483,7 @@ export function LogTimeSheet({
                         type="button"
                         className={`min-h-11 rounded-md text-sm font-bold ${entryMode === "range" ? "bg-mint text-white" : "text-moss"}`}
                         onClick={() => setEntryMode("range")}
+                        aria-pressed={entryMode === "range"}
                       >
                         Start/end
                       </button>
@@ -462,18 +543,18 @@ export function LogTimeSheet({
                 </label>
 
                 <div className="grid gap-2 sm:grid-cols-2">
-                  <SubmitButton className="tap-primary" pendingLabel="Saving time..." disabled={!online}>
+                  <SubmitButton className="tap-primary" pendingLabel="Saving time..." disabled={!online || !availableProjectKeys.size || (isManagedTime && !projects.length)}>
                     <ClipboardPlus size={20} aria-hidden="true" />
                     {logDayOff ? "Save Day Off" : "Save Time"}
                   </SubmitButton>
-                  <SubmitButton className="tap-secondary" pendingLabel="Saving time..." name="continueLogging" value="1" disabled={!online}>
+                  <SubmitButton className="tap-secondary" pendingLabel="Saving time..." name="continueLogging" value="1" disabled={!online || !availableProjectKeys.size || (isManagedTime && !projects.length)}>
                     <RotateCcw size={18} aria-hidden="true" />
                     Save &amp; log another
                   </SubmitButton>
                 </div>
-              </form>
+              </ActionForm>
             ) : (
-              <form action={createExpenseItemAction} className="mt-5 grid gap-4">
+              <ActionForm action={createExpenseItemAction} className="mt-5 grid gap-4">
                 <input type="hidden" name="returnTo" value={pathname} />
                 {ownedProjectSelect}
                 <label>
@@ -508,10 +589,10 @@ export function LogTimeSheet({
                     Save &amp; add another
                   </SubmitButton>
                 </div>
-              </form>
+              </ActionForm>
             )}
           </div>
-        </div>
+        </dialog>, document.body
       ) : null}
     </>
   );

@@ -1,4 +1,6 @@
 "use client";
+import { ActionForm } from "@/components/ActionForm";
+
 
 import { useState } from "react";
 import {
@@ -15,7 +17,7 @@ import {
   UsersRound,
   WalletCards
 } from "lucide-react";
-import { saveOnboardingSetupAction } from "@/app/actions";
+import { saveOnboardingSetupAction } from "@/app/form-actions";
 import { SubmitButton } from "@/components/SubmitButton";
 
 type BusinessStructure = "SOLE_TRADER" | "EMPLOYER";
@@ -132,7 +134,7 @@ export function OnboardingWizard({ initialValues }: { initialValues: InitialValu
   }
 
   return (
-    <form action={saveOnboardingSetupAction} className="mx-auto w-full max-w-3xl">
+    <ActionForm action={saveOnboardingSetupAction} className="mx-auto w-full max-w-3xl">
       <input type="hidden" name="businessStructure" value={businessStructure ?? ""} />
       <input type="hidden" name="tradingName" value={tradingName} />
       <input type="hidden" name="contactName" value={contactName} />
@@ -270,7 +272,7 @@ export function OnboardingWizard({ initialValues }: { initialValues: InitialValu
           )}
         </div>
       </section>
-    </form>
+    </ActionForm>
   );
 }
 

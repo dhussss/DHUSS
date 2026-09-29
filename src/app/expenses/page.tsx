@@ -1,6 +1,8 @@
+
+import { ActionForm } from "@/components/ActionForm";
 import Link from "next/link";
 import { Archive, ArrowRight, CheckCircle2, Pencil, ReceiptText, RotateCcw } from "lucide-react";
-import { archiveWorkExpenseAction, createWorkExpenseAction, deleteWorkExpenseAction, restoreWorkExpenseAction } from "@/app/actions";
+import { archiveWorkExpenseAction, createWorkExpenseAction, deleteWorkExpenseAction, restoreWorkExpenseAction } from "@/app/form-actions";
 import { ConfirmSubmitButton } from "@/components/ConfirmSubmitButton";
 import { WorkExpenseForm } from "@/components/WorkExpenseForm";
 import { requireUserId } from "@/lib/auth";
@@ -140,31 +142,31 @@ export default async function ExpensesPage({
                         Edit
                       </Link>
                       {expense.archivedAt ? (
-                        <form action={restoreWorkExpenseAction}>
+                        <ActionForm action={restoreWorkExpenseAction}>
                           <input type="hidden" name="expenseId" value={expense.id} />
                           <input type="hidden" name="returnTo" value="/expenses" />
                           <button className="tap-secondary w-full px-3" type="submit">
                             <RotateCcw size={17} aria-hidden="true" />
                             Restore
                           </button>
-                        </form>
+                        </ActionForm>
                       ) : (
-                        <form action={archiveWorkExpenseAction}>
+                        <ActionForm action={archiveWorkExpenseAction}>
                           <input type="hidden" name="expenseId" value={expense.id} />
                           <input type="hidden" name="returnTo" value="/expenses" />
                           <button className="tap-secondary w-full px-3" type="submit">
                             <Archive size={17} aria-hidden="true" />
                             Archive
                           </button>
-                        </form>
+                        </ActionForm>
                       )}
-                      <form action={deleteWorkExpenseAction}>
+                      <ActionForm action={deleteWorkExpenseAction}>
                         <input type="hidden" name="expenseId" value={expense.id} />
                         <input type="hidden" name="returnTo" value="/expenses" />
                         <ConfirmSubmitButton className="tap-danger px-3" message={`Delete expense "${expense.description}"? This permanently removes it from the register.`}>
                           Delete
                         </ConfirmSubmitButton>
-                      </form>
+                      </ActionForm>
                     </div>
                   )}
                 </article>

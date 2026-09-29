@@ -1,7 +1,7 @@
 "use client";
 
 import type { ReactNode } from "react";
-import { useFormStatus } from "react-dom";
+import { useActionPending } from "@/components/ActionForm";
 import { Trash2 } from "lucide-react";
 
 export function ConfirmSubmitButton({
@@ -19,7 +19,7 @@ export function ConfirmSubmitButton({
   children: ReactNode;
   showDefaultIcon?: boolean;
 }) {
-  const { pending } = useFormStatus();
+  const pending = useActionPending();
 
   return (
     <button

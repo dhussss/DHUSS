@@ -1,7 +1,9 @@
+
+import { ActionForm } from "@/components/ActionForm";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ArrowLeft, Save } from "lucide-react";
-import { updateExpenseItemAction } from "@/app/actions";
+import { updateExpenseItemAction } from "@/app/form-actions";
 import { SubmitButton } from "@/components/SubmitButton";
 import { requireUserId } from "@/lib/auth";
 import { dateInputValue } from "@/lib/dates";
@@ -45,7 +47,7 @@ export default async function EditExpenseItemPage({
 
       <section className="mt-6 max-w-2xl">
         {item.billingStatus === "UNBILLED" ? (
-          <form action={updateExpenseItemAction} className="card grid gap-4">
+          <ActionForm action={updateExpenseItemAction} className="card grid gap-4">
             <input type="hidden" name="itemId" value={item.id} />
             <input type="hidden" name="projectId" value={item.projectId} />
             <input type="hidden" name="returnTo" value={`/projects/${item.projectId}`} />
@@ -82,7 +84,7 @@ export default async function EditExpenseItemPage({
                 Cancel
               </Link>
             </div>
-          </form>
+          </ActionForm>
         ) : (
           <article className="card text-sm font-bold text-moss">
             This expense item has already been billed, so it cannot be edited from the project log.

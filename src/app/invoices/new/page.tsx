@@ -1,6 +1,8 @@
+
+import { ActionForm } from "@/components/ActionForm";
 import Link from "next/link";
 import { AlertTriangle, ArrowLeft, FilePlus, RefreshCcw, WalletCards } from "lucide-react";
-import { createInvoiceDraftAction } from "@/app/actions";
+import { createInvoiceDraftAction } from "@/app/form-actions";
 import { requireUserId } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { endOfDay, formatDateAU, parseInputDate, todayInputValue } from "@/lib/dates";
@@ -316,7 +318,7 @@ export default async function NewInvoicePage({
                 </div>
               </dl>
 
-              <form action={createInvoiceDraftAction} className="mt-5">
+              <ActionForm action={createInvoiceDraftAction} className="mt-5">
                 {onboarding ? <input type="hidden" name="onboarding" value="1" /> : null}
                 <input type="hidden" name="projectId" value={projectId} />
                 <input type="hidden" name="dateRangeStart" value={startRaw} />
@@ -326,7 +328,7 @@ export default async function NewInvoicePage({
                   <FilePlus size={20} aria-hidden="true" />
                   {onboarding ? "Save draft and finish" : "Save as Draft"}
                 </SubmitButton>
-              </form>
+              </ActionForm>
             </aside>
           </div>
         )}

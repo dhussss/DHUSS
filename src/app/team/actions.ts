@@ -1,4 +1,6 @@
 "use server";
+import { UserInputError } from "@/lib/form-feedback";
+
 
 import { createHash, randomBytes } from "node:crypto";
 import { revalidatePath, revalidateTag } from "next/cache";
@@ -9,7 +11,8 @@ import { parseInputDate, todayInPerth } from "@/lib/dates";
 import { dollarsToCents } from "@/lib/money";
 import { safeInternalPath, withInternalPathParams } from "@/lib/navigation";
 import { prisma } from "@/lib/prisma";
-import { isQuarterHour, isQuarterHourClock, parseClockTime } from "@/lib/time";
+import { isQuarterHour, isQuarterHourClock, labourTotalCents, parseClockTime } from "@/lib/time";
+import { payRunSelectionIsCurrent, teamTimeEntryEditBlockReason } from "@/lib/payroll";
 
 function value(formData: FormData, name: string) {
   return String(formData.get(name) ?? "").trim();
@@ -21,7 +24,7 @@ function tokenHash(token: string) {
 
 function positiveRate(formData: FormData, name: string, label: string) {
   const cents = dollarsToCents(formData.get(name));
-  if (cents <= 0) throw new Error(`${label} must be greater than zero.`);
+  if (cents <= 0) throw new UserInputError(`${label} must be greater than zero.`);
   return cents;
 }
 
@@ -43,14 +46,14 @@ function durationFromForm(formData: FormData) {
     const endTime = value(formData, "endTime");
     const start = parseClockTime(startTime);
     const end = parseClockTime(endTime);
-    if (start === null || end === null || end <= start) throw new Error("Enter a valid start and end time.");
-    if (!isQuarterHourClock(start) || !isQuarterHourClock(end)) throw new Error("Times must use 15-minute increments.");
+    if (start === null || end === null || end <= start) throw new UserInputError("Enter a valid start and end time.");
+    if (!isQuarterHourClock(start) || !isQuarterHourClock(end)) throw new UserInputError("Times must use 15-minute increments.");
     return { startTime, endTime, durationMinutes: end - start };
   }
 
   const hours = Number(value(formData, "durationHours"));
   const durationMinutes = Math.round(hours * 60);
-  if (!Number.isFinite(hours) || !isQuarterHour(durationMinutes)) throw new Error("Hours must be greater than zero and use 15-minute increments.");
+  if (!Number.isFinite(hours) || !isQuarterHour(durationMinutes)) throw new UserInputError("Hours must be greater than zero and use 15-minute increments.");
   return { startTime: null, endTime: null, durationMinutes };
 }
 
@@ -66,33 +69,75 @@ function revalidateTeam(projectId?: string) {
   }
 }
 
-export async function createTeamInvitationAction(formData: FormData) {
+export async function createTeamMemberAction(formData: FormData) {
   const user = await requireUser();
   const subcontractorName = value(formData, "subcontractorName");
   const subcontractorEmail = value(formData, "subcontractorEmail") || null;
   const defaultPayRateCents = positiveRate(formData, "payRate", "Pay rate");
   const defaultChargeRateCents = positiveRate(formData, "chargeRate", "Charge rate");
-  if (!subcontractorName) throw new Error("Subcontractor name is required.");
+  if (!subcontractorName) throw new UserInputError("Subcontractor name is required.");
   if (subcontractorEmail && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(subcontractorEmail)) {
-    throw new Error("Enter a valid subcontractor email address.");
+    throw new UserInputError("Enter a valid subcontractor email address.");
   }
-  if (defaultChargeRateCents < defaultPayRateCents) throw new Error("Charge rate cannot be lower than the pay rate.");
+  if (defaultChargeRateCents < defaultPayRateCents) throw new UserInputError("Charge rate cannot be lower than the pay rate.");
 
-  const token = randomBytes(8).toString("hex").toUpperCase();
-  await prisma.teamInvitation.create({
+  const member = await prisma.teamMember.create({
     data: {
       ownerId: user.id,
-      tokenHash: tokenHash(token),
-      subcontractorName,
-      subcontractorEmail,
+      userId: null,
+      displayName: subcontractorName,
+      email: subcontractorEmail,
       defaultPayRateCents,
       defaultChargeRateCents,
-      expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000)
-    }
+      linkedAt: null
+    },
+    select: { id: true }
   });
 
+  revalidateTeam();
+  redirect(`/team/${member.id}?added=1`);
+}
+
+export async function createTeamMemberInvitationAction(formData: FormData) {
+  const user = await requireUser();
+  const teamMemberId = value(formData, "teamMemberId");
+  const member = await prisma.teamMember.findFirst({
+    where: { id: teamMemberId, ownerId: user.id, status: "ACTIVE" },
+    select: {
+      id: true,
+      userId: true,
+      displayName: true,
+      email: true,
+      defaultPayRateCents: true,
+      defaultChargeRateCents: true
+    }
+  });
+  if (!member) throw new UserInputError("Subcontractor not found.");
+  if (member.userId) throw new UserInputError("This subcontractor already has app access.");
+
+  const token = randomBytes(8).toString("hex").toUpperCase();
+  await prisma.$transaction([
+    prisma.teamInvitation.updateMany({
+      where: { ownerId: user.id, teamMemberId: member.id, status: "PENDING" },
+      data: { status: "REVOKED" }
+    }),
+    prisma.teamInvitation.create({
+      data: {
+        ownerId: user.id,
+        teamMemberId: member.id,
+        tokenHash: tokenHash(token),
+        subcontractorName: member.displayName,
+        subcontractorEmail: member.email,
+        defaultPayRateCents: member.defaultPayRateCents,
+        defaultChargeRateCents: member.defaultChargeRateCents,
+        expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000)
+      }
+    })
+  ]);
+
   revalidatePath("/team");
-  redirect(`/team?invite=${encodeURIComponent(token)}`);
+  revalidatePath(`/team/${member.id}`);
+  redirect(`/team/${member.id}?invite=${encodeURIComponent(token)}`);
 }
 
 export async function revokeTeamInvitationAction(formData: FormData) {
@@ -107,11 +152,11 @@ export async function revokeTeamInvitationAction(formData: FormData) {
 export async function acceptTeamInvitationAction(formData: FormData) {
   const user = await requireUser();
   const code = value(formData, "code").toUpperCase();
-  if (!code) throw new Error("Enter the invitation code.");
+  if (!code) throw new UserInputError("Enter the invitation code.");
 
   const invitation = await prisma.teamInvitation.findUnique({ where: { tokenHash: tokenHash(code) } });
-  if (!invitation || invitation.status !== "PENDING" || invitation.expiresAt <= new Date()) throw new Error("This invitation is invalid or has expired.");
-  if (invitation.ownerId === user.id) throw new Error("You cannot join your own team invitation.");
+  if (!invitation || invitation.status !== "PENDING" || invitation.expiresAt <= new Date()) throw new UserInputError("This invitation is invalid or has expired.");
+  if (invitation.ownerId === user.id) throw new UserInputError("You cannot join your own team invitation.");
 
   await prisma.$transaction(async (tx) => {
     const claimed = await tx.teamInvitation.updateMany({
@@ -123,26 +168,48 @@ export async function acceptTeamInvitationAction(formData: FormData) {
       },
       data: { status: "ACCEPTED", acceptedByUserId: user.id, acceptedAt: new Date() }
     });
-    if (claimed.count !== 1) throw new Error("This invitation has already been used or has expired.");
+    if (claimed.count !== 1) throw new UserInputError("This invitation has already been used or has expired.");
 
-    await tx.teamMember.upsert({
-      where: { ownerId_userId: { ownerId: invitation.ownerId, userId: user.id } },
-      create: {
-        ownerId: invitation.ownerId,
-        userId: user.id,
-        displayName: invitation.subcontractorName,
-        email: user.email || invitation.subcontractorEmail,
-        defaultPayRateCents: invitation.defaultPayRateCents,
-        defaultChargeRateCents: invitation.defaultChargeRateCents
-      },
-      update: {
-        displayName: invitation.subcontractorName,
-        email: user.email || invitation.subcontractorEmail,
-        defaultPayRateCents: invitation.defaultPayRateCents,
-        defaultChargeRateCents: invitation.defaultChargeRateCents,
-        status: "ACTIVE"
-      }
-    });
+    if (invitation.teamMemberId) {
+      const [member, existingLink] = await Promise.all([
+        tx.teamMember.findFirst({
+          where: { id: invitation.teamMemberId, ownerId: invitation.ownerId, status: "ACTIVE" },
+          select: { id: true, userId: true }
+        }),
+        tx.teamMember.findFirst({
+          where: { ownerId: invitation.ownerId, userId: user.id },
+          select: { id: true }
+        })
+      ]);
+      if (!member || member.userId) throw new UserInputError("This subcontractor record is no longer available to link.");
+      if (existingLink && existingLink.id !== member.id) throw new UserInputError("Your account is already linked to this contractor's team.");
+
+      await tx.teamMember.update({
+        where: { id: member.id },
+        data: { userId: user.id, email: user.email || invitation.subcontractorEmail, linkedAt: new Date() }
+      });
+    } else {
+      await tx.teamMember.upsert({
+        where: { ownerId_userId: { ownerId: invitation.ownerId, userId: user.id } },
+        create: {
+          ownerId: invitation.ownerId,
+          userId: user.id,
+          displayName: invitation.subcontractorName,
+          email: user.email || invitation.subcontractorEmail,
+          defaultPayRateCents: invitation.defaultPayRateCents,
+          defaultChargeRateCents: invitation.defaultChargeRateCents,
+          linkedAt: new Date()
+        },
+        update: {
+          displayName: invitation.subcontractorName,
+          email: user.email || invitation.subcontractorEmail,
+          defaultPayRateCents: invitation.defaultPayRateCents,
+          defaultChargeRateCents: invitation.defaultChargeRateCents,
+          status: "ACTIVE",
+          linkedAt: new Date()
+        }
+      });
+    }
   });
 
   revalidateTeam();
@@ -155,13 +222,13 @@ export async function createProjectAssignmentAction(formData: FormData) {
   const teamMemberId = value(formData, "teamMemberId");
   const payRateCents = positiveRate(formData, "payRate", "Pay rate");
   const chargeRateCents = positiveRate(formData, "chargeRate", "Charge rate");
-  if (chargeRateCents < payRateCents) throw new Error("Charge rate cannot be lower than the pay rate.");
+  if (chargeRateCents < payRateCents) throw new UserInputError("Charge rate cannot be lower than the pay rate.");
 
   const [project, member] = await Promise.all([
     prisma.project.findFirst({ where: { id: projectId, ownerId: user.id, status: "ACTIVE" }, select: { id: true } }),
     prisma.teamMember.findFirst({ where: { id: teamMemberId, ownerId: user.id, status: "ACTIVE" }, select: { id: true } })
   ]);
-  if (!project || !member) throw new Error("Choose an active project and subcontractor.");
+  if (!project || !member) throw new UserInputError("Choose an active project and subcontractor.");
 
   await prisma.projectAssignment.upsert({
     where: { projectId_teamMemberId: { projectId, teamMemberId } },
@@ -176,7 +243,7 @@ export async function stopProjectAssignmentAction(formData: FormData) {
   const user = await requireUser();
   const assignmentId = value(formData, "assignmentId");
   const assignment = await prisma.projectAssignment.findFirst({ where: { id: assignmentId, ownerId: user.id }, select: { id: true, projectId: true, teamMemberId: true } });
-  if (!assignment) throw new Error("Assignment not found.");
+  if (!assignment) throw new UserInputError("Assignment not found.");
   await prisma.projectAssignment.update({ where: { id: assignment.id }, data: { active: false, endsAt: new Date() } });
   revalidateTeam(assignment.projectId);
   redirect(`/team/${assignment.teamMemberId}`);
@@ -186,7 +253,7 @@ export async function archiveTeamMemberAction(formData: FormData) {
   const user = await requireUser();
   const teamMemberId = value(formData, "teamMemberId");
   const member = await prisma.teamMember.findFirst({ where: { id: teamMemberId, ownerId: user.id }, select: { id: true } });
-  if (!member) throw new Error("Subcontractor not found.");
+  if (!member) throw new UserInputError("Subcontractor not found.");
 
   await prisma.$transaction([
     prisma.teamMember.update({ where: { id: member.id }, data: { status: "ARCHIVED" } }),
@@ -201,7 +268,7 @@ export async function restoreTeamMemberAction(formData: FormData) {
   const user = await requireUser();
   const teamMemberId = value(formData, "teamMemberId");
   const member = await prisma.teamMember.findFirst({ where: { id: teamMemberId, ownerId: user.id }, select: { id: true } });
-  if (!member) throw new Error("Subcontractor not found.");
+  if (!member) throw new UserInputError("Subcontractor not found.");
 
   await prisma.teamMember.update({ where: { id: member.id }, data: { status: "ACTIVE" } });
   revalidateTeam();
@@ -215,7 +282,7 @@ export async function createSubcontractorTimeEntryAction(formData: FormData) {
     where: { id: assignmentId, active: true, teamMember: { userId: user.id, status: "ACTIVE" }, project: { status: "ACTIVE" } },
     include: { teamMember: { select: { id: true, displayName: true } }, project: { select: { id: true } } }
   });
-  if (!assignment) throw new Error("Choose one of your active assigned projects.");
+  if (!assignment) throw new UserInputError("Choose one of your active assigned projects.");
 
   const date = parseInputDate(formData.get("date"));
   const notes = value(formData, "notes") || null;
@@ -241,6 +308,128 @@ export async function createSubcontractorTimeEntryAction(formData: FormData) {
   redirect(timeEntryReturnTo(formData, "/team/work?saved=1"));
 }
 
+export async function createManagedTeamTimeEntryAction(formData: FormData) {
+  const user = await requireUser();
+  const assignmentId = value(formData, "assignmentId");
+  const requestedTeamMemberId = value(formData, "teamMemberId");
+  const requestedProjectId = value(formData, "projectId");
+  const date = parseInputDate(formData.get("date"));
+  const notes = value(formData, "notes") || null;
+  const duration = durationFromForm(formData);
+
+  const saved = await prisma.$transaction(async (tx) => {
+    let assignment;
+    if (assignmentId) {
+      assignment = await tx.projectAssignment.findFirst({
+        where: {
+          id: assignmentId,
+          ownerId: user.id,
+          active: true,
+          teamMember: { ownerId: user.id, status: "ACTIVE" },
+          project: { ownerId: user.id, status: "ACTIVE" }
+        },
+        include: { teamMember: { select: { id: true, displayName: true } } }
+      });
+    } else {
+      const [member, project] = await Promise.all([
+        tx.teamMember.findFirst({
+          where: { id: requestedTeamMemberId, ownerId: user.id, status: "ACTIVE" },
+          select: { id: true, displayName: true, defaultPayRateCents: true, defaultChargeRateCents: true }
+        }),
+        tx.project.findFirst({
+          where: { id: requestedProjectId, ownerId: user.id, status: "ACTIVE" },
+          select: { id: true }
+        })
+      ]);
+      if (!member || !project) throw new UserInputError("Choose an active subcontractor and project.");
+
+      const existingAssignment = await tx.projectAssignment.findUnique({
+        where: { projectId_teamMemberId: { projectId: project.id, teamMemberId: member.id } }
+      });
+      if (existingAssignment && existingAssignment.ownerId !== user.id) throw new UserInputError("This project assignment does not belong to your team.");
+      assignment = existingAssignment
+        ? await tx.projectAssignment.update({
+            where: { id: existingAssignment.id },
+            data: { active: true, endsAt: null },
+            include: { teamMember: { select: { id: true, displayName: true } } }
+          })
+        : await tx.projectAssignment.create({
+            data: {
+              ownerId: user.id,
+              projectId: project.id,
+              teamMemberId: member.id,
+              payRateCents: member.defaultPayRateCents,
+              chargeRateCents: member.defaultChargeRateCents
+            },
+            include: { teamMember: { select: { id: true, displayName: true } } }
+          });
+    }
+    if (!assignment) throw new UserInputError("Choose an active project assigned to this subcontractor.");
+
+    await tx.timeEntry.create({
+      data: {
+        ownerId: user.id,
+        projectId: assignment.projectId,
+        createdByUserId: user.id,
+        teamMemberId: assignment.teamMember.id,
+        projectAssignmentId: assignment.id,
+        workerDisplayNameSnapshot: assignment.teamMember.displayName,
+        date,
+        ...duration,
+        notes,
+        hourlyRateCentsSnapshot: assignment.chargeRateCents,
+        payRateCentsSnapshot: assignment.payRateCents,
+        approvalStatus: "APPROVED",
+        paymentStatus: "UNPAID"
+      }
+    });
+    return { projectId: assignment.projectId, teamMemberId: assignment.teamMember.id };
+  });
+
+  revalidateTeam(saved.projectId);
+  redirect(timeEntryReturnTo(formData, `/team/${saved.teamMemberId}?timeLogged=1`));
+}
+
+export async function updateTeamTimeEntryAction(formData: FormData) {
+  const user = await requireUser();
+  const entryId = value(formData, "entryId");
+  const entry = await prisma.timeEntry.findFirst({
+    where: {
+      id: entryId,
+      teamMemberId: { not: null },
+      OR: [
+        { ownerId: user.id },
+        { createdByUserId: user.id, teamMember: { userId: user.id } }
+      ]
+    },
+    select: {
+      id: true,
+      ownerId: true,
+      projectId: true,
+      teamMemberId: true,
+      billingStatus: true,
+      paymentStatus: true
+    }
+  });
+  if (!entry?.teamMemberId) throw new UserInputError("Time entry not found.");
+  const editBlockReason = teamTimeEntryEditBlockReason(entry);
+  if (editBlockReason === "billed") throw new UserInputError("Billed subcontractor hours cannot be edited. Unbill the invoice first.");
+  if (editBlockReason === "paid") throw new UserInputError("Paid subcontractor hours cannot be edited. Reverse the wage payment first.");
+
+  const date = parseInputDate(formData.get("date"));
+  const notes = value(formData, "notes") || null;
+  const duration = durationFromForm(formData);
+  await prisma.timeEntry.update({
+    where: { id: entry.id },
+    data: { date, notes, ...duration }
+  });
+
+  revalidateTeam(entry.projectId);
+  revalidatePath(`/team/${entry.teamMemberId}`);
+  const destination = safeReturnTo(formData, entry.ownerId === user.id ? `/team/${entry.teamMemberId}` : `/projects/${entry.projectId}`);
+  redirect(withInternalPathParams(destination, { timeUpdated: "1" }));
+}
+
 export async function deleteTeamTimeEntryAction(formData: FormData) {
   const user = await requireUser();
   const entryId = value(formData, "entryId");
@@ -248,8 +437,8 @@ export async function deleteTeamTimeEntryAction(formData: FormData) {
     where: { id: entryId, ownerId: user.id, teamMemberId: { not: null } },
     select: { id: true, projectId: true, teamMemberId: true, billingStatus: true, paymentStatus: true, wagePaymentId: true }
   });
-  if (!entry) throw new Error("Time entry not found.");
-  if (entry.billingStatus !== "UNBILLED") throw new Error("Billed time entries cannot be deleted. Unbill the invoice first.");
+  if (!entry) throw new UserInputError("Time entry not found.");
+  if (entry.billingStatus !== "UNBILLED") throw new UserInputError("Billed time entries cannot be deleted. Unbill the invoice first.");
 
   await prisma.$transaction(async (tx) => {
     // Deleting a paid entry reverses the whole wage payment it belongs to (other entries
@@ -286,9 +475,9 @@ export async function deleteMyTimeEntryAction(formData: FormData) {
     where: { id: entryId, createdByUserId: user.id, teamMemberId: { not: null } },
     select: { id: true, projectId: true, billingStatus: true, paymentStatus: true }
   });
-  if (!entry) throw new Error("Time entry not found.");
-  if (entry.billingStatus !== "UNBILLED") throw new Error("Billed hours cannot be deleted. Ask the project owner to unbill the invoice first.");
-  if (entry.paymentStatus === "PAID") throw new Error("Paid hours cannot be deleted. Ask the project owner to reverse the wage payment first.");
+  if (!entry) throw new UserInputError("Time entry not found.");
+  if (entry.billingStatus !== "UNBILLED") throw new UserInputError("Billed hours cannot be deleted. Ask the project owner to unbill the invoice first.");
+  if (entry.paymentStatus === "PAID") throw new UserInputError("Paid hours cannot be deleted. Ask the project owner to reverse the wage payment first.");
 
   await prisma.timeEntry.delete({ where: { id: entryId } });
   revalidateTeam(entry.projectId);
@@ -300,20 +489,34 @@ export async function markTeamMemberPaidAction(formData: FormData) {
   const teamMemberId = value(formData, "teamMemberId");
   const paymentReference = value(formData, "paymentReference") || null;
   const projectId = value(formData, "projectId") || null;
+  const selectedEntryIds = [...new Set(formData.getAll("entryId").map((entryId) => String(entryId)).filter(Boolean))];
+  if (value(formData, "selectionRequired") === "1" && !selectedEntryIds.length) {
+    throw new UserInputError("Choose at least one unpaid shift for this payment.");
+  }
   const member = await prisma.teamMember.findFirst({ where: { id: teamMemberId, ownerId: user.id }, select: { id: true, displayName: true } });
-  if (!member) throw new Error("Subcontractor not found.");
+  if (!member) throw new UserInputError("Subcontractor not found.");
   const paidAt = formData.get("paidAt") ? parseInputDate(formData.get("paidAt")) : todayInPerth();
 
   await prisma.$transaction(async (tx) => {
     const entries = await tx.timeEntry.findMany({
-      where: { ownerId: user.id, teamMemberId, approvalStatus: "APPROVED", paymentStatus: "UNPAID", ...(projectId ? { projectId } : {}) },
+      where: {
+        ownerId: user.id,
+        teamMemberId,
+        approvalStatus: "APPROVED",
+        paymentStatus: "UNPAID",
+        ...(projectId ? { projectId } : {}),
+        ...(selectedEntryIds.length ? { id: { in: selectedEntryIds } } : {})
+      },
       select: { id: true, projectId: true, durationMinutes: true, payRateCentsSnapshot: true, project: { select: { title: true } } }
     });
-    if (!entries.length) throw new Error("There are no unpaid hours for this employee and project.");
+    if (!entries.length) throw new UserInputError("There are no unpaid hours for this employee and project.");
+    if (!payRunSelectionIsCurrent(selectedEntryIds, entries.map((entry) => entry.id))) {
+      throw new UserInputError("One or more selected shifts changed before payment. Refresh and review the pay run again.");
+    }
     const byProject = new Map<string, typeof entries>();
     for (const entry of entries) byProject.set(entry.projectId, [...(byProject.get(entry.projectId) || []), entry]);
     for (const [entryProjectId, projectEntries] of byProject) {
-      const amountCents = projectEntries.reduce((sum, entry) => sum + Math.round((entry.durationMinutes / 60) * (entry.payRateCentsSnapshot || 0)), 0);
+      const amountCents = projectEntries.reduce((sum, entry) => sum + labourTotalCents(entry.durationMinutes, entry.payRateCentsSnapshot || 0), 0);
       const minutes = projectEntries.reduce((sum, entry) => sum + entry.durationMinutes, 0);
       const expense = await tx.workExpense.create({
         data: {
@@ -337,7 +540,7 @@ export async function markTeamMemberPaidAction(formData: FormData) {
         where: { id: { in: projectEntries.map((entry) => entry.id) }, ownerId: user.id, paymentStatus: "UNPAID" },
         data: { paymentStatus: "PAID", paidAt, paymentReference, wagePaymentId: payment.id }
       });
-      if (updatedEntries.count !== projectEntries.length) throw new Error("These wages changed while the payment was being recorded. Refresh and try again.");
+      if (updatedEntries.count !== projectEntries.length) throw new UserInputError("These wages changed while the payment was being recorded. Refresh and try again.");
     }
   });
   revalidateTeam();
@@ -352,7 +555,7 @@ export async function updateWagePaymentAction(formData: FormData) {
   const paidAt = parseInputDate(formData.get("paidAt"));
   const reference = value(formData, "reference") || null;
   const payment = await prisma.wagePayment.findFirst({ where: { id: paymentId, ownerId: user.id, status: "PAID" }, select: { id: true, teamMemberId: true, workExpenseId: true } });
-  if (!payment) throw new Error("Wage payment not found.");
+  if (!payment) throw new UserInputError("Wage payment not found.");
   await prisma.$transaction([
     prisma.wagePayment.update({ where: { id: payment.id }, data: { paidAt, reference } }),
     prisma.timeEntry.updateMany({ where: { wagePaymentId: payment.id, ownerId: user.id }, data: { paidAt, paymentReference: reference } }),
@@ -367,7 +570,7 @@ export async function reverseWagePaymentAction(formData: FormData) {
   const paymentId = value(formData, "paymentId");
   const reversalNote = value(formData, "reversalNote") || "Payment marked unpaid";
   const payment = await prisma.wagePayment.findFirst({ where: { id: paymentId, ownerId: user.id, status: "PAID" }, select: { id: true, teamMemberId: true, workExpenseId: true } });
-  if (!payment) throw new Error("Wage payment not found.");
+  if (!payment) throw new UserInputError("Wage payment not found.");
   const reversedAt = new Date();
   await prisma.$transaction([
     prisma.wagePayment.update({ where: { id: payment.id }, data: { status: "VOID", reversedAt, reversalNote } }),

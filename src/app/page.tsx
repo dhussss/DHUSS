@@ -1,3 +1,5 @@
+
+import { ActionForm } from "@/components/ActionForm";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import {
@@ -16,7 +18,7 @@ import type { LucideIcon } from "lucide-react";
 import { LogTimeSheet } from "@/components/LogTimeSheet";
 import { WeeklyPerformanceChart } from "@/components/WeeklyPerformanceChart";
 import { ConfirmSubmitButton } from "@/components/ConfirmSubmitButton";
-import { markTeamMemberPaidAction } from "@/app/team/actions";
+import { markTeamMemberPaidAction } from "@/app/form-actions";
 import { requireUserId } from "@/lib/auth";
 import { getDashboardData } from "@/lib/app-data";
 import { dateInputValue, formatDateAU, previousWeekMondayToSunday, todayInPerth } from "@/lib/dates";
@@ -31,11 +33,12 @@ type DashboardSearchParams = Promise<{
   wagePaid?: string;
   timeSaved?: string;
   assignedTimeSaved?: string;
+  teamTimeSaved?: string;
   onboarding?: string;
 }>;
 
 export default async function DashboardPage({ searchParams }: { searchParams: DashboardSearchParams }) {
-  const { wagePaid, timeSaved, assignedTimeSaved, onboarding } = await searchParams;
+  const { wagePaid, timeSaved, assignedTimeSaved, teamTimeSaved, onboarding } = await searchParams;
   const ownerId = await requireUserId();
   const today = todayInPerth();
   const previousWeek = previousWeekMondayToSunday(today);
@@ -48,6 +51,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: Da
   const {
     projects,
     assignedProjects,
+    managedTeamMembers,
     unpaidWageGroups,
     topActiveProjects,
     invoiceSnapshots,
@@ -88,6 +92,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: Da
         wagePaid={wagePaid}
         timeSaved={timeSaved}
         assignedTimeSaved={assignedTimeSaved}
+        teamTimeSaved={teamTimeSaved}
       />
 
       <header className="dashboard-header">
@@ -97,7 +102,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: Da
         </div>
         <div className="dashboard-actions">
           <div className="dashboard-log-action">
-            <LogTimeSheet projects={projects} assignedProjects={assignedProjects} buttonLabel="Log work" storageScope={ownerId} />
+            <LogTimeSheet projects={projects} assignedProjects={assignedProjects} managedTeamMembers={managedTeamMembers} buttonLabel="Log work" storageScope={ownerId} />
           </div>
           <Link className="tap-secondary" href="/invoices/new"><ReceiptText size={17} aria-hidden="true" />New invoice</Link>
           <Link className="tap-secondary" href="/projects/new"><FolderKanban size={17} aria-hidden="true" />New project</Link>
@@ -144,12 +149,12 @@ export default async function DashboardPage({ searchParams }: { searchParams: Da
                   <p className="mt-1 text-xs text-moss">{formatHours(group.minutes)}h unpaid · {formatHours(group.billedMinutes)}h billed</p>
                 </div>
                 <strong>{formatMoney(group.wagesCents)}</strong>
-                <form action={markTeamMemberPaidAction}>
+                <ActionForm action={markTeamMemberPaidAction}>
                   <input type="hidden" name="teamMemberId" value={group.teamMemberId} />
                   <input type="hidden" name="projectId" value={group.projectId} />
                   <input type="hidden" name="returnTo" value="/?wagePaid=1" />
                   <ConfirmSubmitButton className="tap-secondary" message={`Mark ${formatMoney(group.wagesCents)} for ${group.employee} on ${group.project} as paid? This will add a wages expense.`} pendingLabel="Recording..." showDefaultIcon={false}>Mark paid</ConfirmSubmitButton>
-                </form>
+                </ActionForm>
               </article>
             ))}
           </div>
@@ -242,11 +247,13 @@ export default async function DashboardPage({ searchParams }: { searchParams: Da
   );
 }
 
-function DashboardNotices({ onboarding, wagePaid, timeSaved, assignedTimeSaved }: { onboarding?: string; wagePaid?: string; timeSaved?: string; assignedTimeSaved?: string }) {
+function DashboardNotices({ onboarding, wagePaid, timeSaved, assignedTimeSaved, teamTimeSaved }: { onboarding?: string; wagePaid?: string; timeSaved?: string; assignedTimeSaved?: string; teamTimeSaved?: string }) {
   const message = onboarding === "complete"
     ? "Setup complete. Your workspace is ready."
     : wagePaid === "1"
       ? "Wage payment recorded and added to expenses."
+      : teamTimeSaved === "1"
+        ? "Subcontractor hours saved and added to billing and unpaid wages."
       : assignedTimeSaved === "1"
         ? "Hours submitted to the assigning contractor."
         : timeSaved === "1"

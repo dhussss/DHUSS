@@ -1,7 +1,9 @@
+
+import { ActionForm } from "@/components/ActionForm";
 import Link from "next/link";
 import { Prisma } from "@prisma/client";
 import { Archive, BriefcaseBusiness, Plus, RotateCcw, Search } from "lucide-react";
-import { unarchiveProjectAction } from "@/app/actions";
+import { unarchiveProjectAction } from "@/app/form-actions";
 import { requireUserId } from "@/lib/auth";
 import { getProjectsPageData } from "@/lib/app-data";
 import { formatMoney } from "@/lib/money";
@@ -128,12 +130,12 @@ export default async function ProjectsPage({
                   <dl className="collection-meta"><dt>Unbilled hours</dt><dd>{formatHours(project.unbilledMinutes)}h</dd></dl>
                   <dl className="collection-meta"><dt>Unbilled value</dt><dd>{formatMoney(project.unbilledValueCents)}</dd></dl>
                   <ProjectStatusPill status={project.status} />
-                  <form action={unarchiveProjectAction}>
+                  <ActionForm action={unarchiveProjectAction}>
                     <input type="hidden" name="projectId" value={project.id} />
                     <button className="tap-secondary" type="submit">
                       <RotateCcw size={17} aria-hidden="true" />Unarchive
                     </button>
-                  </form>
+                  </ActionForm>
                 </article>
               );
             })

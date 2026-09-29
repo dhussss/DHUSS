@@ -527,25 +527,25 @@ export const tutorials: TutorialDefinition[] = [
   {
     key: "team-setup",
     category: "Settings",
-    title: "Connect and pay your team",
-    summary: "Invite a worker, assign projects, capture their hours and keep wages traceable.",
-    purpose: "The team workflow lets workers use their own account while the employer retains project, charge-rate, invoice and wage control.",
-    whenToUse: "Use it when a subcontractor or employee needs to log their own hours on projects you manage.",
+    title: "Add, bill and pay your team",
+    summary: "Add a worker immediately, assign projects, capture their hours and keep wages traceable.",
+    purpose: "The team workflow works whether you log a subcontractor's hours yourself or later invite them to use their own account.",
+    whenToUse: "Use it whenever subcontractor labour needs to be billed to a client and tracked through to payment.",
     outcome: "You will understand linking, assignment, billing and wage-payment responsibilities end to end.",
     durationMinutes: 5,
     icon: "team",
     keywords: ["team", "employee", "subcontractor", "invite", "assignment", "wage", "pay rate"],
     employersOnly: true,
     steps: [
-      { title: "Create a linking code", body: "The worker signs up with their own login and uses the code to connect. Do not share account passwords." },
+      { title: "Add the subcontractor", body: "Enter their name plus pay and client charge rates. No login or invitation is required, and you can invite them later without duplicating their history." },
       { title: "Assign the project and rates", body: "Set what you pay the worker and what you charge the client. The worker cannot edit your project setup." },
-      { title: "Let hours flow automatically", body: "The assigned project appears in the worker’s Projects and Log Work screens. Their saved hours update your project without approval." },
+      { title: "Capture their hours", body: "Log hours from their team record yourself. If you later link their app account, assigned projects also appear in their Projects and Log Work screens." },
       { title: "Bill and pay from one trail", body: "Employee labour appears separately on client invoices. Wage amounts stay visible until recorded paid, with reversals and audit history available." }
     ],
     demoFrames: [
-      { label: "Code", title: "Link account", detail: "Worker keeps own login" },
+      { label: "Add", title: "Create team record", detail: "Invitation is optional" },
       { label: "Job", title: "Assign project", detail: "Pay and charge rates" },
-      { label: "h", title: "Worker logs time", detail: "Employer updates automatically" },
+      { label: "h", title: "Capture time", detail: "You or the worker can log" },
       { label: "$", title: "Bill and pay", detail: "Two traceable obligations" }
     ],
     actionHref: "/team",

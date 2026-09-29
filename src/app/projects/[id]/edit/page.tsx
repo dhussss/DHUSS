@@ -1,10 +1,14 @@
+
+import { ActionForm } from "@/components/ActionForm";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { AlertCircle, ArrowLeft, Archive, Save, Trash2 } from "lucide-react";
-import { archiveProjectAction, deleteProjectAction, updateProjectAction } from "@/app/actions";
+import { AlertCircle, ArrowLeft, Archive, CheckCircle2, Save, Trash2 } from "lucide-react";
+import { archiveProjectAction, deleteProjectAction, updateProjectAction } from "@/app/form-actions";
 import { requireUserId } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { loadProjectControlSummary } from "@/lib/app-data";
 import { centsToDollars } from "@/lib/money";
+import { projectCloseoutReadiness } from "@/lib/project-control";
 import { ConfirmSubmitButton } from "@/components/ConfirmSubmitButton";
 import { SubmitButton } from "@/components/SubmitButton";
 
@@ -22,33 +26,28 @@ export default async function EditProjectPage({
   const { id } = await params;
   const query = await searchParams;
   const deleteError = typeof query?.deleteError === "string" ? query.deleteError : "";
+  const archiveError = typeof query?.archiveError === "string" ? query.archiveError : "";
   const ownerId = await requireUserId();
-  const [project, clients, invoiceCount, billedTimeCount, billedExpenseCount, wagePaymentCount, reversedWagePaymentCount, unbilledTimeCount, unbilledExpenseCount, assignmentCount] = await Promise.all([
+  const [project, clients, control] = await Promise.all([
     prisma.project.findFirst({ where: { id, ownerId }, include: { client: true } }),
     prisma.client.findMany({ where: { ownerId }, orderBy: { businessName: "asc" } }),
-    prisma.invoice.count({ where: { projectId: id, ownerId } }),
-    prisma.timeEntry.count({ where: { projectId: id, ownerId, billingStatus: "BILLED" } }),
-    prisma.expenseItem.count({ where: { projectId: id, ownerId, billingStatus: "BILLED" } }),
-    prisma.wagePayment.count({ where: { projectId: id, ownerId, status: "PAID" } }),
-    prisma.wagePayment.count({ where: { projectId: id, ownerId, status: "VOID" } }),
-    prisma.timeEntry.count({ where: { projectId: id, ownerId, billingStatus: "UNBILLED" } }),
-    prisma.expenseItem.count({ where: { projectId: id, ownerId, billingStatus: "UNBILLED" } }),
-    prisma.projectAssignment.count({ where: { projectId: id, ownerId } })
+    loadProjectControlSummary(ownerId, id)
   ]);
 
   if (!project) notFound();
+  const closeout = projectCloseoutReadiness(control);
   const deleteBlockers = [
-    invoiceCount ? `${invoiceCount} invoice${invoiceCount === 1 ? "" : "s"}` : "",
-    billedTimeCount ? `${billedTimeCount} billed time entr${billedTimeCount === 1 ? "y" : "ies"}` : "",
-    billedExpenseCount ? `${billedExpenseCount} billed expense item${billedExpenseCount === 1 ? "" : "s"}` : "",
-    wagePaymentCount ? `${wagePaymentCount} active wage payment${wagePaymentCount === 1 ? "" : "s"}` : ""
+    control.invoiceCount ? `${control.invoiceCount} invoice${control.invoiceCount === 1 ? "" : "s"}` : "",
+    control.billedTimeCount ? `${control.billedTimeCount} billed time entr${control.billedTimeCount === 1 ? "y" : "ies"}` : "",
+    control.billedExpenseCount ? `${control.billedExpenseCount} billed expense item${control.billedExpenseCount === 1 ? "" : "s"}` : "",
+    control.paidWagePaymentCount ? `${control.paidWagePaymentCount} active wage payment${control.paidWagePaymentCount === 1 ? "" : "s"}` : ""
   ].filter(Boolean);
   const canDelete = deleteBlockers.length === 0;
   const deleteWipesAway = [
-    unbilledTimeCount ? `${unbilledTimeCount} unbilled time entr${unbilledTimeCount === 1 ? "y" : "ies"}` : "",
-    unbilledExpenseCount ? `${unbilledExpenseCount} unbilled expense item${unbilledExpenseCount === 1 ? "" : "s"}` : "",
-    assignmentCount ? `${assignmentCount} subcontractor assignment${assignmentCount === 1 ? "" : "s"}` : "",
-    reversedWagePaymentCount ? `${reversedWagePaymentCount} reversed wage payment record${reversedWagePaymentCount === 1 ? "" : "s"}` : ""
+    control.unbilledTimeCount ? `${control.unbilledTimeCount} unbilled time entr${control.unbilledTimeCount === 1 ? "y" : "ies"}` : "",
+    control.unbilledExpenseCount ? `${control.unbilledExpenseCount} unbilled expense item${control.unbilledExpenseCount === 1 ? "" : "s"}` : "",
+    control.assignmentCount ? `${control.assignmentCount} subcontractor assignment${control.assignmentCount === 1 ? "" : "s"}` : "",
+    control.reversedWagePaymentCount ? `${control.reversedWagePaymentCount} reversed wage payment record${control.reversedWagePaymentCount === 1 ? "" : "s"}` : ""
   ].filter(Boolean);
 
   return (
@@ -70,8 +69,14 @@ export default async function EditProjectPage({
             <span>{deleteError}</span>
           </div>
         ) : null}
+        {archiveError ? (
+          <div className="mb-4 flex items-start gap-2 rounded-lg border border-gum/30 bg-gum/10 p-3 text-sm font-bold text-gum">
+            <AlertCircle size={18} aria-hidden="true" />
+            <span>{archiveError}</span>
+          </div>
+        ) : null}
 
-        <form action={updateProjectAction} className="grid gap-5">
+        <ActionForm action={updateProjectAction} className="grid gap-5">
           <input type="hidden" name="projectId" value={project.id} />
           <label>
             Project/job name
@@ -100,13 +105,6 @@ export default async function EditProjectPage({
             />
           </label>
           <label>
-            Status
-            <select name="status" defaultValue={project.status}>
-              <option value="ACTIVE">Active</option>
-              <option value="ARCHIVED">Archived</option>
-            </select>
-          </label>
-          <label>
             Notes
             <textarea name="notes" defaultValue={project.notes ?? ""} />
           </label>
@@ -114,15 +112,48 @@ export default async function EditProjectPage({
             <Save size={20} aria-hidden="true" />
             Save Changes
           </SubmitButton>
-        </form>
+        </ActionForm>
 
-        <form action={archiveProjectAction} className="mt-4">
-          <input type="hidden" name="projectId" value={project.id} />
-          <SubmitButton className="tap-danger w-full" pendingLabel="Archiving...">
-            <Archive size={20} aria-hidden="true" />
-            Archive Project
-          </SubmitButton>
-        </form>
+        {project.status === "ACTIVE" ? (
+          <section className="mt-4 rounded-lg border border-line bg-white p-4 sm:p-5">
+            <div className="flex items-start gap-3">
+              <span className={`grid size-10 shrink-0 place-items-center rounded-lg ${closeout.canArchive ? "bg-mint/10 text-mint" : "bg-yolk/20 text-ink"}`}>
+                {closeout.canArchive ? <CheckCircle2 size={20} aria-hidden="true" /> : <Archive size={20} aria-hidden="true" />}
+              </span>
+              <div className="min-w-0 flex-1">
+                <p className="font-black text-ink">Project closeout</p>
+                <p className="mt-1 text-sm font-bold leading-6 text-moss">
+                  {closeout.canArchive
+                    ? "Billing and subcontractor obligations are clear. This project is ready to archive."
+                    : "Finish the items below before archiving so work and wages do not disappear from active follow-up."}
+                </p>
+                {closeout.blockers.length ? (
+                  <ul className="mt-3 grid gap-2 text-sm font-semibold text-ink">
+                    {closeout.blockers.map((blocker) => <li key={blocker}>• {blocker}</li>)}
+                  </ul>
+                ) : null}
+                {closeout.warnings.length ? (
+                  <div className="mt-3 rounded-lg border border-yolk/50 bg-yolk/10 p-3 text-sm font-semibold text-ink">
+                    {closeout.warnings.join(". ")}. Archiving is allowed, and payment follow-up will remain on the invoice dashboard.
+                  </div>
+                ) : null}
+                <ActionForm action={archiveProjectAction} className="mt-4">
+                  <input type="hidden" name="projectId" value={project.id} />
+                  <ConfirmSubmitButton
+                    className="tap-danger w-full"
+                    disabled={!closeout.canArchive}
+                    message={`Archive ${project.title}? The complete project history will remain available in Archived projects.`}
+                    pendingLabel="Archiving..."
+                    showDefaultIcon={false}
+                  >
+                    <Archive size={20} aria-hidden="true" />
+                    Archive Project
+                  </ConfirmSubmitButton>
+                </ActionForm>
+              </div>
+            </div>
+          </section>
+        ) : null}
 
         <section className="mt-4 rounded-lg border border-line bg-white p-4">
           <div className="flex items-start gap-3">
@@ -135,7 +166,7 @@ export default async function EditProjectPage({
                 Deleting is only for unbilled test/setup projects. Archive real project history instead.
               </p>
               {canDelete ? (
-                <form action={deleteProjectAction} className="mt-4">
+                <ActionForm action={deleteProjectAction} className="mt-4">
                   <input type="hidden" name="projectId" value={project.id} />
                   <ConfirmSubmitButton
                     className="tap-danger w-full"
@@ -148,7 +179,7 @@ export default async function EditProjectPage({
                   >
                     Delete Project
                   </ConfirmSubmitButton>
-                </form>
+                </ActionForm>
               ) : (
                 <div className="mt-4 rounded-lg border border-gum/30 bg-gum/10 p-3 text-sm font-bold text-gum">
                   This project cannot be deleted because it has {deleteBlockers.join(", ")}. Use Archive Project to keep history intact.

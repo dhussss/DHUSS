@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ArrowLeft } from "lucide-react";
-import { updateWorkExpenseAction } from "@/app/actions";
+import { updateWorkExpenseAction } from "@/app/form-actions";
 import { WorkExpenseForm } from "@/components/WorkExpenseForm";
 import { requireUserId } from "@/lib/auth";
 import { safeInternalPath } from "@/lib/navigation";

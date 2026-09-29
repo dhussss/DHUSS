@@ -1,7 +1,7 @@
 "use client";
 
 import type { ReactNode } from "react";
-import { useFormStatus } from "react-dom";
+import { useActionPending } from "@/components/ActionForm";
 
 export function SubmitButton({
   className,
@@ -18,7 +18,7 @@ export function SubmitButton({
   name?: string;
   value?: string;
 }) {
-  const { pending } = useFormStatus();
+  const pending = useActionPending();
 
   return (
     <button className={className} type="submit" disabled={disabled || pending} aria-busy={pending} name={name} value={value}>
