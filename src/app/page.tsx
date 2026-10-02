@@ -152,6 +152,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: Da
                 <ActionForm action={markTeamMemberPaidAction}>
                   <input type="hidden" name="teamMemberId" value={group.teamMemberId} />
                   <input type="hidden" name="projectId" value={group.projectId} />
+                  <input type="hidden" name="reviewedAmountCents" value={group.wagesCents} />
                   <input type="hidden" name="returnTo" value="/?wagePaid=1" />
                   <ConfirmSubmitButton className="tap-secondary" message={`Mark ${formatMoney(group.wagesCents)} for ${group.employee} on ${group.project} as paid? This will add a wages expense.`} pendingLabel="Recording..." showDefaultIcon={false}>Mark paid</ConfirmSubmitButton>
                 </ActionForm>

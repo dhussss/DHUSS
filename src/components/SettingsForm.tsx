@@ -1,8 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { AlertCircle, CheckCircle2, Palette, Save, Settings2, ShieldCheck } from "lucide-react";
-import { updateSettingsAction } from "@/app/actions";
+import { updateSettingsAction } from "@/app/form-actions";
 import { themePresets } from "@/lib/themes";
 
 type SettingsFormValue = {
@@ -22,6 +22,8 @@ export function SettingsForm({ settings }: { settings: SettingsFormValue }) {
   const [pending, setPending] = useState(false);
   const [saved, setSaved] = useState(false);
   const [error, setError] = useState("");
+  const errorRef = useRef<HTMLDivElement>(null);
+  useEffect(() => { if (error) errorRef.current?.focus(); }, [error]);
 
   async function handleSubmit(formData: FormData) {
     setPending(true);
@@ -29,25 +31,32 @@ export function SettingsForm({ settings }: { settings: SettingsFormValue }) {
     setError("");
 
     try {
-      await updateSettingsAction(formData);
+      const result = await updateSettingsAction(formData);
+      if (result.error) {
+        setError(result.error);
+        return;
+      }
       setSaved(true);
-    } catch (submitError) {
-      setError(submitError instanceof Error ? submitError.message : "Settings could not be saved.");
+    } catch {
+      setError("Settings could not be saved. Your details are still here. Please try again.");
     } finally {
       setPending(false);
     }
   }
 
   return (
-    <form action={handleSubmit} className="grid gap-5">
+    <form onSubmit={(event) => {
+      event.preventDefault();
+      if (!pending) void handleSubmit(new FormData(event.currentTarget));
+    }} aria-busy={pending} className="grid gap-5">
       {saved ? (
-        <div className="flex items-center gap-2 rounded-lg border border-mint/30 bg-mint/10 p-3 text-sm font-bold text-moss">
+        <div role="status" className="flex items-center gap-2 rounded-lg border border-mint/30 bg-mint/10 p-3 text-sm font-bold text-moss">
           <CheckCircle2 size={18} aria-hidden="true" />
           Settings saved.
         </div>
       ) : null}
       {error ? (
-        <div className="flex items-start gap-2 rounded-lg border border-gum/30 bg-gum/10 p-3 text-sm font-bold text-gum">
+        <div ref={errorRef} tabIndex={-1} role="alert" className="flex items-start gap-2 rounded-lg border border-gum/30 bg-gum/10 p-3 text-sm font-bold text-gum">
           <AlertCircle size={18} aria-hidden="true" />
           <span>{error}</span>
         </div>

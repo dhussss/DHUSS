@@ -3,7 +3,7 @@ import { UserInputError } from "@/lib/form-feedback";
 
 
 import { createHash, randomBytes } from "node:crypto";
-import { revalidatePath, revalidateTag } from "next/cache";
+import { revalidatePath, revalidateTag } from "@/lib/deferred-revalidation";
 import { redirect } from "next/navigation";
 import { requireUser } from "@/lib/auth";
 import { CACHE_TAGS } from "@/lib/app-data";
@@ -12,7 +12,9 @@ import { dollarsToCents } from "@/lib/money";
 import { safeInternalPath, withInternalPathParams } from "@/lib/navigation";
 import { prisma } from "@/lib/prisma";
 import { isQuarterHour, isQuarterHourClock, labourTotalCents, parseClockTime } from "@/lib/time";
-import { payRunSelectionIsCurrent, teamTimeEntryEditBlockReason } from "@/lib/payroll";
+import { payRunAmountIsCurrent, payRunSelectionIsCurrent, teamTimeEntryEditBlockReason } from "@/lib/payroll";
+import { billingTransaction } from "@/lib/billing-transaction";
+import { syncProjectDrafts } from "@/lib/invoice-draft-sync";
 
 function value(formData: FormData, name: string) {
   return String(formData.get(name) ?? "").trim();
@@ -63,8 +65,9 @@ function revalidateTeam(projectId?: string) {
   revalidatePath("/team/work");
   revalidatePath("/projects");
   revalidatePath("/invoices/new");
+  revalidatePath("/invoices", "layout");
   if (projectId) revalidatePath(`/projects/${projectId}`);
-  for (const tag of [CACHE_TAGS.dashboard, CACHE_TAGS.projects, CACHE_TAGS.hoursExport, CACHE_TAGS.insights, CACHE_TAGS.expenses]) {
+  for (const tag of [CACHE_TAGS.dashboard, CACHE_TAGS.projects, CACHE_TAGS.hoursExport, CACHE_TAGS.insights, CACHE_TAGS.expenses, CACHE_TAGS.invoices]) {
     revalidateTag(tag);
   }
 }
@@ -393,35 +396,39 @@ export async function createManagedTeamTimeEntryAction(formData: FormData) {
 export async function updateTeamTimeEntryAction(formData: FormData) {
   const user = await requireUser();
   const entryId = value(formData, "entryId");
-  const entry = await prisma.timeEntry.findFirst({
-    where: {
-      id: entryId,
-      teamMemberId: { not: null },
-      OR: [
-        { ownerId: user.id },
-        { createdByUserId: user.id, teamMember: { userId: user.id } }
-      ]
-    },
-    select: {
-      id: true,
-      ownerId: true,
-      projectId: true,
-      teamMemberId: true,
-      billingStatus: true,
-      paymentStatus: true
-    }
-  });
-  if (!entry?.teamMemberId) throw new UserInputError("Time entry not found.");
-  const editBlockReason = teamTimeEntryEditBlockReason(entry);
-  if (editBlockReason === "billed") throw new UserInputError("Billed subcontractor hours cannot be edited. Unbill the invoice first.");
-  if (editBlockReason === "paid") throw new UserInputError("Paid subcontractor hours cannot be edited. Reverse the wage payment first.");
+  const entry = await billingTransaction(async (tx) => {
+    const entry = await tx.timeEntry.findFirst({
+      where: {
+        id: entryId,
+        teamMemberId: { not: null },
+        OR: [
+          { ownerId: user.id },
+          { createdByUserId: user.id, teamMember: { userId: user.id } }
+        ]
+      },
+      select: {
+        id: true,
+        ownerId: true,
+        projectId: true,
+        teamMemberId: true,
+        billingStatus: true,
+        paymentStatus: true
+      }
+    });
+    if (!entry?.teamMemberId || !entry.ownerId) throw new UserInputError("Time entry not found.");
+    const editBlockReason = teamTimeEntryEditBlockReason(entry);
+    if (editBlockReason === "billed") throw new UserInputError("Billed subcontractor hours cannot be edited. Unbill the invoice first.");
+    if (editBlockReason === "paid") throw new UserInputError("Paid subcontractor hours cannot be edited. Reverse the wage payment first.");
 
-  const date = parseInputDate(formData.get("date"));
-  const notes = value(formData, "notes") || null;
-  const duration = durationFromForm(formData);
-  await prisma.timeEntry.update({
-    where: { id: entry.id },
-    data: { date, notes, ...duration }
+    const date = parseInputDate(formData.get("date"));
+    const notes = value(formData, "notes") || null;
+    const duration = durationFromForm(formData);
+    await tx.timeEntry.update({
+      where: { id: entry.id },
+      data: { date, notes, ...duration }
+    });
+    await syncProjectDrafts(tx, entry.ownerId, entry.projectId);
+    return entry;
   });
 
   revalidateTeam(entry.projectId);
@@ -433,14 +440,14 @@ export async function updateTeamTimeEntryAction(formData: FormData) {
 export async function deleteTeamTimeEntryAction(formData: FormData) {
   const user = await requireUser();
   const entryId = value(formData, "entryId");
-  const entry = await prisma.timeEntry.findFirst({
-    where: { id: entryId, ownerId: user.id, teamMemberId: { not: null } },
-    select: { id: true, projectId: true, teamMemberId: true, billingStatus: true, paymentStatus: true, wagePaymentId: true }
-  });
-  if (!entry) throw new UserInputError("Time entry not found.");
-  if (entry.billingStatus !== "UNBILLED") throw new UserInputError("Billed time entries cannot be deleted. Unbill the invoice first.");
+  const entry = await billingTransaction(async (tx) => {
+    const entry = await tx.timeEntry.findFirst({
+      where: { id: entryId, ownerId: user.id, teamMemberId: { not: null } },
+      select: { id: true, projectId: true, teamMemberId: true, billingStatus: true, paymentStatus: true, wagePaymentId: true }
+    });
+    if (!entry) throw new UserInputError("Time entry not found.");
+    if (entry.billingStatus !== "UNBILLED") throw new UserInputError("Billed time entries cannot be deleted. Unbill the invoice first.");
 
-  await prisma.$transaction(async (tx) => {
     // Deleting a paid entry reverses the whole wage payment it belongs to (other entries
     // in that payment return to unpaid, ready to be re-paid together) rather than forcing
     // a separate trip to find and click "reverse payment" first.
@@ -460,6 +467,8 @@ export async function deleteTeamTimeEntryAction(formData: FormData) {
     }
 
     await tx.timeEntry.delete({ where: { id: entryId } });
+    await syncProjectDrafts(tx, user.id, entry.projectId);
+    return entry;
   });
 
   revalidateTeam(entry.projectId);
@@ -471,15 +480,19 @@ export async function deleteTeamTimeEntryAction(formData: FormData) {
 export async function deleteMyTimeEntryAction(formData: FormData) {
   const user = await requireUser();
   const entryId = value(formData, "entryId");
-  const entry = await prisma.timeEntry.findFirst({
-    where: { id: entryId, createdByUserId: user.id, teamMemberId: { not: null } },
-    select: { id: true, projectId: true, billingStatus: true, paymentStatus: true }
-  });
-  if (!entry) throw new UserInputError("Time entry not found.");
-  if (entry.billingStatus !== "UNBILLED") throw new UserInputError("Billed hours cannot be deleted. Ask the project owner to unbill the invoice first.");
-  if (entry.paymentStatus === "PAID") throw new UserInputError("Paid hours cannot be deleted. Ask the project owner to reverse the wage payment first.");
+  const entry = await billingTransaction(async (tx) => {
+    const entry = await tx.timeEntry.findFirst({
+      where: { id: entryId, createdByUserId: user.id, teamMember: { userId: user.id } },
+      select: { id: true, ownerId: true, projectId: true, billingStatus: true, paymentStatus: true }
+    });
+    if (!entry?.ownerId) throw new UserInputError("Time entry not found.");
+    if (entry.billingStatus !== "UNBILLED") throw new UserInputError("Billed hours cannot be deleted. Ask the project owner to unbill the invoice first.");
+    if (entry.paymentStatus === "PAID") throw new UserInputError("Paid hours cannot be deleted. Ask the project owner to reverse the wage payment first.");
 
-  await prisma.timeEntry.delete({ where: { id: entryId } });
+    await tx.timeEntry.delete({ where: { id: entryId } });
+    await syncProjectDrafts(tx, entry.ownerId, entry.projectId);
+    return entry;
+  });
   revalidateTeam(entry.projectId);
   redirect(safeReturnTo(formData, "/team/work"));
 }
@@ -497,7 +510,7 @@ export async function markTeamMemberPaidAction(formData: FormData) {
   if (!member) throw new UserInputError("Subcontractor not found.");
   const paidAt = formData.get("paidAt") ? parseInputDate(formData.get("paidAt")) : todayInPerth();
 
-  await prisma.$transaction(async (tx) => {
+  await billingTransaction(async (tx) => {
     const entries = await tx.timeEntry.findMany({
       where: {
         ownerId: user.id,
@@ -512,6 +525,10 @@ export async function markTeamMemberPaidAction(formData: FormData) {
     if (!entries.length) throw new UserInputError("There are no unpaid hours for this employee and project.");
     if (!payRunSelectionIsCurrent(selectedEntryIds, entries.map((entry) => entry.id))) {
       throw new UserInputError("One or more selected shifts changed before payment. Refresh and review the pay run again.");
+    }
+    const currentAmountCents = entries.reduce((sum, entry) => sum + labourTotalCents(entry.durationMinutes, entry.payRateCentsSnapshot || 0), 0);
+    if (!payRunAmountIsCurrent(value(formData, "reviewedAmountCents"), currentAmountCents)) {
+      throw new UserInputError("The unpaid amount has changed. Refresh and review the updated amount before recording payment.");
     }
     const byProject = new Map<string, typeof entries>();
     for (const entry of entries) byProject.set(entry.projectId, [...(byProject.get(entry.projectId) || []), entry]);
@@ -554,13 +571,14 @@ export async function updateWagePaymentAction(formData: FormData) {
   const paymentId = value(formData, "paymentId");
   const paidAt = parseInputDate(formData.get("paidAt"));
   const reference = value(formData, "reference") || null;
-  const payment = await prisma.wagePayment.findFirst({ where: { id: paymentId, ownerId: user.id, status: "PAID" }, select: { id: true, teamMemberId: true, workExpenseId: true } });
-  if (!payment) throw new UserInputError("Wage payment not found.");
-  await prisma.$transaction([
-    prisma.wagePayment.update({ where: { id: payment.id }, data: { paidAt, reference } }),
-    prisma.timeEntry.updateMany({ where: { wagePaymentId: payment.id, ownerId: user.id }, data: { paidAt, paymentReference: reference } }),
-    ...(payment.workExpenseId ? [prisma.workExpense.update({ where: { id: payment.workExpenseId }, data: { date: paidAt, receiptReference: reference } })] : [])
-  ]);
+  const payment = await billingTransaction(async (tx) => {
+    const payment = await tx.wagePayment.findFirst({ where: { id: paymentId, ownerId: user.id, status: "PAID" }, select: { id: true, teamMemberId: true, workExpenseId: true } });
+    if (!payment) throw new UserInputError("This payment is no longer marked paid. Refresh before making changes.");
+    await tx.wagePayment.update({ where: { id: payment.id, ownerId: user.id, status: "PAID" }, data: { paidAt, reference } });
+    await tx.timeEntry.updateMany({ where: { wagePaymentId: payment.id, ownerId: user.id }, data: { paidAt, paymentReference: reference } });
+    if (payment.workExpenseId) await tx.workExpense.update({ where: { id: payment.workExpenseId, ownerId: user.id }, data: { date: paidAt, receiptReference: reference } });
+    return payment;
+  });
   revalidateTeam();
   redirect(`/team/${payment.teamMemberId}?paymentUpdated=1`);
 }
@@ -568,15 +586,17 @@ export async function updateWagePaymentAction(formData: FormData) {
 export async function reverseWagePaymentAction(formData: FormData) {
   const user = await requireUser();
   const paymentId = value(formData, "paymentId");
-  const reversalNote = value(formData, "reversalNote") || "Payment marked unpaid";
-  const payment = await prisma.wagePayment.findFirst({ where: { id: paymentId, ownerId: user.id, status: "PAID" }, select: { id: true, teamMemberId: true, workExpenseId: true } });
-  if (!payment) throw new UserInputError("Wage payment not found.");
+  const reversalNote = value(formData, "reversalNote");
+  if (!reversalNote) throw new UserInputError("Enter a reason for reversing this payment.");
   const reversedAt = new Date();
-  await prisma.$transaction([
-    prisma.wagePayment.update({ where: { id: payment.id }, data: { status: "VOID", reversedAt, reversalNote } }),
-    prisma.timeEntry.updateMany({ where: { wagePaymentId: payment.id, ownerId: user.id }, data: { paymentStatus: "UNPAID", paidAt: null, paymentReference: null, wagePaymentId: null } }),
-    ...(payment.workExpenseId ? [prisma.workExpense.update({ where: { id: payment.workExpenseId }, data: { archivedAt: reversedAt, notes: `Reversed: ${reversalNote}` } })] : [])
-  ]);
+  const payment = await billingTransaction(async (tx) => {
+    const payment = await tx.wagePayment.findFirst({ where: { id: paymentId, ownerId: user.id, status: "PAID" }, select: { id: true, teamMemberId: true, workExpenseId: true } });
+    if (!payment) throw new UserInputError("This payment is no longer marked paid. Refresh before making changes.");
+    await tx.wagePayment.update({ where: { id: payment.id, ownerId: user.id, status: "PAID" }, data: { status: "VOID", reversedAt, reversalNote } });
+    await tx.timeEntry.updateMany({ where: { wagePaymentId: payment.id, ownerId: user.id }, data: { paymentStatus: "UNPAID", paidAt: null, paymentReference: null, wagePaymentId: null } });
+    if (payment.workExpenseId) await tx.workExpense.update({ where: { id: payment.workExpenseId, ownerId: user.id }, data: { archivedAt: reversedAt, notes: `Reversed: ${reversalNote}` } });
+    return payment;
+  });
   revalidateTeam();
   redirect(`/team/${payment.teamMemberId}?paymentReversed=1`);
 }

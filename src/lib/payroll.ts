@@ -16,3 +16,8 @@ export function payRunSelectionIsCurrent(requestedIds: string[], foundIds: strin
   const found = new Set(foundIds);
   return requested.size === found.size && [...requested].every((id) => found.has(id));
 }
+
+export function payRunAmountIsCurrent(reviewedAmount: string, currentAmountCents: number) {
+  return /^\d+$/.test(reviewedAmount) && Number.isSafeInteger(Number(reviewedAmount)) &&
+    Number(reviewedAmount) === currentAmountCents;
+}

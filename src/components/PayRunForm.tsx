@@ -50,6 +50,7 @@ export function PayRunForm({
       <input type="hidden" name="projectId" value={projectId} />
       <input type="hidden" name="returnTo" value={`/team/${teamMemberId}?paid=1`} />
       <input type="hidden" name="selectionRequired" value="1" />
+      <input type="hidden" name="reviewedAmountCents" value={selectedCents} />
       <div className="flex items-start justify-between gap-3 border-b border-line p-4">
         <div>
           <p className="font-black">{project}</p>

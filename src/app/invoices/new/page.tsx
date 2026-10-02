@@ -11,6 +11,8 @@ import { formatMoney } from "@/lib/money";
 import { formatHours } from "@/lib/time";
 import { SubmitButton } from "@/components/SubmitButton";
 import { LearnHowLink } from "@/components/LearnHowLink";
+import { InvoiceScopeFields } from "@/components/InvoiceScopeFields";
+import { InvoiceReviewGate } from "@/components/InvoiceReviewGate";
 
 export const dynamic = "force-dynamic";
 
@@ -65,6 +67,7 @@ export default async function NewInvoicePage({
   const projectId = paramValue(params, "projectId") || projects[0]?.id || "";
   const startRaw = paramValue(params, "dateRangeStart") || todayInputValue();
   const endRaw = paramValue(params, "dateRangeEnd") || todayInputValue();
+  const scope = paramValue(params, "scope") === "all" || (!paramValue(params, "scope") && !paramValue(params, "dateRangeStart")) ? "all" : "range";
   const invoiceMode = paramValue(params, "invoiceMode") === "SIMPLE" ? "SIMPLE" : "DETAILED";
   const onboarding = paramValue(params, "onboarding") === "1";
 
@@ -77,7 +80,7 @@ export default async function NewInvoicePage({
     try {
       const start = parseInputDate(startRaw);
       const end = endOfDay(parseInputDate(endRaw));
-      if (end < start) {
+      if (scope === "range" && end < start) {
         rangeError = "End date must be after start date.";
       } else {
         [entries, expenses] = await Promise.all([
@@ -88,7 +91,7 @@ export default async function NewInvoicePage({
               billingStatus: "UNBILLED",
               invoiceLineItems: { none: { invoice: { status: "DRAFT" } } },
               OR: [{ teamMemberId: null }, { approvalStatus: "APPROVED" }],
-              date: { gte: start, lte: end }
+              ...(scope === "range" ? { date: { gte: start, lte: end } } : {})
             },
             select: { id: true, date: true, durationMinutes: true, notes: true, hourlyRateCentsSnapshot: true, workerDisplayNameSnapshot: true, teamMemberId: true, payRateCentsSnapshot: true },
             orderBy: [{ date: "asc" }, { createdAt: "asc" }]
@@ -99,7 +102,7 @@ export default async function NewInvoicePage({
               ownerId,
               billingStatus: "UNBILLED",
               invoiceLineItems: { none: { invoice: { status: "DRAFT" } } },
-              datePurchased: { gte: start, lte: end }
+              ...(scope === "range" ? { datePurchased: { gte: start, lte: end } } : {})
             },
             select: {
               id: true,
@@ -152,6 +155,7 @@ export default async function NewInvoicePage({
         {!onboarding ? <LearnHowLink tutorialKey="creating-invoices" className="mt-2">Walk through invoice creation</LearnHowLink> : null}
       </header>
 
+      <InvoiceReviewGate key={`${projectId}:${scope}:${startRaw}:${endRaw}:${invoiceMode}`} filters={
       <form className="card mt-5 grid gap-4" method="get">
         {onboarding ? <input type="hidden" name="onboarding" value="1" /> : null}
         <label>
@@ -171,16 +175,7 @@ export default async function NewInvoicePage({
             <span>{selectedProject.expenseItems.length} expense item{selectedProject.expenseItems.length === 1 ? "" : "s"}</span>
           </div>
         ) : null}
-        <div className="grid grid-cols-2 gap-3">
-          <label>
-            Start date
-            <input type="date" name="dateRangeStart" defaultValue={startRaw} required />
-          </label>
-          <label>
-            End date
-            <input type="date" name="dateRangeEnd" defaultValue={endRaw} required />
-          </label>
-        </div>
+        <InvoiceScopeFields key={`${scope}:${startRaw}:${endRaw}`} initialScope={scope} start={startRaw} end={endRaw} />
         <fieldset className="grid gap-2">
           <legend className="text-sm font-bold text-moss">Invoice mode</legend>
           <div className="grid gap-3 sm:grid-cols-2">
@@ -202,9 +197,10 @@ export default async function NewInvoicePage({
         </fieldset>
         <button className="tap-secondary" type="submit">
           <RefreshCcw size={20} aria-hidden="true" />
-          Update Invoice
+          Review work
         </button>
       </form>
+      }>
 
       <section className="mt-6">
         <div className="mb-3">
@@ -321,6 +317,7 @@ export default async function NewInvoicePage({
               <ActionForm action={createInvoiceDraftAction} className="mt-5">
                 {onboarding ? <input type="hidden" name="onboarding" value="1" /> : null}
                 <input type="hidden" name="projectId" value={projectId} />
+                <input type="hidden" name="scope" value={scope} />
                 <input type="hidden" name="dateRangeStart" value={startRaw} />
                 <input type="hidden" name="dateRangeEnd" value={endRaw} />
                 <input type="hidden" name="invoiceMode" value={invoiceMode} />
@@ -333,6 +330,7 @@ export default async function NewInvoicePage({
           </div>
         )}
       </section>
+      </InvoiceReviewGate>
     </main>
   );
 }

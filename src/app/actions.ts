@@ -5,7 +5,7 @@ import { UserInputError } from "@/lib/form-feedback";
 import crypto from "node:crypto";
 import { Prisma } from "@prisma/client";
 import type { InvoiceMode, WorkExpenseCategory, WorkExpenseStatus } from "@prisma/client";
-import { revalidatePath, revalidateTag } from "next/cache";
+import { revalidatePath, revalidateTag } from "@/lib/deferred-revalidation";
 import { redirect } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { requireUserId } from "@/lib/auth";
@@ -21,6 +21,8 @@ import { isQuarterHour, isQuarterHourClock, parseClockTime } from "@/lib/time";
 import { createClient } from "@/lib/supabase/server";
 import { safeInternalPath, withInternalPathParams } from "@/lib/navigation";
 import { projectCloseoutReadiness } from "@/lib/project-control";
+import { billingTransaction } from "@/lib/billing-transaction";
+import { syncProjectDrafts } from "@/lib/invoice-draft-sync";
 
 function text(formData: FormData, key: string) {
   return String(formData.get(key) ?? "").trim();
@@ -560,21 +562,26 @@ export async function updateTimeEntryAction(formData: FormData) {
   const ownerId = await requireUserId();
   const entryId = text(formData, "entryId");
   const projectId = text(formData, "projectId");
-  const entry = await prisma.timeEntry.findUnique({
-    where: { id: entryId },
-    select: { id: true, projectId: true, billingStatus: true, teamMemberId: true }
-  });
+  await billingTransaction(async (tx) => {
+    const entry = await tx.timeEntry.findUnique({
+      where: { id: entryId },
+      select: { id: true, projectId: true, billingStatus: true, teamMemberId: true }
+    });
 
-  if (!entry || entry.projectId !== projectId) throw new UserInputError("Time entry not found.");
-  const project = await prisma.project.findFirst({ where: { id: projectId, ownerId }, select: { id: true } });
-  if (!project) throw new UserInputError("Time entry not found.");
-  if (entry.teamMemberId) throw new UserInputError("Review subcontractor hours from the Team section.");
-  if (entry.billingStatus !== "UNBILLED") throw new UserInputError("Billed time entries cannot be edited.");
+    if (!entry || entry.projectId !== projectId) throw new UserInputError("Time entry not found.");
+    const project = await tx.project.findFirst({ where: { id: projectId, ownerId }, select: { id: true } });
+    if (!project) throw new UserInputError("Time entry not found.");
+    if (entry.teamMemberId) throw new UserInputError("Review subcontractor hours from the Team section.");
+    if (entry.billingStatus !== "UNBILLED") throw new UserInputError("Billed time entries cannot be edited.");
 
-  await prisma.timeEntry.update({
-    where: { id: entryId },
-    data: timeEntryDataFromForm(formData)
+    await tx.timeEntry.update({
+      where: { id: entryId },
+      data: timeEntryDataFromForm(formData)
+    });
+    await syncProjectDrafts(tx, ownerId, projectId);
   });
+  revalidatePath("/invoices", "layout");
+  revalidateDataTags(CACHE_TAGS.invoices);
 
   revalidatePath("/");
   revalidatePath("/projects");
@@ -588,18 +595,23 @@ export async function deleteTimeEntryAction(formData: FormData) {
   const ownerId = await requireUserId();
   const entryId = text(formData, "entryId");
   const projectId = text(formData, "projectId");
-  const entry = await prisma.timeEntry.findUnique({
-    where: { id: entryId },
-    select: { id: true, projectId: true, billingStatus: true, teamMemberId: true }
+  await billingTransaction(async (tx) => {
+    const entry = await tx.timeEntry.findUnique({
+      where: { id: entryId },
+      select: { id: true, projectId: true, billingStatus: true, teamMemberId: true }
+    });
+
+    if (!entry || entry.projectId !== projectId) throw new UserInputError("Time entry not found.");
+    const project = await tx.project.findFirst({ where: { id: projectId, ownerId }, select: { id: true } });
+    if (!project) throw new UserInputError("Time entry not found.");
+    if (entry.teamMemberId) throw new UserInputError("Review subcontractor hours from the Team section.");
+    if (entry.billingStatus !== "UNBILLED") throw new UserInputError("Billed time entries cannot be deleted.");
+
+    await tx.timeEntry.delete({ where: { id: entryId } });
+    await syncProjectDrafts(tx, ownerId, projectId);
   });
-
-  if (!entry || entry.projectId !== projectId) throw new UserInputError("Time entry not found.");
-  const project = await prisma.project.findFirst({ where: { id: projectId, ownerId }, select: { id: true } });
-  if (!project) throw new UserInputError("Time entry not found.");
-  if (entry.teamMemberId) throw new UserInputError("Review subcontractor hours from the Team section.");
-  if (entry.billingStatus !== "UNBILLED") throw new UserInputError("Billed time entries cannot be deleted.");
-
-  await prisma.timeEntry.delete({ where: { id: entryId } });
+  revalidatePath("/invoices", "layout");
+  revalidateDataTags(CACHE_TAGS.invoices);
 
   revalidatePath("/");
   revalidatePath("/projects");
@@ -671,20 +683,25 @@ export async function updateExpenseItemAction(formData: FormData) {
   const ownerId = await requireUserId();
   const itemId = text(formData, "itemId");
   const projectId = text(formData, "projectId");
-  const item = await prisma.expenseItem.findUnique({
-    where: { id: itemId },
-    select: { id: true, projectId: true, billingStatus: true }
-  });
+  await billingTransaction(async (tx) => {
+    const item = await tx.expenseItem.findUnique({
+      where: { id: itemId },
+      select: { id: true, projectId: true, billingStatus: true }
+    });
 
-  if (!item || item.projectId !== projectId) throw new UserInputError("Expense item not found.");
-  const project = await prisma.project.findFirst({ where: { id: projectId, ownerId }, select: { id: true } });
-  if (!project) throw new UserInputError("Expense item not found.");
-  if (item.billingStatus !== "UNBILLED") throw new UserInputError("Billed expense items cannot be edited.");
+    if (!item || item.projectId !== projectId) throw new UserInputError("Expense item not found.");
+    const project = await tx.project.findFirst({ where: { id: projectId, ownerId }, select: { id: true } });
+    if (!project) throw new UserInputError("Expense item not found.");
+    if (item.billingStatus !== "UNBILLED") throw new UserInputError("Billed expense items cannot be edited.");
 
-  await prisma.expenseItem.update({
-    where: { id: item.id },
-    data: expenseItemDataFromForm(formData)
+    await tx.expenseItem.update({
+      where: { id: item.id },
+      data: expenseItemDataFromForm(formData)
+    });
+    await syncProjectDrafts(tx, ownerId, projectId);
   });
+  revalidatePath("/invoices", "layout");
+  revalidateDataTags(CACHE_TAGS.invoices);
 
   revalidatePath("/");
   revalidatePath("/projects");
@@ -698,17 +715,22 @@ export async function deleteExpenseItemAction(formData: FormData) {
   const ownerId = await requireUserId();
   const itemId = text(formData, "itemId");
   const projectId = text(formData, "projectId");
-  const item = await prisma.expenseItem.findUnique({
-    where: { id: itemId },
-    select: { id: true, projectId: true, billingStatus: true }
+  await billingTransaction(async (tx) => {
+    const item = await tx.expenseItem.findUnique({
+      where: { id: itemId },
+      select: { id: true, projectId: true, billingStatus: true }
+    });
+
+    if (!item || item.projectId !== projectId) throw new UserInputError("Expense item not found.");
+    const project = await tx.project.findFirst({ where: { id: projectId, ownerId }, select: { id: true } });
+    if (!project) throw new UserInputError("Expense item not found.");
+    if (item.billingStatus !== "UNBILLED") throw new UserInputError("Billed expense items cannot be deleted.");
+
+    await tx.expenseItem.delete({ where: { id: item.id } });
+    await syncProjectDrafts(tx, ownerId, projectId);
   });
-
-  if (!item || item.projectId !== projectId) throw new UserInputError("Expense item not found.");
-  const project = await prisma.project.findFirst({ where: { id: projectId, ownerId }, select: { id: true } });
-  if (!project) throw new UserInputError("Expense item not found.");
-  if (item.billingStatus !== "UNBILLED") throw new UserInputError("Billed expense items cannot be deleted.");
-
-  await prisma.expenseItem.delete({ where: { id: item.id } });
+  revalidatePath("/invoices", "layout");
+  revalidateDataTags(CACHE_TAGS.invoices);
 
   revalidatePath("/");
   revalidatePath("/projects");
@@ -1247,9 +1269,9 @@ export async function deleteClientAction(formData: FormData) {
   redirect("/clients");
 }
 
-async function nextInvoiceNumber(ownerId: string, prefix: string, attempt = 0) {
+async function nextInvoiceNumber(tx: Prisma.TransactionClient, ownerId: string, prefix: string) {
   const year = todayInPerth().getUTCFullYear();
-  const existing = await prisma.invoice.findMany({
+  const existing = await tx.invoice.findMany({
     where: { ownerId, invoiceNumber: { startsWith: `${prefix}${year}-` } },
     select: { invoiceNumber: true }
   });
@@ -1257,17 +1279,7 @@ async function nextInvoiceNumber(ownerId: string, prefix: string, attempt = 0) {
   return nextInvoiceNumberFromExisting(
     existing.map((invoice) => invoice.invoiceNumber),
     prefix,
-    year,
-    attempt
-  );
-}
-
-function isUniqueInvoiceNumberViolation(error: unknown) {
-  return (
-    error instanceof Prisma.PrismaClientKnownRequestError &&
-    error.code === "P2002" &&
-    Array.isArray(error.meta?.target) &&
-    (error.meta.target as string[]).includes("invoiceNumber")
+    year
   );
 }
 
@@ -1297,110 +1309,100 @@ function criticalInvoiceProfileIssues(
 export async function createInvoiceDraftAction(formData: FormData) {
   const ownerId = await requireUserId();
   const projectId = text(formData, "projectId");
-  const start = parseInputDate(formData.get("dateRangeStart"));
-  const end = endOfDay(parseInputDate(formData.get("dateRangeEnd")));
+  const allUnbilled = text(formData, "scope") === "all";
+  const start = allUnbilled ? todayInPerth() : parseInputDate(formData.get("dateRangeStart"));
+  const end = endOfDay(allUnbilled ? todayInPerth() : parseInputDate(formData.get("dateRangeEnd")));
   const mode = invoiceModeFromForm(formData);
 
   if (end < start) {
     throw new UserInputError("End date must be after start date.");
   }
 
-  const [project, profile] = await Promise.all([
-    prisma.project.findFirst({
-      where: { id: projectId, ownerId },
-      select: { id: true, clientId: true, client: true }
-    }),
-    prisma.businessProfile.findUnique({ where: { ownerId } })
-  ]);
-  if (!project) throw new UserInputError("Project not found.");
+  const invoice = await billingTransaction(async (tx) => {
+    const [project, profile] = await Promise.all([
+      tx.project.findFirst({
+        where: { id: projectId, ownerId },
+        select: { id: true, clientId: true, client: true }
+      }),
+      tx.businessProfile.findUnique({ where: { ownerId } })
+    ]);
+    if (!project) throw new UserInputError("Project not found.");
 
-  const [entries, expenses] = await Promise.all([
-    prisma.timeEntry.findMany({
-      where: {
-        projectId,
-        ownerId,
-        billingStatus: "UNBILLED",
-        invoiceLineItems: { none: { invoice: { status: "DRAFT" } } },
-        OR: [{ teamMemberId: null }, { approvalStatus: "APPROVED" }],
-        date: { gte: start, lte: end }
-      },
-      select: { id: true, date: true, durationMinutes: true, notes: true, hourlyRateCentsSnapshot: true, workerDisplayNameSnapshot: true, teamMemberId: true, payRateCentsSnapshot: true },
-      orderBy: [{ date: "asc" }, { createdAt: "asc" }]
-    }),
-    prisma.expenseItem.findMany({
-      where: {
-        projectId,
-        ownerId,
-        billingStatus: "UNBILLED",
-        invoiceLineItems: { none: { invoice: { status: "DRAFT" } } },
-        datePurchased: { gte: start, lte: end }
-      },
-      select: {
-        id: true,
-        datePurchased: true,
-        description: true,
-        quantity: true,
-        unitCostCents: true,
-        totalCostCents: true,
-        notes: true
-      },
-      orderBy: [{ datePurchased: "asc" }, { createdAt: "asc" }]
-    })
-  ]);
-
-  if (entries.length === 0 && expenses.length === 0) {
-    throw new UserInputError("There are no unbilled entries or items in this date range.");
-  }
-
-  const paymentTermsDays = profile?.paymentTermsDays ?? 14;
-  const gstRate = profile ? Number(profile.gstRate) : 0;
-  const totals = invoiceTotals(entries, expenses, {
-    registered: profile?.gstRegistered ?? false,
-    rate: gstRate
-  });
-  const invoiceDate = todayInPerth();
-  const invoicePrefix = profile?.invoicePrefix || "INV-";
-  const maxAttempts = 10;
-  let invoice: Awaited<ReturnType<typeof prisma.invoice.create>> | null = null;
-
-  for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
-    try {
-      invoice = await prisma.invoice.create({
-        data: {
-          invoiceNumber: await nextInvoiceNumber(ownerId, invoicePrefix, attempt),
+    const [entries, expenses] = await Promise.all([
+      tx.timeEntry.findMany({
+        where: {
           projectId,
-          clientId: project.clientId,
           ownerId,
-          invoiceDate,
-          dueDate: addDays(invoiceDate, paymentTermsDays),
-          paymentTermsDays,
-          dateRangeStart: start,
-          dateRangeEnd: parseInputDate(formData.get("dateRangeEnd")),
-          status: "DRAFT",
-          mode,
-          totalHours: totals.totalHours,
-          totalDurationMinutes: totals.totalDurationMinutes,
-          subtotalCents: totals.subtotalCents,
-          expensesSubtotalCents: totals.expensesSubtotalCents,
-          gstCents: totals.gstCents,
-          labourTotalCents: totals.labourTotalCents,
-          itemTotalCents: totals.itemTotalCents,
-          grandTotalCents: totals.grandTotalCents,
-          summary: summaryText(entries, expenses),
-          lineItems: {
-            create: buildInvoiceLineData(entries, expenses).map((line) => ({ ...line, ownerId }))
-          }
-        }
-      });
-      break;
-    } catch (error) {
-      // Two concurrent draft creations can both compute the same next invoice number;
-      // retry with an incremented number rather than surfacing a raw constraint error.
-      if (!isUniqueInvoiceNumberViolation(error) || attempt === maxAttempts - 1) throw error;
-    }
-  }
+          billingStatus: "UNBILLED",
+          invoiceLineItems: { none: { invoice: { status: "DRAFT" } } },
+          OR: [{ teamMemberId: null }, { approvalStatus: "APPROVED" }],
+          ...(allUnbilled ? {} : { date: { gte: start, lte: end } })
+        },
+        select: { id: true, date: true, durationMinutes: true, notes: true, hourlyRateCentsSnapshot: true, workerDisplayNameSnapshot: true, teamMemberId: true, payRateCentsSnapshot: true },
+        orderBy: [{ date: "asc" }, { createdAt: "asc" }]
+      }),
+      tx.expenseItem.findMany({
+        where: {
+          projectId,
+          ownerId,
+          billingStatus: "UNBILLED",
+          invoiceLineItems: { none: { invoice: { status: "DRAFT" } } },
+          ...(allUnbilled ? {} : { datePurchased: { gte: start, lte: end } })
+        },
+        select: {
+          id: true,
+          datePurchased: true,
+          description: true,
+          quantity: true,
+          unitCostCents: true,
+          totalCostCents: true,
+          notes: true
+        },
+        orderBy: [{ datePurchased: "asc" }, { createdAt: "asc" }]
+      })
+    ]);
 
-  if (!invoice) throw new UserInputError("Could not create the invoice. Please try again.");
+    if (entries.length === 0 && expenses.length === 0) {
+      throw new UserInputError("There are no unbilled entries or items in this date range.");
+    }
+
+    const paymentTermsDays = profile?.paymentTermsDays ?? 14;
+    const gstRate = profile ? Number(profile.gstRate) : 0;
+    const totals = invoiceTotals(entries, expenses, {
+      registered: profile?.gstRegistered ?? false,
+      rate: gstRate
+    });
+    const invoiceDate = todayInPerth();
+    const invoicePrefix = profile?.invoicePrefix || "INV-";
+    const sourceDates = [...entries.map((entry) => entry.date.getTime()), ...expenses.map((item) => item.datePurchased.getTime())];
+    return tx.invoice.create({
+      data: {
+        invoiceNumber: await nextInvoiceNumber(tx, ownerId, invoicePrefix),
+        projectId,
+        clientId: project.clientId,
+        ownerId,
+        invoiceDate,
+        dueDate: addDays(invoiceDate, paymentTermsDays),
+        paymentTermsDays,
+        dateRangeStart: allUnbilled ? new Date(Math.min(...sourceDates)) : start,
+        dateRangeEnd: allUnbilled ? new Date(Math.max(...sourceDates)) : parseInputDate(formData.get("dateRangeEnd")),
+        status: "DRAFT",
+        mode,
+        totalHours: totals.totalHours,
+        totalDurationMinutes: totals.totalDurationMinutes,
+        subtotalCents: totals.subtotalCents,
+        expensesSubtotalCents: totals.expensesSubtotalCents,
+        gstCents: totals.gstCents,
+        labourTotalCents: totals.labourTotalCents,
+        itemTotalCents: totals.itemTotalCents,
+        grandTotalCents: totals.grandTotalCents,
+        summary: summaryText(entries, expenses),
+        lineItems: {
+          create: buildInvoiceLineData(entries, expenses).map((line) => ({ ...line, ownerId }))
+        }
+      }
+    });
+  });
 
   revalidatePath("/invoices");
   revalidateDataTags(CACHE_TAGS.dashboard, CACHE_TAGS.invoices);
@@ -1409,62 +1411,67 @@ export async function createInvoiceDraftAction(formData: FormData) {
 }
 
 async function finaliseInvoice(ownerId: string, invoiceId: string, status: "SENT" | "PAID", confirmedIncomplete: boolean) {
-  const invoice = await prisma.invoice.findUnique({
-    where: { id: invoiceId },
-    include: {
-      lineItems: true,
-      project: { select: { client: true } }
-    }
-  });
-
-  if (!invoice) throw new UserInputError("Invoice not found.");
-  if (invoice.ownerId !== ownerId) throw new UserInputError("Invoice not found.");
-  if (invoice.status === "VOID") throw new UserInputError("Void invoices cannot be finalised.");
-  if (invoice.status === "PAID") throw new UserInputError("Invoice is already paid.");
-
-  if (invoice.status === "SENT") {
-    if (status !== "PAID") throw new UserInputError("Sent invoices cannot be resent.");
-    const updated = await prisma.invoice.updateMany({
-      where: { id: invoiceId, ownerId, status: "SENT" },
-      data: { status: "PAID", paymentDate: new Date() }
+  await billingTransaction(async (tx) => {
+    const current = await tx.invoice.findFirst({ where: { id: invoiceId, ownerId }, select: { projectId: true, status: true } });
+    if (!current) throw new UserInputError("Invoice not found.");
+    if (current.status === "DRAFT") await syncProjectDrafts(tx, ownerId, current.projectId);
+    const invoice = await tx.invoice.findFirst({
+      where: { id: invoiceId, ownerId },
+      include: {
+        lineItems: true,
+        project: { select: { client: true } }
+      }
     });
-    if (updated.count !== 1) throw new UserInputError("Invoice status changed. Refresh the page and try again.");
-    return;
-  }
 
-  const timeEntryIds = [...new Set(
-    invoice.lineItems
-      .map((line) => line.timeEntryId)
-      .filter((id): id is string => Boolean(id))
-  )];
-  const expenseItemIds = [...new Set(
-    invoice.lineItems
-      .map((line) => line.expenseItemId)
-      .filter((id): id is string => Boolean(id))
-  )];
+    if (!invoice) throw new UserInputError("Invoice not found.");
+    if (invoice.ownerId !== ownerId) throw new UserInputError("Invoice not found.");
+    if (invoice.status === "VOID") throw new UserInputError("Void invoices cannot be finalised.");
+    if (invoice.status === "PAID") throw new UserInputError("Invoice is already paid.");
 
-  const profile = await prisma.businessProfile.findUnique({ where: { ownerId } });
-  const profileIssues = criticalInvoiceProfileIssues(profile);
-  if (profileIssues.length && !confirmedIncomplete) {
-    throw new UserInputError(`Invoice is missing important business details: ${profileIssues.join(" ")}`);
-  }
+    if (invoice.status === "SENT") {
+      if (status !== "PAID") throw new UserInputError("Sent invoices cannot be resent.");
+      const updated = await tx.invoice.updateMany({
+        where: { id: invoiceId, ownerId, status: "SENT" },
+        data: { status: "PAID", paymentDate: new Date() }
+      });
+      if (updated.count !== 1) throw new UserInputError("Invoice status changed. Refresh the page and try again.");
+      return;
+    }
 
-  const client = invoice.project.client;
-  const labourSubtotalCents = invoice.lineItems
-    .filter((line) => line.type === "LABOUR")
-    .reduce((sum, line) => sum + line.totalAmountCents, 0);
-  const expensesSubtotalCents = invoice.lineItems
-    .filter((line) => line.type === "EXPENSE")
-    .reduce((sum, line) => sum + line.totalAmountCents, 0);
-  const totalDurationMinutes = invoice.lineItems.reduce((sum, line) => sum + (line.hoursMinutes ?? 0), 0);
-  const subtotalCents = labourSubtotalCents + expensesSubtotalCents;
-  const gstRate = profile ? Number(profile.gstRate) : Number(invoice.businessGstRateSnapshot);
-  const gstRegistered = profile?.gstRegistered ?? invoice.businessGstRegisteredSnapshot;
-  const gstCents = gstRegistered ? Math.round(subtotalCents * (gstRate / 100)) : 0;
-  const paymentTermsDays = profile?.paymentTermsDays ?? invoice.paymentTermsDays;
-  const invoiceDate = invoice.invoiceDate;
+    if (!invoice.lineItems.length) throw new UserInputError("This draft no longer has any work to invoice. Delete it and create a new draft from unbilled work.");
 
-  await prisma.$transaction(async (tx) => {
+    const timeEntryIds = [...new Set(
+      invoice.lineItems
+        .map((line) => line.timeEntryId)
+        .filter((id): id is string => Boolean(id))
+    )];
+    const expenseItemIds = [...new Set(
+      invoice.lineItems
+        .map((line) => line.expenseItemId)
+        .filter((id): id is string => Boolean(id))
+    )];
+
+    const profile = await tx.businessProfile.findUnique({ where: { ownerId } });
+    const profileIssues = criticalInvoiceProfileIssues(profile);
+    if (profileIssues.length && !confirmedIncomplete) {
+      throw new UserInputError(`Invoice is missing important business details: ${profileIssues.join(" ")}`);
+    }
+
+    const client = invoice.project.client;
+    const labourSubtotalCents = invoice.lineItems
+      .filter((line) => line.type === "LABOUR")
+      .reduce((sum, line) => sum + line.totalAmountCents, 0);
+    const expensesSubtotalCents = invoice.lineItems
+      .filter((line) => line.type === "EXPENSE")
+      .reduce((sum, line) => sum + line.totalAmountCents, 0);
+    const totalDurationMinutes = invoice.lineItems.reduce((sum, line) => sum + (line.hoursMinutes ?? 0), 0);
+    const subtotalCents = labourSubtotalCents + expensesSubtotalCents;
+    const gstRate = profile ? Number(profile.gstRate) : Number(invoice.businessGstRateSnapshot);
+    const gstRegistered = profile?.gstRegistered ?? invoice.businessGstRegisteredSnapshot;
+    const gstCents = gstRegistered ? Math.round(subtotalCents * (gstRate / 100)) : 0;
+    const paymentTermsDays = profile?.paymentTermsDays ?? invoice.paymentTermsDays;
+    const invoiceDate = invoice.invoiceDate;
+
     const currentInvoice = await tx.invoice.findFirst({
       where: { id: invoiceId, ownerId },
       select: { status: true }
@@ -1475,29 +1482,29 @@ async function finaliseInvoice(ownerId: string, invoiceId: string, status: "SENT
 
     const updatedEntries = timeEntryIds.length
       ? await tx.timeEntry.updateMany({
-          where: {
-            ownerId,
-            id: { in: timeEntryIds },
-            OR: [
-              { billingStatus: "UNBILLED", invoiceId: null },
-              { billingStatus: "BILLED", invoiceId }
-            ]
-          },
-          data: { billingStatus: "BILLED", invoiceId }
-        })
+        where: {
+          ownerId,
+          id: { in: timeEntryIds },
+          OR: [
+            { billingStatus: "UNBILLED", invoiceId: null },
+            { billingStatus: "BILLED", invoiceId }
+          ]
+        },
+        data: { billingStatus: "BILLED", invoiceId }
+      })
       : { count: 0 };
     const updatedExpenses = expenseItemIds.length
       ? await tx.expenseItem.updateMany({
-          where: {
-            ownerId,
-            id: { in: expenseItemIds },
-            OR: [
-              { billingStatus: "UNBILLED", invoiceId: null },
-              { billingStatus: "BILLED", invoiceId }
-            ]
-          },
-          data: { billingStatus: "BILLED", invoiceId }
-        })
+        where: {
+          ownerId,
+          id: { in: expenseItemIds },
+          OR: [
+            { billingStatus: "UNBILLED", invoiceId: null },
+            { billingStatus: "BILLED", invoiceId }
+          ]
+        },
+        data: { billingStatus: "BILLED", invoiceId }
+      })
       : { count: 0 };
 
     if (updatedEntries.count !== timeEntryIds.length || updatedExpenses.count !== expenseItemIds.length) {

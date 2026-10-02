@@ -1,9 +1,9 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { AlertCircle, Building2, CheckCircle2, Mail, Save, Trash2, Upload } from "lucide-react";
-import { updateBusinessProfileAction } from "@/app/actions";
+import { updateBusinessProfileAction } from "@/app/form-actions";
 import { createClient } from "@/lib/supabase/browser";
 
 type BusinessProfileFormValue = {
@@ -60,6 +60,8 @@ export function BusinessProfileForm({
   const [error, setError] = useState("");
   const [savedMessage, setSavedMessage] = useState(saved);
   const [pending, setPending] = useState(false);
+  const errorRef = useRef<HTMLDivElement>(null);
+  useEffect(() => { if (error) errorRef.current?.focus(); }, [error]);
 
   const logoPreview = useMemo(() => (removeLogo ? null : preview), [preview, removeLogo]);
 
@@ -112,27 +114,34 @@ export function BusinessProfileForm({
         formData.delete("removeLogo");
       }
 
-      await updateBusinessProfileAction(formData);
+      const result = await updateBusinessProfileAction(formData);
+      if (result.error) {
+        setError(result.error);
+        return;
+      }
       setSavedMessage(true);
       setLogoFile(null);
       router.refresh();
-    } catch (submitError) {
-      setError(submitError instanceof Error ? submitError.message : "Business profile could not be saved.");
+    } catch {
+      setError("Business profile could not be saved. Your details are still here. Please try again.");
     } finally {
       setPending(false);
     }
   }
 
   return (
-    <form action={handleSubmit} className="grid gap-5">
+    <form onSubmit={(event) => {
+      event.preventDefault();
+      if (!pending) void handleSubmit(new FormData(event.currentTarget));
+    }} aria-busy={pending} className="grid gap-5">
       {savedMessage ? (
-        <div className="flex items-center gap-2 rounded-lg border border-mint/30 bg-mint/10 p-3 text-sm font-bold text-moss">
+        <div role="status" className="flex items-center gap-2 rounded-lg border border-mint/30 bg-mint/10 p-3 text-sm font-bold text-moss">
           <CheckCircle2 size={18} aria-hidden="true" />
           Business profile saved.
         </div>
       ) : null}
       {error ? (
-        <div className="flex items-start gap-2 rounded-lg border border-gum/30 bg-gum/10 p-3 text-sm font-bold text-gum">
+        <div ref={errorRef} tabIndex={-1} role="alert" className="flex items-start gap-2 rounded-lg border border-gum/30 bg-gum/10 p-3 text-sm font-bold text-gum">
           <AlertCircle size={18} aria-hidden="true" />
           <span>{error}</span>
         </div>

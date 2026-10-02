@@ -172,6 +172,14 @@ export async function updateClientAction(data: FormData) {
   return runFormAction(() => app.updateClientAction(data));
 }
 
+export async function updateBusinessProfileAction(data: FormData) {
+  return runFormAction(() => app.updateBusinessProfileAction(data));
+}
+
+export async function updateSettingsAction(data: FormData) {
+  return runFormAction(() => app.updateSettingsAction(data));
+}
+
 export async function updateExpenseItemAction(data: FormData) {
   return runFormAction(() => app.updateExpenseItemAction(data));
 }

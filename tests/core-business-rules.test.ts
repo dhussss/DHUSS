@@ -17,7 +17,7 @@ import { invoiceSenderDisplayName } from "../src/lib/platform";
 import { clampTutorialStep, tutorialByKey, tutorialCategories, tutorials } from "../src/lib/tutorials";
 import { buildInvoiceReminderEmailBody } from "../src/lib/invoice-documents";
 import { projectCloseoutReadiness, projectFinancialPosition } from "../src/lib/project-control";
-import { payRunSelectionIsCurrent, teamTimeEntryEditBlockReason } from "../src/lib/payroll";
+import { payRunAmountIsCurrent, payRunSelectionIsCurrent, teamTimeEntryEditBlockReason } from "../src/lib/payroll";
 import type { InvoiceBusinessDetails, InvoiceClientDetails, InvoiceDocumentData } from "../src/lib/invoice-documents";
 
 test("currency input is converted to integer cents without silent truncation", () => {
@@ -315,4 +315,13 @@ test("pay runs reject stale or incomplete source-entry selections", () => {
   assert.equal(payRunSelectionIsCurrent(["entry-1", "entry-2"], ["entry-2", "entry-1"]), true);
   assert.equal(payRunSelectionIsCurrent(["entry-1", "entry-2"], ["entry-1"]), false);
   assert.equal(payRunSelectionIsCurrent(["entry-1"], ["entry-1", "entry-2"]), false);
+});
+
+test("pay runs only accept the amount that was reviewed", () => {
+  assert.equal(payRunAmountIsCurrent("32000", 32000), true);
+  assert.equal(payRunAmountIsCurrent("32000", 36000), false);
+  assert.equal(payRunAmountIsCurrent("", 0), false);
+  assert.equal(payRunAmountIsCurrent("3.2e4", 32000), false);
+  assert.equal(payRunAmountIsCurrent("32000.0", 32000), false);
+  assert.equal(payRunAmountIsCurrent("9007199254740992", 9007199254740992), false);
 });
